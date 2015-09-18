@@ -26,4 +26,4 @@
 """
 This modules contains classes related with tomography
 """
-from prepare_subtomograms_scipion import ProtPrepareSubtomograms
+from prepare_subtomograms_scipion import *

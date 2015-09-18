@@ -26,19 +26,10 @@
 """
 In this module are protocol base classes related to EM Particles
 """
-
-from pyworkflow.protocol.params import PointerParam
 from pyworkflow.em.protocol import EMProtocol
-from pyworkflow.em.data import EMObject
-from pyworkflow.utils.properties import Message
-from itertools import izip
-
-
-
 
 class ProtTomograms(EMProtocol):
     pass
-
 
 class ProtProcessTomograms(ProtTomograms):
     """ This class will serve as a base for all protocol
