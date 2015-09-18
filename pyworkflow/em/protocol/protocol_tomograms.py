@@ -24,25 +24,24 @@
 # *
 # **************************************************************************
 """
-In this module are protocol base classes related to EM.
-There should be sub-classes in the different packages from
-each EM-software package.
+In this module are protocol base classes related to EM Particles
 """
-from protocol import *
-from protocol_import import *
-from protocol_micrographs import *
-from protocol_movies import *
-from protocol_particles import *
-from protocol_2d import *
-from protocol_3d import *
-from protocol_sets import *
-from protocol_tiltpairs import *
-from protocol_ctf_assign import ProtCTFAssign
-from protocol_alignment_assign import ProtAlignmentAssign
-from protocol_batch import *
-from protocol_classes_consensus import ProtClassesConsensus, ViewerClassesConsensus
-from protocol_extract_coordinates import ProtExtractCoords
-from protocol_tomograms import ProtProcessTomograms
 
-from parallel import ProtTestParallel
+from pyworkflow.protocol.params import PointerParam
+from pyworkflow.em.protocol import EMProtocol
+from pyworkflow.em.data import EMObject
+from pyworkflow.utils.properties import Message
+from itertools import izip
 
+
+
+
+class ProtTomograms(EMProtocol):
+    pass
+
+
+class ProtProcessTomograms(ProtTomograms):
+    """ This class will serve as a base for all protocol
+    that performs some operation on Tomograms.
+    """
+    pass
