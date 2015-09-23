@@ -33,6 +33,7 @@ import pyworkflow as pw
 from pyworkflow.utils.reflection import getSubclassesFromModules, getSubclasses, getModules
 from data import *
 from data_tiltpairs import *
+from data_tomo import *
 from protocol import *
 from constants import *
 from convert import *
@@ -41,7 +42,7 @@ from pyworkflow.wizard import Wizard
 from viewer import *
 #from pprint import pprint
 import transformations
-#from packages import *
+from tomo import *
 
 PACKAGES_PATH = os.path.join(pw.HOME, 'em', 'packages')
 

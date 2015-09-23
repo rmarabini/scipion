@@ -37,3 +37,4 @@ from coordinates import ProtImportCoordinates
 from ctfs import ProtImportCTF
 from volumes import ProtImportVolumes, ProtImportPdb
 from masks import ProtImportMask
+from tomograms import ProtImportTomograms

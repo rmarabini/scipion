@@ -24,7 +24,34 @@
 # *
 # **************************************************************************
 """
-This modules contains classes related with tomography
+In this module are protocol base classes related to EM imports of Tomograms
 """
-from prepare_subtomograms_scipion import ProtPrepareSubtomograms
 
+
+from pyworkflow.protocol import params
+
+from micrographs import ProtImportMicBase
+
+
+class ProtImportTomograms(ProtImportMicBase):
+    """Protocol to import a set of tomograms to the project"""
+    _label = 'import tomograms'
+    _outputClassName = 'SetOfTomograms'
+    
+    
+    #--------------------------- DEFINE param functions --------------------------------------------
+    def _defineParams(self, form):
+        ProtImportMicBase._defineParams(self, form)    
+        
+        form.addParam('bfactor', params.FloatParam, default=4.0,
+                      label='Provide B-factor:',
+                      help= '3D CTF model weighting B-factor per e-/A2')
+        form.addParam('totalDose', params.FloatParam, default=40.0,
+                      label='Provide acummulated dose:',
+                      help= 'Total dose for the whole tomogram.')
+    
+    def setSamplingRate(self, tomoSet):
+        ProtImportMicBase.setSamplingRate(self, tomoSet)
+        tomoSet.setBfactor(self.bfactor.get())
+        tomoSet.setDose(self.totalDose.get())
+        

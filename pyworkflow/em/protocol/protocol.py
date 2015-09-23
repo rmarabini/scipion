@@ -36,6 +36,7 @@ from pyworkflow.em.data import (SetOfMicrographs, SetOfCoordinates, SetOfParticl
                                 SetOfClasses2D, SetOfClasses3D, SetOfClassesVol,
                                 SetOfVolumes, SetOfCTF, SetOfMovies,
                                 SetOfMovieParticles, SetOfAverages, SetOfNormalModes)
+from pyworkflow.em.data_tomo import SetOfTomograms
 from pyworkflow.em.constants import RELATION_SOURCE, RELATION_TRANSFORM, RELATION_CTF
 from pyworkflow.em.data_tiltpairs import SetOfAngles
 from pyworkflow.utils.path import cleanPath
@@ -109,6 +110,9 @@ class EMProtocol(Protocol):
     
     def _createSetOfMovies(self, suffix=''):
         return self.__createSet(SetOfMovies, 'movies%s.sqlite', suffix)
+
+    def _createSetOfTomograms(self, suffix=''):
+        return self.__createSet(SetOfTomograms, 'tomograms%s.sqlite', suffix)
 
     def _createSetOfAngles(self, suffix=''):
         return self.__createSet(SetOfAngles, 'tiltpairs_angles%s.sqlite', suffix)

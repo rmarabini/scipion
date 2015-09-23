@@ -120,10 +120,10 @@ def read_relion_star(filename):
 
 ## Looping through the micrographs
 ScriptDir = os.getcwd() + '/'
-#print ScriptDir
+print "ScriptDir: ", ScriptDir
 
 micnames = read_relion_star(TomogramStarFileName)
-#print micnames
+print "micnames: ", micnames
 
 # Shell script to do 3D CTF model reconstruction
 ctfreconstmastername = ScriptDir + 'do_all_reconstruct_ctfs.sh'
@@ -165,7 +165,7 @@ for mic in micnames:
   stackname = MicDirName + MicRootName + '.st'
   ordername = MicDirName + MicRootName + '.order'
   coordsname = MicDirName + MicRootName + '.coords'
-  #print micname, stackname, ordername, coordsname
+  print micname, stackname, ordername, coordsname
   # Parsing the micrograph names 
   #
 
