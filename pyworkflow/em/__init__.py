@@ -37,12 +37,12 @@ from data_tomo import *
 from protocol import *
 from constants import *
 from convert import *
+from tomo import ProtPrepareSubtomograms # Change this as getProtocols method
 #from pyworkflow.viewer import Viewer
 from pyworkflow.wizard import Wizard
 from viewer import *
 #from pprint import pprint
 import transformations
-from tomo import *
 
 PACKAGES_PATH = os.path.join(pw.HOME, 'em', 'packages')
 

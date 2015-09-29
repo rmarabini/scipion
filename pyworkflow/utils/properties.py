@@ -227,6 +227,7 @@ It is used by a few programs like Ctffind or Frealign."""
     LABEL_CTF_ESTI = 'CTF Estimation'
     LABEL_INPUT = 'Input'
     LABEL_INPUT_MIC = 'Input Micrographs'
+    LABEL_INPUT_TOM = 'Input Tomograms'
     LABEL_INPUT_PART = 'Input Particles'
     LABEL_INPUT_VOLS = 'Input Volumes'
     LABEL_INPUT_MOVS = 'Input Movies'

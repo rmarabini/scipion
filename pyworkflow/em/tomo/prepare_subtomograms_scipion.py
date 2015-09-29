@@ -27,12 +27,15 @@
 This script is a re-implementation of 'prepare_subtomograms.py' script that
 was written by Tanmay Bharat to support sub-tomogram averaging in RELION.
 """
-
-#import os, sys, commands, math, stat
+import sys
+from os.path import basename, join
 from pyworkflow.protocol import params
+import pyworkflow.utils.path as pwutils
 from pyworkflow.utils.properties import Message
 from pyworkflow.em.protocol import EMProtocol, ProtProcessTomograms, STEPS_PARALLEL, LEVEL_ADVANCED
-from pyworkflow.em.constants import SAMPLING_FROM_IMAGE, SAMPLING_FROM_SCANNER
+# from pyworkflow.em.constants import SAMPLING_FROM_IMAGE, SAMPLING_FROM_SCANNER
+from imodpath import CTFFIND_PATH, CTFFIND4_PATH
+
 
 class ProtPrepareSubtomograms(ProtProcessTomograms):
     """sub-tomogram averaging in RELION
@@ -45,66 +48,10 @@ class ProtPrepareSubtomograms(ProtProcessTomograms):
     
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
-        
-        form.addSection(label='Import')
-        form.addParam('filesPath', params.PathParam, 
-                      label="Files directory",
-                      help="Directory with the files you want to import.\n\n"
-                           "The path can also contain wildcards to select\n"
-                           "from several folders.\n\n"
-                           "For example:\n"
-                           "  ~/Particles/\n"
-                           "  data/day??_micrographs/")
-        form.addParam('filesPattern', params.StringParam,
-                      label='Pattern', 
-                      help="Pattern of the files to be imported.\n\n"
-                           "The pattern can contain standard wildcards such as\n"
-                           "*, ?, etc, or special ones like ### to mark some\n"
-                           "digits in the filename as ID.")
-        form.addParam('copyFiles', params.BooleanParam, default=False, 
-                      expertLevel=LEVEL_ADVANCED,
-                      label="Copy files?",
-                      help="By default the files are not copied into the\n"
-                           "project to avoid data duplication and to save\n"
-                           "disk space. Instead of copying, symbolic links are\n"
-                           "created pointing to original files. This approach\n"
-                           "has the drawback that if the project is moved to\n"
-                           "another computer, the links need to be restored.\n")
-        group = form.addGroup('Acquisition info')
-#         form.addSection('Acquisition info')
-        group.addParam('voltage', params.FloatParam, default=200,
-                   label=Message.LABEL_VOLTAGE, 
-                   help=Message.TEXT_VOLTAGE)
-        group.addParam('sphericalAberration', params.FloatParam, default=2,
-                   label=Message.LABEL_SPH_ABERRATION, 
-                   help=Message.TEXT_SPH_ABERRATION)
-        group.addParam('amplitudeContrast', params.FloatParam, default=0.1,
-                      label=Message.LABEL_AMPLITUDE,
-                      help=Message.TEXT_AMPLITUDE)
-        group.addParam('magnification', params.IntParam, default=50000,
-                   label=Message.LABEL_MAGNI_RATE, 
-                   help=Message.TEXT_MAGNI_RATE)
-        group.addParam('samplingRateMode', params.EnumParam, 
-                       choices=[Message.LABEL_SAMP_MODE_1, Message.LABEL_SAMP_MODE_2],
-                       default=SAMPLING_FROM_IMAGE,
-                       label=Message.LABEL_SAMP_MODE,
-                       help=Message.TEXT_SAMP_MODE)
-        group.addParam('samplingRate', params.FloatParam,  default=4.0,
-                       condition='samplingRateMode==%d' % SAMPLING_FROM_IMAGE, 
-                       label=Message.LABEL_SAMP_RATE,
-                       help=Message.TEXT_SAMP_RATE)
-        group.addParam('scannedPixelSize', params.FloatParam, default=12.0,
-                       condition='samplingRateMode==%d' % SAMPLING_FROM_SCANNER,
-                       label=Message.LABEL_SCANNED,
-                       help='')
-        group.addParam('bfactor', params.FloatParam, default=4.0,
-                      label='Provide B-factor:',
-                      help= '3D CTF model weighting B-factor per e-/A2')
-        group.addParam('totalDose', params.FloatParam, default=40.0,
-                      label='Provide acummulated dose:',
-                      help= 'Total dose for the whole tomogram.')
-        
         form.addSection(label=Message.LABEL_CTF_ESTI)
+        form.addParam('inputTomograms', params.PointerParam, important=True,
+                      label=Message.LABEL_INPUT_TOM,
+                       pointerClass='SetOfTomograms')
         form.addParam('ctfDownFactor', params.FloatParam, default=1.,
               label='CTF Downsampling factor',
               help='Set to 1 for no downsampling. Non-integer downsample factors are possible. '
@@ -149,46 +96,151 @@ class ProtPrepareSubtomograms(ProtProcessTomograms):
                       help='The PSD is estimated from small patches of this size. Bigger patches '
                            'allow identifying more details. However, since there are fewer windows, '
                            'estimations are noisier.')
-
-        form.addParallelSection(threads=2, mpi=3)
+        
+        form.addParallelSection(threads=1, mpi=3)
     
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         """Insert the steps to preprocess the tomograms
         """
-        self._insertFunctionStep("prepareDirectoriesStep")
-        self._insertFunctionStep("imodExecutionStep")
-        self._insertFunctionStep("estimateCtfStep")
+        ctfDepsList = []
+        tomoSet = self.inputTomograms.get()
+        for tomo in tomoSet:
+            extractDeps = self._insertFunctionStep("extractTiltAnglesStep", tomo.getFileName(), prerequisites=ctfDepsList)
+            for i in range(1, tomo.getDim()+1):
+                tiltImgDeps = self._insertFunctionStep("extractTiltImgStep", tomo.getFileName(), i, prerequisites=[extractDeps])
+                ctfDeps = self._insertFunctionStep("estimateCtfStep", tomo.getFileName(), i, prerequisites=[tiltImgDeps])
+                ctfDepsList.append(ctfDeps)
+    
+    #--------------------------- STEPS functions ---------------------------------------------------
+    def extractTiltAnglesStep(self,  tomoFn):
+        from imodpath import EXTRACTTILTS_PATH
         
+        extractProg = EXTRACTTILTS_PATH
         
+        args = '-InputFile %(tomogram)s -tilts -OutputFile %(tiltangles)s'
+        params = {"tomogram" : tomoFn, 
+                  "tiltangles" : self._getFnPath(tomoFn, "tiltAngles.txt")
+                  }
         
+        self.runJob(extractProg, args % params)
+    
+    def extractTiltImgStep(self, tomoFn, i):
+        from imodpath import NEWSTACK_PATH
+        stackProg = NEWSTACK_PATH
+        
+        args = '-secs %(numStk)d %(tomogram)s %(tomoStck)s'
+        params = {"tomogram" : tomoFn,
+                  "numStk" : i-1,
+                  "tomoStck" : self._getImgName(tomoFn, i)
+                  }
+        
+        self.runJob(stackProg, args % params)
+    
+    def estimateCtfStep(self, tomoFn, i):
+        """ Run ctffind, 3 or 4, with required parameters """
+        args, program, params = self._prepareCommand()
+        downFactor = self.ctfDownFactor.get()
+        micFn = self._getImgName(tomoFn, i)
+        if downFactor != 1:
+            from pyworkflow.em.packages import xmipp3
+            
+            micFnMrc = self._getTmpPath(basename(micFn))
+            self.runJob("xmipp_transform_downsample","-i %s -o %s --step %f --method fourier" % (micFn, micFnMrc, downFactor), env=xmipp3.getEnviron())
+            
+        else:
+            micFnMrc = micFn
+        
+        # Update _params dictionary
+        params['micFn'] = micFnMrc
+        params['micDir'] = self._getTomoPath(tomoFn)
+        params['ctffindPSD'] = self._getFnPath(tomoFn, '%s_ctfEstimation.mrc' % pwutils.removeBaseExt(micFn))
+        params['ctffindOut'] = self._getFnPath(tomoFn, '%s_ctfEstimation.txt' % pwutils.removeBaseExt(micFn))
+        
+        try:
+            self.runJob(program, args % params)
+        except Exception, ex:
+            print >> sys.stderr, "ctffind has failed with micrograph %s" % micFnMrc
+        pwutils.cleanPath(micFnMrc)
     
     
+    def _getTomoPath(self, tomoFn):
+        tomoBaseDir = pwutils.removeBaseExt(tomoFn)
+        pwutils.makePath(self._getExtraPath(tomoBaseDir))
+        return self._getExtraPath(tomoBaseDir)
     
+    def _getFnPath(self, tomoFn, fn):
+        return join(self._getTomoPath(tomoFn), basename(fn))
     
+    def _getImgName(self, tomoFn, i):
+        baseImgFn = pwutils.removeBaseExt(tomoFn) + "_%03d.mrc" %i
+        return join(self._getTomoPath(tomoFn), baseImgFn)
+
+    def _prepareCommand(self):
+        tomoSet = self.inputTomograms.get()
+        samRate = tomoSet.getSamplingRate()
+        acquisition = tomoSet.getAcquisition()
+        
+        params = {'voltage': acquisition.getVoltage(),
+                  'sphericalAberration': acquisition.getSphericalAberration(),
+                  'magnification': acquisition.getMagnification(),
+                  'ampContrast': acquisition.getAmplitudeContrast(),
+                  'samplingRate': samRate * self.ctfDownFactor.get(),
+                  'scannedPixelSize': tomoSet.getScannedPixelSize() * self.ctfDownFactor.get(),
+                  'windowSize': self.windowSize.get(),
+                  'lowRes': self.lowRes.get(),
+                  'highRes': self.highRes.get(),
+                  # Convert from microns to Amstrongs
+                  'minDefocus': self.minDefocus.get() * 1e+4, 
+                  'maxDefocus': self.maxDefocus.get() * 1e+4
+                  }
+        
+        # Convert digital frequencies to spatial frequencies
+        params['lowRes'] = samRate / self.lowRes.get()
+        if params['lowRes'] > 50:
+            params['lowRes'] = 50
+        params['highRes'] = samRate / self.highRes.get()
+        params['step_focus'] = 500.0
+        if not self.useCftfind4:
+            args, program = self._argsCtffind3()
+        else:
+            params['astigmatism'] = self.astigmatism.get()
+            if self.findPhaseShift:
+                params['phaseShift'] = "yes"
+            else:
+                params['phaseShift'] = "no"
+            args, program = self._argsCtffind4()
+        
+        return args, program, params
     
-#     
-#     
-#     
-#     
-#     
-#     extracttilts -InputFile BBa.st -tilts -OutputFile tiltangles.txt > extracttilt_output.txt
-#     
-#     newstack -secs 0 BBa.st ctffind/BBa_image65.0_0.mrc > ctffind/temp_newstack_out.txt
-#     
-#     
-#     
-#     
-#     ctffindstarname  /home/josue/PROCESAMIENTO/Tomography/tutorialData/Relion/ctffind/BBa_images.star
-#     tutorialData/Relion> cat /home/josue/PROCESAMIENTO/Tomography/tutorialData/Relion/ctffind/BBa_images.star
-#     data_
-# 
-#         loop_
-#         _rlnMicrographName #1
-#         ctffind/BBa_image65.0_0.mrc
-#         
-#     
-#     
-#     
-#     
-#     
+    def _argsCtffind3(self):
+        program = 'export NATIVEMTZ=kk ; ' + CTFFIND_PATH
+        args = """   << eof > %(ctffindOut)s
+%(micFn)s
+%(ctffindPSD)s
+%(sphericalAberration)f,%(voltage)f,%(ampContrast)f,%(magnification)f,%(scannedPixelSize)f
+%(windowSize)d,%(lowRes)f,%(highRes)f,%(minDefocus)f,%(maxDefocus)f,%(step_focus)f
+eof
+"""
+        return args, program
+    
+    def _argsCtffind4(self):
+        program = 'export OMP_NUM_THREADS=1; ' + CTFFIND4_PATH
+        args = """ << eof
+%(micFn)s
+%(ctffindPSD)s
+%(samplingRate)f
+%(voltage)f
+%(sphericalAberration)f
+%(ampContrast)f
+%(windowSize)d
+%(lowRes)f
+%(highRes)f
+%(minDefocus)f
+%(maxDefocus)f
+%(step_focus)f
+%(astigmatism)f
+%(phaseShift)s
+eof
+"""            
+        return args, program

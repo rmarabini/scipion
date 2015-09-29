@@ -22,6 +22,7 @@ EM_ROOT = software/em
 BSOFT_HOME = %(EM_ROOT)s/bsoft
 CTFFIND_HOME = %(EM_ROOT)s/ctffind
 CTFFIND4_HOME = %(EM_ROOT)s/ctffind4
+IMOD_HOME = %(EM_ROOT)s/imod
 DOGPICKER_HOME = %(EM_ROOT)s/dogpicker
 EMAN2DIR = %(EM_ROOT)s/eman
 FREALIGN_HOME = %(EM_ROOT)s/frealign

@@ -61,7 +61,7 @@ class RelionImport():
             self.protocol.setSamplingRate(self.micSet)
             self.micSet.setIsPhaseFlipped(self.protocol.haveDataBeenPhaseFlipped.get())
             self.protocol.fillAcquisition(self.micSet.getAcquisition())
-
+        
         partSet = self.protocol._createSetOfParticles()
         partSet.setObjComment('Particles imported from Relion star file:\n%s' % self._starFile)
 
