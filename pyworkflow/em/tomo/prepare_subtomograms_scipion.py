@@ -63,9 +63,8 @@ class ProtPrepareSubtomograms(ProtProcessTomograms):
         form.addParam('useCftfind4', params.BooleanParam, default=True,
               label="Use ctffind4 to estimate the CTF?",
               help='If is true, the protocol will use ctffind4 instead of ctffind3')
-        form.addParam('astigmatism', params.FloatParam, default=100.0,
-              label='Expected (tolerated) astigmatism', expertLevel=params.LEVEL_ADVANCED,
-              condition='useCftfind4', )
+        form.addParam('astigmatism', params.FloatParam, default=1000.0,
+              label='Expected (tolerated) astigmatism (A)')
         form.addParam('findPhaseShift', params.BooleanParam, default=False,
               label="Find additional phase shift?", condition='useCftfind4',
               expertLevel=params.LEVEL_ADVANCED,)
@@ -90,7 +89,8 @@ class ProtPrepareSubtomograms(ProtProcessTomograms):
                       label='Min')
         line.addParam('maxDefocus', params.FloatParam, default=4.,
                       label='Max')
-        
+        form.addParam('stepFocus', params.FloatParam, default=500.0,
+              label='Defocus step size for search (A)')
         form.addParam('windowSize', params.IntParam, default=256, expertLevel=LEVEL_ADVANCED,
                       label='Window size',
                       help='The PSD is estimated from small patches of this size. Bigger patches '
@@ -106,8 +106,10 @@ class ProtPrepareSubtomograms(ProtProcessTomograms):
         ctfDepsList = []
         tomoSet = self.inputTomograms.get()
         for tomo in tomoSet:
+            numbOfMics = tomo.getDim()[3]
+            print "numbOfMics ", numbOfMics
             extractDeps = self._insertFunctionStep("extractTiltAnglesStep", tomo.getFileName(), prerequisites=ctfDepsList)
-            for i in range(1, tomo.getDim()+1):
+            for i in range(1, numbOfMics+1):
                 tiltImgDeps = self._insertFunctionStep("extractTiltImgStep", tomo.getFileName(), i, prerequisites=[extractDeps])
                 ctfDeps = self._insertFunctionStep("estimateCtfStep", tomo.getFileName(), i, prerequisites=[tiltImgDeps])
                 ctfDepsList.append(ctfDeps)
@@ -192,7 +194,9 @@ class ProtPrepareSubtomograms(ProtProcessTomograms):
                   'highRes': self.highRes.get(),
                   # Convert from microns to Amstrongs
                   'minDefocus': self.minDefocus.get() * 1e+4, 
-                  'maxDefocus': self.maxDefocus.get() * 1e+4
+                  'maxDefocus': self.maxDefocus.get() * 1e+4,
+                  'astigmatism' : self.astigmatism.get(),
+                  'focus' : self.stepFocus.get()
                   }
         
         # Convert digital frequencies to spatial frequencies
@@ -200,11 +204,9 @@ class ProtPrepareSubtomograms(ProtProcessTomograms):
         if params['lowRes'] > 50:
             params['lowRes'] = 50
         params['highRes'] = samRate / self.highRes.get()
-        params['step_focus'] = 500.0
         if not self.useCftfind4:
             args, program = self._argsCtffind3()
         else:
-            params['astigmatism'] = self.astigmatism.get()
             if self.findPhaseShift:
                 params['phaseShift'] = "yes"
             else:
@@ -214,12 +216,12 @@ class ProtPrepareSubtomograms(ProtProcessTomograms):
         return args, program, params
     
     def _argsCtffind3(self):
-        program = 'export NATIVEMTZ=kk ; ' + CTFFIND_PATH
-        args = """   << eof > %(ctffindOut)s
+        program = CTFFIND_PATH
+        args = """ --old-school-input << eof > %(ctffindOut)s 
 %(micFn)s
 %(ctffindPSD)s
-%(sphericalAberration)f,%(voltage)f,%(ampContrast)f,%(magnification)f,%(scannedPixelSize)f
-%(windowSize)d,%(lowRes)f,%(highRes)f,%(minDefocus)f,%(maxDefocus)f,%(step_focus)f
+%(sphericalAberration)0.1f, %(voltage)0.1f, %(ampContrast)0.1f, %(magnification)0.1f, %(scannedPixelSize)0.1f
+%(windowSize)d, %(lowRes)0.2f, %(highRes)0.2f, %(minDefocus)0.1f, %(maxDefocus)0.1f, %(focus)0.1f,  %(astigmatism)0.1f
 eof
 """
         return args, program
@@ -238,9 +240,9 @@ eof
 %(highRes)f
 %(minDefocus)f
 %(maxDefocus)f
-%(step_focus)f
+%(focus)f
 %(astigmatism)f
 %(phaseShift)s
 eof
-"""            
+"""
         return args, program

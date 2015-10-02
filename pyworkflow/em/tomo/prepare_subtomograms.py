@@ -22,7 +22,7 @@ Magnification = 53000
 # Pixel size of the detector (in micron)
 DPixSize = 11.5             
 # Path to CTFFIND (version 3 or 4)
-PathToCtffind = '/public/EM/ctffind/ctffind.exe'     
+PathToCtffind = '/home/josue/workspace/scipion/software/em/ctffind_V3.5/ctffind3.exe'     
 # If CTFFIND crashed in the middle, you can turn this to True to resume CTF estimations only for unfinished images
 OnlyDoUnfinishedCTFs = False                               
 
@@ -121,15 +121,15 @@ def read_relion_star(filename):
 ## Looping through the micrographs
 ScriptDir = os.getcwd() + '/'
 print "ScriptDir: ", ScriptDir
-
+ 
 micnames = read_relion_star(TomogramStarFileName)
 print "micnames: ", micnames
-
+ 
 # Shell script to do 3D CTF model reconstruction
 ctfreconstmastername = ScriptDir + 'do_all_reconstruct_ctfs.sh'
 ctfreconstmasterfile = open(ctfreconstmastername, 'w')
 os.chmod(ctfreconstmastername, stat.S_IRWXU)
-
+ 
 #
 # This is the master STAR file for refinement later on
 subtomostarname = ScriptDir + 'particles_' + SubtomoName + '.star'
@@ -144,9 +144,9 @@ subtomostarfile.write('_rlnCoordinateZ #4' + '\n')
 subtomostarfile.write('_rlnImageName #5' + '\n')
 subtomostarfile.write('_rlnCtfImage #6' +'\n')
 #
-
+ 
 for mic in micnames:
-
+ 
   #
   # Parsing the micrograph names 
   micsplit = mic.split('.')
@@ -157,10 +157,10 @@ for mic in micnames:
     MicDirName = MicDirName + dirsplit[dircount]
     MicDirName = MicDirName + '/'
   MicRootName = dirsplit[len(dirsplit)-1]
-  
+   
   #print MicDirName
   #print MicRootName
-  
+   
   micname = MicDirName + MicRootName + '.mrc'
   stackname = MicDirName + MicRootName + '.st'
   ordername = MicDirName + MicRootName + '.order'
@@ -168,19 +168,19 @@ for mic in micnames:
   print micname, stackname, ordername, coordsname
   # Parsing the micrograph names 
   #
-
+ 
   #sys.exit()
-
+ 
   ##### Running CTFFIND on all images of the tilt series  ##########
-
+ 
   CtffindDirName = 'ctffind/'
   OutputDir = ScriptDir + MicDirName + CtffindDirName
   newstackroot = MicDirName + CtffindDirName + MicRootName +  '_image'
   print OutputDir
-
+ 
   ## Making a new directory to output the results of CTFFIND
   ensure_dir(OutputDir)
-
+ 
   ## Extracting the tilt information with the IMOD command extracttilts
   extracttile_scratchname = OutputDir + 'extracttilt_output.txt'
   print ':: RELION sub-tomogram averaging :: ' + '\n' + 'Using IMOD extracttilts to get tilt angles' + '\n' 
@@ -190,32 +190,32 @@ for mic in micnames:
   os.remove(extracttile_scratchname)
   ##
   print ':: RELION sub-tomogram averaging :: ' + '\n' + 'Tilt values extracted ' + '\n'
-
+ 
   ##
   tiltanglesfilename = OutputDir + 'tiltangles.txt'
   tiltfile = open(tiltanglesfilename, 'r')
-  
+   
   ctffindstarname = OutputDir + MicRootName + '_images.star'
   ctffindstarfile = open(ctffindstarname, 'w')
   ctffindstarfile.write('data_' + '\n' + '\n')
   ctffindstarfile.write('loop_' + '\n')
   ctffindstarfile.write('_rlnMicrographName #1' + '\n')
-  
+   
   exttilts=[]
   i=-1
   for line in tiltfile:
-    
+     
     pair = line.split()
     #print pair
     i=i+1
-    
+     
     # Tilt of the stage for the current image
     tilt = float(pair[0])
     #roundtilt = round(tilt)
     exttilts.append(tilt)
     #print(str(int(roundtilt)))
     #
-
+ 
     # extracting each image using the IMOD command newstack
     print ':: RELION sub-tomogram averaging :: ' + '\n' + 'Extracting tilt series image ' + '\n' 
     newstack_scratchname = OutputDir + 'temp_newstack_out.txt'
@@ -223,18 +223,18 @@ for mic in micnames:
     newstackline = 'newstack -secs ' + str(i) + ' ' + stackname + ' ' +  extracted_image_name + ' > ' + newstack_scratchname +'\n'
     print(newstackline)
     ctffindstarfile.write(extracted_image_name + '\n')
-
+ 
     os.system(newstackline)
     os.remove(newstack_scratchname)
-
+ 
   ctffindstarfile.close()
   #sys.exit()
-
+ 
   # running CTFFIND using the RELION command relion_run_ctffind
   outputstarname =  OutputDir + MicRootName +  '_ctffind.star'
   print ':: RELION sub-tomogram averaging :: ' + '\n' + 'Running relion_run_ctffind ' + '\n' 
   relion_ctffindline = 'relion_run_ctffind --i ' + ctffindstarname + ' --o ' + outputstarname + ' --CS ' + str(Cs) + ' --HT ' + str(Voltage) +  ' --ctfWin -1 --AmpCnst ' + str(AmpContrast) +  ' --DStep ' + str(DPixSize) +  ' --XMAG ' + str(Magnification) + ' --Box ' + str(BoxSize) +  ' --dFMin ' + str(LowDefocusLimit) + ' --dFMax ' + str(HighDefocusLimit) + ' --FStep ' + str(DefocusStep) + ' --dAst ' + str(Astigmatism) + ' --ResMin ' + str(LowResLimit) + ' --ResMax ' + str(HighResLimit) + ' --ctffind_exe \"' + PathToCtffind + '  --omp-num-threads 1 --old-school-input\"' 
-  
+   
   # If some are unfinished 
   if OnlyDoUnfinishedCTFs == True:
     relion_ctffindline = relion_ctffindline + ' --only_do_unfinished'
@@ -243,7 +243,7 @@ for mic in micnames:
           #
   print ':: RELION sub-tomogram averaging :: ' + '\n' + 'CTF Parameters of all tilt series images were estimated using RELION\'s  relion_run_ctffind ' + '\n' 
   print ':: RELION sub-tomogram averaging :: ' + '\n' + 'Parameters have been saved in ' + outputstarname + '\n' 
-
+ 
   tiltfile.close()
 
   ##### Running CTFFIND on all images of the tilt series  ##########
@@ -287,7 +287,7 @@ for mic in micnames:
 
   # Reading the output of CTFFIND
   micnames, avgdefoci, defocusv = read_relion_star(outputstarname)
-
+  print "Defocus: ", micnames, avgdefoci, defocusv
   #print exttilts
   #print avgdefoci
   #print len(exttilts), len(tiltorder)
@@ -312,6 +312,7 @@ for mic in micnames:
   headerline = 'header -brief -size -input ' + micname 
   print headerline
   status, sizevals = commands.getstatusoutput(headerline)
+  print "status, sizevals ", status, sizevals
   tomosize=sizevals.split()
   #print tomosize
   xlimit = float(tomosize[0])

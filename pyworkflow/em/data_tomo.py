@@ -52,7 +52,7 @@ class Tomogram(Micrograph):
         if not self.isCompressed():
             fn = self.getFileName()
             if fn is not None and exists(fn.replace(':mrc', '')):
-                return ImageHandler().getDimensions(self)[3]
+                return ImageHandler().getDimensions(self)
         return None
 
 
@@ -93,5 +93,5 @@ class SetOfTomograms(SetOfMicrographsBase):
                 import traceback
                 traceback.print_exc()
         dimStr = str(self._firstDim)
-        s = "%s (%d items, %d tilt series, %s, %0.2f A/px)" % (self.getClassName(), self.getSize(), self.getFirstItem().getDim(), dimStr, sampling)
+        s = "%s (%d items, %d tilt series, %s, %0.2f A/px)" % (self.getClassName(), self.getSize(), self.getFirstItem().getDim()[3], dimStr, sampling)
         return s

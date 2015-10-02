@@ -37,7 +37,7 @@ class ProtImportTomograms(ProtImportMicBase):
     """Protocol to import a set of tomograms to the project"""
     _label = 'import tomograms'
     _outputClassName = 'SetOfTomograms'
-    
+#     _checkStacks = False    
     
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):

@@ -121,7 +121,7 @@ class ProtImportImages(ProtImportFiles):
             
             if self._checkStacks:
                 _, _, _, n = imgh.getDimensions(dst)
-                
+            print "NNNNNNNNNNNN: ", n
             if n > 1:
                 for index in range(1, n+1):
                     img.cleanObjId()
