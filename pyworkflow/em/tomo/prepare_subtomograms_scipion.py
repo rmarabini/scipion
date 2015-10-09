@@ -87,32 +87,61 @@ class ProtPrepareSubtomograms(ProtProcessTomograms):
                                  'Underfocus is represented by a positive number.')
         line.addParam('minDefocus', params.FloatParam, default=0.25, 
                       label='Min')
-        line.addParam('maxDefocus', params.FloatParam, default=4.,
+        line.addParam('maxDefocus', params.FloatParam, default=10.,
                       label='Max')
-        form.addParam('stepFocus', params.FloatParam, default=500.0,
+        form.addParam('stepFocus', params.FloatParam, default=2000.0,
               label='Defocus step size for search (A)')
         form.addParam('windowSize', params.IntParam, default=256, expertLevel=LEVEL_ADVANCED,
                       label='Window size',
                       help='The PSD is estimated from small patches of this size. Bigger patches '
                            'allow identifying more details. However, since there are fewer windows, '
                            'estimations are noisier.')
+        form.addSection(label="Reconstruct")
+        form.addParam('filesPath', params.PathParam, 
+              label="Directory of the coordinates",
+              help="Directory with the files you want to import.\n\n"
+                   "The path can also contain wildcards to select\n"
+                   "from several folders.\n\n"
+                   "For example:\n"
+                   "  ~/Coordinates/\n"
+                   "  data/day??_coords/")
+        form.addParam('filesPattern', params.StringParam, default="*.coord",
+                      label='Coordinates pattern', 
+                      help="Pattern of the coordinates to be imported.\n\n"
+                           "The pattern can contain standard wildcards such as\n"
+                           "*, ?, etc.\n"
+                           "The coordinates files must have the same name"
+                           "as the tomograms")
+        form.addParam('boxSize', params.IntParam, default=0,
+                      label='Particle box size', validators=[params.Positive],
+                      help='In pixels. The box size is the size of the boxed subtomograms.')
         
-        form.addParallelSection(threads=1, mpi=3)
+        form.addParallelSection(threads=3, mpi=1)
     
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         """Insert the steps to preprocess the tomograms
         """
         ctfDepsList = []
+        reconsDeps = []
         tomoSet = self.inputTomograms.get()
+        
         for tomo in tomoSet:
+            tomoFn = tomo.getFileName()
             numbOfMics = tomo.getDim()[3]
-            print "numbOfMics ", numbOfMics
-            extractDeps = self._insertFunctionStep("extractTiltAnglesStep", tomo.getFileName(), prerequisites=ctfDepsList)
+            
+            extractDeps = self._insertFunctionStep("extractTiltAnglesStep", tomoFn, prerequisites=ctfDepsList)
             for i in range(1, numbOfMics+1):
                 tiltImgDeps = self._insertFunctionStep("extractTiltImgStep", tomo.getFileName(), i, prerequisites=[extractDeps])
-                ctfDeps = self._insertFunctionStep("estimateCtfStep", tomo.getFileName(), i, prerequisites=[tiltImgDeps])
+                ctfDeps = self._insertFunctionStep("estimateCtfStep", tomoFn, i, prerequisites=[tiltImgDeps])
                 ctfDepsList.append(ctfDeps)
+            writeDeps = self._insertFunctionStep("writeStarCtf3DStep", tomo.getFileName(), numbOfMics, prerequisites=ctfDepsList)
+            
+            numOfCoords = self._getNumberOfCoords(tomoFn)
+            for coordNum in range(1, numOfCoords+1):
+                reconsDep = self._insertFunctionStep("reconstructCtf3DStep", tomoFn, coordNum, prerequisites=[writeDeps])
+                reconsDeps.append(reconsDep)
+            self._insertFunctionStep("createOutputStep", prerequisites=reconsDeps)
     
     #--------------------------- STEPS functions ---------------------------------------------------
     def extractTiltAnglesStep(self,  tomoFn):
@@ -165,7 +194,102 @@ class ProtPrepareSubtomograms(ProtProcessTomograms):
             print >> sys.stderr, "ctffind has failed with micrograph %s" % micFnMrc
         pwutils.cleanPath(micFnMrc)
     
+    def writeStarCtf3DStep(self, tomoFn, numbOfMics):
+        import math
+        import pyworkflow.em.metadata as md
+        
+        tomoSet = self.inputTomograms.get()
+        sizeX, _, _, sizeZ = tomoSet.getFirstItem().getDim()
+        
+        micKey = pwutils.removeBaseExt(tomoFn)
+        coordFn = self._getCoordsFns().get(micKey)
+        numOfCoords = self._getNumberOfCoords(tomoFn)
+        
+        
+        for i in range(1, numOfCoords+1):
+            
+            ctf3DStar = self._getCtfStar(tomoFn, i)
+            ctf3DMd = md.MetaData()
+
+            line = self._getCoords(coordFn, i)
+        
+            for micNumb in range(1, numbOfMics+1):
+                tiltRow = md.Row()
+                objId = ctf3DMd.addObject()
+                
+                aveDefocus = self._getAveDefocus(tomoFn, micNumb)
+                tiltAngleGrads = self._getTiltAngles(tomoFn, micNumb)
+                tiltAngleRads = float(tiltAngleGrads)*math.pi/180
+                
+                xTomo = float(float(line[0]) - (sizeX/2) ) * tomoSet.getSamplingRate()
+                zTomo = float(float(line[2]) - (sizeZ/2) ) * tomoSet.getSamplingRate()
+
+                # Calculating the height difference of the particle from the tilt axis
+                xImg = (xTomo*(math.cos(tiltAngleRads))) + (zTomo*(math.sin(tiltAngleRads)))
+                deltaD = xImg*math.sin(tiltAngleRads)
+                partDef = aveDefocus + deltaD
+                
+                # Weighting the 3D CTF model using the tilt dependent scale factor and the dose dependent B-Factor
+                tiltScale = math.cos(abs(tiltAngleRads))
+                tiltList = self._getTiltList(tomoFn)
+                tiltStep = (max(tiltList) - min(tiltList))/(numbOfMics-1)
+                bestTiltDiff = tiltStep + 0.5
+                
+                for k in range(len(tiltList)):
+                    tiltDiff = abs(tiltAngleGrads-tiltList[k])
+                    
+                    if tiltDiff < (bestTiltDiff+0.25):
+                        if tiltDiff < bestTiltDiff:
+                            bestTiltDiff = tiltDiff
+                            currAcumDose = self._getDose(k+1, numbOfMics)
+                    
+                doseWeight = currAcumDose * tomoSet.getBfactor()
+                
+                tiltRow.setValue(md.RLN_CTF_DEFOCUSU, partDef)
+                tiltRow.setValue(md.RLN_CTF_VOLTAGE, tomoSet.getAcquisition().getVoltage())
+                tiltRow.setValue(md.RLN_CTF_CS, tomoSet.getAcquisition().getSphericalAberration())
+                tiltRow.setValue(md.RLN_CTF_Q0, tomoSet.getAcquisition().getAmplitudeContrast())
+                tiltRow.setValue(md.RLN_ORIENT_ROT, 0.0)
+                tiltRow.setValue(md.RLN_ORIENT_TILT, tiltAngleGrads)
+                tiltRow.setValue(md.RLN_ORIENT_PSI, 0.0)
+                tiltRow.setValue(md.RLN_CTF_BFACTOR, doseWeight)
+                tiltRow.setValue(md.RLN_CTF_SCALEFACTOR, tiltScale)
+                tiltRow.writeToMd(ctf3DMd, objId)
+            ctf3DMd.write("data_images@%s" % ctf3DStar)
     
+    def reconstructCtf3DStep(self, tomoFn, coordNum):
+        from pyworkflow.em.packages import relion
+        program = "relion_reconstruct"
+        sampling = self.inputTomograms.get().getSamplingRate()
+        params = {"sampling" : sampling,
+                  "ctfStar" : self._getCtfStar(tomoFn, coordNum),
+                  "ctf3D" : self._getCtf3D(tomoFn, coordNum),
+                  "boxSize" : self.boxSize.get()
+                  }
+        
+        args = " --i %(ctfStar)s --o %(ctf3D)s --reconstruct_ctf %(boxSize)d --angpix %(sampling)f"
+        self.runJob(program, args % params, env=relion.getEnviron())
+    
+    def createOutputStep(self):
+        pass
+    
+    #--------------------------- INFO functions --------------------------------------------
+    def _validate(self):
+        errors = []
+        return errors    
+    
+    def _summary(self):
+        summary = []
+        return summary
+    
+    def _methods(self):
+        methods = ''
+        return [methods]
+        
+    def _citations(self):
+        pass
+    
+    #--------------------------- UTILS functions --------------------------------------------
     def _getTomoPath(self, tomoFn):
         tomoBaseDir = pwutils.removeBaseExt(tomoFn)
         pwutils.makePath(self._getExtraPath(tomoBaseDir))
@@ -177,7 +301,19 @@ class ProtPrepareSubtomograms(ProtProcessTomograms):
     def _getImgName(self, tomoFn, i):
         baseImgFn = pwutils.removeBaseExt(tomoFn) + "_%03d.mrc" %i
         return join(self._getTomoPath(tomoFn), baseImgFn)
-
+    
+    def _getCtfStar(self, tomoFn, i):
+        ctfDir = join(self._getTomoPath(tomoFn), "Ctf3D")
+        pwutils.makePath(ctfDir)
+        baseCtfFn = pwutils.removeBaseExt(tomoFn) + "_ctf_%06d.star" %i
+        return join(ctfDir, baseCtfFn)
+    
+    def _getCtf3D(self, tomoFn, i):
+        ctfDir = join(self._getTomoPath(tomoFn), "Particles")
+        pwutils.makePath(ctfDir)
+        baseCtfFn = pwutils.removeBaseExt(tomoFn) + "_ctf_%06d.mrc" %i
+        return join(ctfDir, baseCtfFn)
+    
     def _prepareCommand(self):
         tomoSet = self.inputTomograms.get()
         samRate = tomoSet.getSamplingRate()
@@ -246,3 +382,69 @@ eof
 eof
 """
         return args, program
+    
+    def _getCoordsFns(self):
+        """ Return a sorted list with the paths of files that matched the pattern"""
+        from glob import glob
+        coorDict = {}
+        filesPath = self.filesPath.get('').strip()
+        filesPattern = self.filesPattern.get('').strip()
+        
+        if filesPattern:
+            fullPattern = join(filesPath, filesPattern)
+        else:
+            fullPattern = filesPath
+            
+        pattern = pwutils.expandPattern(fullPattern)
+        filePaths = glob(pattern)
+        filePaths.sort()
+        for fn in filePaths:
+            coordKey = pwutils.removeBaseExt(fn)
+            coorDict[coordKey] = fn
+        return coorDict
+    
+    def _getCoords(self, coordFn, coordNum):
+        crdFile = open(coordFn, 'r')
+        lines = crdFile.readlines()
+        line = lines[coordNum].split()
+        crdFile.close()
+        return line
+    
+    def _getNumberOfCoords(self, tomoFn):
+        micKey = pwutils.removeBaseExt(tomoFn)
+        coordFn = self._getCoordsFns().get(micKey)
+        crdFile = open(coordFn, 'r')
+        num = len(crdFile.readlines())
+        crdFile.close()
+        return num
+    
+    def _getAveDefocus(self, tomoFn, micNum):
+        from pyworkflow.em.packages.grigoriefflab.convert import parseCtffindOutput, parseCtffind4Output
+        
+        micFn = self._getImgName(tomoFn, micNum)
+        ctfFn = self._getFnPath(tomoFn, '%s_ctfEstimation.txt' % pwutils.removeBaseExt(micFn))
+        
+        if not self.useCftfind4:
+            result = parseCtffindOutput(ctfFn)
+            defocusU, defocusV, _ = result
+        else:
+            result =  parseCtffind4Output(ctfFn)
+            defocusU, defocusV, _, _, _, _ = result
+        
+        return (defocusU + defocusV) / 2
+    
+    def _getTiltAngles(self, tomoFn, micNumb):
+        tiltList = self._getTiltList(tomoFn)
+        return tiltList[micNumb-1]
+    
+    def _getTiltList(self, tomoFn):
+        tiltFn = self._getFnPath(tomoFn, "tiltAngles.txt")
+        tiltFile = open(tiltFn, "r")
+        tiltList = tiltFile.readlines()
+        tiltFile.close()
+        tiltList = [float(i) for i in tiltList]
+        return tiltList
+    
+    def _getDose(self, micNumb, numbOfMics):
+        totalDose = self.inputTomograms.get().getDose()
+        return totalDose * float(micNumb) / float(numbOfMics)

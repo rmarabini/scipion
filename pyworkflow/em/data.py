@@ -563,7 +563,7 @@ class Volume(Image):
     def __init__(self, **args):
         Image.__init__(self, **args)
         self._classId = Integer()
-
+    
     def getDim(self):
         """Return image dimensions as tuple: (Xdim, Ydim, Zdim)"""
         fn = self.getFileName()

@@ -912,7 +912,7 @@ Examples:
                       choices=['Corrected', 'Unmasked Maps', 'Masked Maps', 'Phase Randomized Masked Maps', 'all'],
                       default=FSC_CORRECTED, display=EnumParam.DISPLAY_COMBO, 
                       label='Display resolution plots (FSC)',
-                      help='') 
+                      help='')
         group.addParam('resolutionThresholdFSC', FloatParam, default=0.143, 
                       expertLevel=LEVEL_ADVANCED,
                       label='Threshold in resolution plots',

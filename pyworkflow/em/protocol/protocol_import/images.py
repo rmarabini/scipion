@@ -121,7 +121,6 @@ class ProtImportImages(ProtImportFiles):
             
             if self._checkStacks:
                 _, _, _, n = imgh.getDimensions(dst)
-            print "NNNNNNNNNNNN: ", n
             if n > 1:
                 for index in range(1, n+1):
                     img.cleanObjId()
@@ -233,11 +232,17 @@ class ProtImportImages(ProtImportFiles):
         return None 
 
     def _fillMicName(self, img, filename):
-        from pyworkflow.em import Micrograph
+        from pyworkflow.em import Micrograph, Tomogram
         if isinstance(img, Micrograph):
             filePaths = self.getMatchFiles()
             commPath = commonPath(filePaths)
             micName = filename.replace(commPath + "/", "").replace("/", "_")
             img.setMicName(micName)
+            
+        elif isinstance(img, Tomogram):
+            filePaths = self.getMatchFiles()
+            commPath = commonPath(filePaths)
+            tomoName = filename.replace(commPath + "/", "").replace("/", "_")
+            img.setTomoName(tomoName)
     
     
