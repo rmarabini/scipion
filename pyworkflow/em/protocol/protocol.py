@@ -36,7 +36,8 @@ from pyworkflow.em.data import (SetOfMicrographs, SetOfCoordinates, SetOfParticl
                                 SetOfClasses2D, SetOfClasses3D, SetOfClassesVol,
                                 SetOfVolumes, SetOfCTF, SetOfMovies,
                                 SetOfMovieParticles, SetOfAverages, SetOfNormalModes)
-from pyworkflow.em.data_tomo import SetOfTomograms
+from pyworkflow.em.data_tomo import (SetOfTomograms, SetOfTomoRecs, SetOfSubtomograms,
+                                     SetOfTomoCoordinates, SetOfCTF3D)
 from pyworkflow.em.constants import RELATION_SOURCE, RELATION_TRANSFORM, RELATION_CTF
 from pyworkflow.em.data_tiltpairs import SetOfAngles
 from pyworkflow.utils.path import cleanPath
@@ -103,17 +104,32 @@ class EMProtocol(Protocol):
     
     def _createSetOfCTF(self, suffix=''):
         return self.__createSet(SetOfCTF, 'ctfs%s.sqlite', suffix)
-
-
+    
     def _createSetOfNormalModes(self, suffix=''):
         return self.__createSet(SetOfNormalModes, 'modes%s.sqlite', suffix)
     
     def _createSetOfMovies(self, suffix=''):
         return self.__createSet(SetOfMovies, 'movies%s.sqlite', suffix)
-
+    
     def _createSetOfTomograms(self, suffix=''):
         return self.__createSet(SetOfTomograms, 'tomograms%s.sqlite', suffix)
-
+    
+    def _createSetOfTomoRecs(self, suffix=''):
+        return self.__createSet(SetOfTomoRecs, 'tomogramsRec%s.sqlite', suffix)
+    
+    def _createSetOfSubtomograms(self, suffix=''):
+        return self.__createSet(SetOfSubtomograms, 'subtomograms%s.sqlite', suffix)
+    
+    def _createSetOfTomoCoordinates(self, TomoRecSet, suffix=''):
+        coordSet = self.__createSet(SetOfTomoCoordinates, 'tomoCoordinates%s.sqlite', suffix)
+        coordSet.setTomoRecs(TomoRecSet)       
+        return coordSet
+    
+    def _createSetOfCTF3D(self, tomoCoords, suffix=''):
+        ctf3DSet = self.__createSet(SetOfCTF3D, 'ctfs3D%s.sqlite', suffix)
+        ctf3DSet.setTomoCoordinates(tomoCoords)
+        return ctf3DSet
+    
     def _createSetOfAngles(self, suffix=''):
         return self.__createSet(SetOfAngles, 'tiltpairs_angles%s.sqlite', suffix)
        

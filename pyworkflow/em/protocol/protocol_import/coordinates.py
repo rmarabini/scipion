@@ -232,3 +232,53 @@ class ProtImportCoordinates(ProtImportFiles, ProtParticlePicking):
         boxSize = (int)(boxSize * scale)
         return boxSize
 
+
+class ProtImportTomoCoordinates(ProtImportFiles, ProtParticlePicking):
+    """ Protocol to import a set of coordinates from reconstructed tomograms"""
+    _label = 'import subtomogram coordinates'
+
+    #--------------------------- DEFINE param functions --------------------------------------------
+    def _defineParams(self, form):
+        ProtImportFiles._defineParams(self, form)
+
+        form.addParam('inputTomoRecs', PointerParam, pointerClass='SetOfTomoRecs', 
+                          label='Input reconstructed tomograms',
+                          help='Select the subtomograms that you want to import coordinates.')
+
+        form.addParam('boxSize', IntParam, label='Box size')
+        form.addParam('scale', FloatParam,
+                      label='Scale', default=1,
+                      help='factor to scale coordinates')
+        form.addParam('invertX', BooleanParam, default=False,
+                      label='Invert X')
+        form.addParam('invertY', BooleanParam, default=False,
+                      label='Invert Y')
+        form.addParam('invertZ', BooleanParam, default=False,
+                      label='Invert Z')
+
+    #--------------------------- INSERT steps functions --------------------------------------------
+    def _insertAllSteps(self):
+        importFrom = self.importFrom.get()
+        self._insertFunctionStep('createOutputStep', importFrom,
+                                     self.filesPath.get())
+
+    #--------------------------- STEPS functions ---------------------------------------------------
+    def createOutputStep(self, importFrom, *args):
+        inputTomoRecs = self.inputTomoRecs.get()
+        coordsSet = self._createSetOfTomoCoordinates(inputTomoRecs)
+        coordsSet.setBoxSize(self.boxSize.get())
+        ci = self.getImportClass()
+        
+        for coordFile, _ in self.iterFiles():
+            mic = self.getMatchingMic(coordFile)
+            if mic is not None:
+                def addCoordinate(coord):
+                    coord.setMicrograph(mic)
+                    self.correctCoordinatePosition(coord)
+                    coordsSet.append(coord)
+                # Parse the coordinates in the given format for this micrograph
+                ci.importCoordinates(coordFile, addCoordinate=addCoordinate)
+        
+        self._defineOutputs(outputCoordinates=coordsSet)
+        self._defineSourceRelation(self.inputMicrographs, coordsSet)
+

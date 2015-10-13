@@ -61,7 +61,7 @@ class TomogramBase(Image):
     
     def isCompressed(self):
         return self.getFileName().endswith('bz2') 
-        
+    
     def getDim(self):
         """Return image dimensions as tuple: (Xdim, Ydim, Zdim)
         Consider compressed Movie files"""
@@ -94,14 +94,13 @@ class TomoRec(TomogramBase):
     def setTomogram(self, tomogram):
         """ Set the tomogram to which this reconstruction belongs. """
         self._tomogramPointer.set(tomogram)
-        self._tomoId.set(tomogram.getObjId())
-        self._tomoName.set(tomogram.getMicName())
 
 
 class Subtomogram(Image):
     """ Represents an EM Particle object """
     def __init__(self, **args):
         Image.__init__(self, **args)
+        self._ctfModel = None
         self._tomoCoordinate = None
         self._tomoId = Integer()
         self._tomoName = String()
@@ -137,6 +136,16 @@ class Subtomogram(Image):
     
     def getTomoName(self):
         return self._tomoName.get()
+    
+    def hasCTF(self):
+        return self._ctfModel is not None
+    
+    def getCTF(self):
+        """ Return the CTF model """
+        return self._ctfModel
+    
+    def setCTF(self, newCTF):
+        self._ctfModel = newCTF
 
 
 class TomoCoordinate(EMObject):
@@ -147,7 +156,7 @@ class TomoCoordinate(EMObject):
         self._x = Integer(kwargs.get('x', None))
         self._y = Integer(kwargs.get('y', None))
         self._z = Integer(kwargs.get('z', None))
-        self._tomoRecPointer = Pointer(objDoStore=False)
+        self._tomoRecPointer = Pointer()
         self._tomoId = Integer()
         self._tomoName = String()
     
@@ -214,6 +223,41 @@ class TomoCoordinate(EMObject):
         return self._tomoName.get()
 
 
+class CTF3DModel(EMObject):
+    """ Represents a generic CTF model. """
+    def __init__(self, **kwargs):
+        EMObject.__init__(self, **kwargs)
+        self._ctfFile = String()
+#         self._tomogramPointer  = Pointer()
+        self._tomoCoordinatePointer  = Pointer()
+    
+    def getCtfFile(self):
+        self._ctfFile.get()
+    
+    def setCtfFile(self, ctfFile):
+        self._ctfFile.set(ctfFile)
+    
+#     def getTomogram(self):
+#         """ Return the tomoRec object to which
+#         this coordinate is associated.
+#         """
+#         return self._tomogramPointer.get()
+#     
+#     def setTomogram(self, tomo):
+#         """ Set the tomogram to which this reconstruction belongs. """
+#         self._tomogramPointer.set(tomo)
+    
+    def getTomoCoordinate(self):
+        """ Return the tomoRec object to which
+        this coordinate is associated.
+        """
+        return self._tomoCoordinatePointer.get()
+    
+    def setTomoCoordinate(self, tomoCoordinate):
+        """ Set the tomogram to which this reconstruction belongs. """
+        self._tomoCoordinatePointer.set(tomoCoordinate)
+
+
 class SetOfTomogramsBase(SetOfMicrographsBase):
     """ Create a base class to set of Tomograms and a set of TomoRecs. """
     
@@ -234,10 +278,15 @@ class SetOfTomogramsBase(SetOfMicrographsBase):
     def setBfactor(self, bfactor):
         self._bfactor.set(bfactor)
     
+    def copyInfo(self, other):
+        SetOfMicrographsBase.copyInfo(self, other)
+        self.setDose(other.getDose())
+        self.setBfactor(other.getBfactor())
+    
     def __str__(self):
         """ String representation of a set of movies. """
         sampling = self.getSamplingRate()
-
+        
         if not sampling:
             print "FATAL ERROR: Object %s has no sampling rate!!!" % self.getName()
             sampling = -999.0
@@ -267,6 +316,16 @@ class SetOfTomoRecs(SetOfTomogramsBase):
     
     def __init__(self, **kwargs):
         SetOfTomogramsBase.__init__(self, **kwargs)
+        self._tomogramsPointer  = Pointer()
+    
+    def getTomograms(self):
+        """ Return the tomoRec object to which
+        this coordinate is associated.
+        """
+        return self._tomogramsPointer.get()
+    
+    def setTomograms(self, tomoSet):
+        self._tomogramsPointer.set(tomoSet)
 
 
 class SetOfSubtomograms(SetOfImages):
@@ -325,7 +384,7 @@ class SetOfTomoCoordinates(EMSet):
         """ Set the box size of the subtomograms. """
         self._boxSize.set(boxSize)
     
-    def iterTomoRecss(self):
+    def iterTomoRecs(self):
         """ Iterate over the micrographs set associated with this
         set of coordinates.
         """
@@ -376,3 +435,18 @@ class SetOfTomoCoordinates(EMSet):
         s = "%s (%d items, %s)" % (self.getClassName(), self.getSize(), boxStr)
         
         return s
+
+
+class SetOfCTF3D(EMSet):
+    """ Contains a set of CTF models estimated."""
+    ITEM_TYPE = CTF3DModel
+    
+    def __init__(self, **args):
+        EMSet.__init__(self, **args)
+        self._tomoCoordinatesPointer = Pointer()
+    
+    def getTomoCoordinates(self):
+        return self._tomoCoordinatesPointer.get()
+    
+    def setTomoCoordinates(self, tomoCoordinates):
+        self._tomoCoordinatesPointer.set(tomoCoordinates)
