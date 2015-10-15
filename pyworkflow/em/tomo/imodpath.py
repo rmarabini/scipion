@@ -36,15 +36,15 @@ NEWSTACK = 'newstack'
 CTFFIND3 = 'ctffind3.exe'
 CTFFIND4 = 'ctffind'
 
-EXTRACTTILTS_PATH = join(os.environ['IMOD_HOME'], 'bin', EXTRACTTILTS)
-NEWSTACK_PATH = join(os.environ['IMOD_HOME'], 'bin', NEWSTACK)
+EXTRACTTILTS_PATH = join(os.environ['IMOD_DIR'], 'bin', EXTRACTTILTS)
+NEWSTACK_PATH = join(os.environ['IMOD_DIR'], 'bin', NEWSTACK)
 
 def getEnviron():
     """ Setup the environment variables needed to launch imod. """
     environ = Environ(os.environ)
     environ.update({
-            'PATH': join(os.environ['IMOD_HOME'], 'bin'),
-            'LD_LIBRARY_PATH': join(os.environ['IMOD_HOME'], 'lib'),
+            'PATH': join(os.environ['IMOD_DIR'], 'bin'),
+            'LD_LIBRARY_PATH': join(os.environ['IMOD_DIR'], 'lib'),
             }, position=Environ.BEGIN)
     return environ
 

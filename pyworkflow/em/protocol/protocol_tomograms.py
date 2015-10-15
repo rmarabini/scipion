@@ -1,6 +1,6 @@
 # **************************************************************************
 # *
-# * Authors:     Airen Zaldivar Peraza (azaldivar@cnb.csic.es)
+# * Authors:     Josue Gomez Blanco (jgomez@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -28,10 +28,19 @@ In this module are protocol base classes related to EM Particles
 """
 from pyworkflow.em.protocol import EMProtocol
 
+
 class ProtTomograms(EMProtocol):
     pass
 
+
 class ProtProcessTomograms(ProtTomograms):
+    """ This class will serve as a base for all protocol
+    that performs some operation on Tomograms.
+    """
+    pass
+
+
+class ProtExtractSubtomograms(ProtTomograms):
     """ This class will serve as a base for all protocol
     that performs some operation on Tomograms.
     """

@@ -37,7 +37,9 @@ from data_tomo import *
 from protocol import *
 from constants import *
 from convert import *
-from tomo import ProtPrepareSubtomograms # Change this as getProtocols method
+from tomo import ProtCtf3DEstimation # Change this as getProtocols method
+from pyworkflow.em.tomo.relionTomo import ProtRelionExtractSubtomograms # Change this as getProtocols method
+
 #from pyworkflow.viewer import Viewer
 from pyworkflow.wizard import Wizard
 from viewer import *

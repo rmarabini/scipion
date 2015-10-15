@@ -38,11 +38,12 @@ class TestTomogramBase(BaseTest):
     def setData(cls, dataProject='Tomo'):
         cls.dataset = DataSet.getDataSet(dataProject)
         cls.tomogramsFn = cls.dataset.getFile('allTomograms')
+        cls.tomoRecsFn = cls.dataset.getFile('allRec')
         cls.coords = cls.dataset.getFile('allCoordinates')
     
     @classmethod
     def runImportTomograms(cls, pattern, vol, spAbrr, samplingRate):
-        """ Run an Import particles protocol. """
+        """ Run an Import tomograms protocol. """
         protImport = cls.newProtocol(ProtImportTomograms,
                                      voltage=vol,
                                      sphericalAberration=spAbrr,
@@ -53,28 +54,56 @@ class TestTomogramBase(BaseTest):
         if protImport.outputTomograms is None:
             raise Exception('Import of images: %s, failed. outputTomograms is None.' % pattern)
         return protImport
+    
+    @classmethod
+    def runImportTomoRecs(cls, pattern, tomograms, sampling):
+        """ Run an Import reconstructed tomograms protocol. """
+        protImport2 = cls.newProtocol(ProtImportTomoRecs,
+                                     filesPath=pattern,
+                                     samplingRate=sampling,
+                                     inputTomograms=tomograms)
+        cls.launchProtocol(protImport2)
+        # check that input images have been imported (a better way to do this?)
+        if protImport2.outputTomoRecs is None:
+            raise Exception('Import of images: %s, failed. outputTomograms is None.' % pattern)
+        return protImport2
+    
+    @classmethod
+    def runImportTomoCoords(cls, pattern, tomoRecs, bSize):
+        """ Run an Import reconstructed tomograms protocol. """
+        protImportCrds = cls.newProtocol(ProtImportTomoCoordinates,
+                                         filesPath=pattern,
+                                         inputTomoRecs=tomoRecs,
+                                         boxSize=bSize)
+        cls.launchProtocol(protImportCrds)
+        # check that input images have been imported (a better way to do this?)
+        if protImportCrds.outputTomoCoordinates is None:
+            raise Exception('Import of images: %s, failed. outputTomograms is None.' % pattern)
+        return protImportCrds
+
+    
 
 
-class TestSubtomogramAveraging(TestTomogramBase):
+class TestCtf3DEstimation(TestTomogramBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
         TestTomogramBase.setData()
         cls.protImport = cls.runImportTomograms(cls.tomogramsFn, 300, 2.26, 2.6)
+        cls.protImportRec = cls.runImportTomoRecs(cls.tomoRecsFn, cls.protImport.outputTomograms, 10.4)
+        cls.protImportCrds = cls.runImportTomoCoords(cls.coords, cls.protImportRec.outputTomoRecs, 50)
     
-    def testSubtomogramAverage(self):
+    def testCtf3DEstimation(self):
         print "Run prepare tomograms"
-        protTomoAve = self.newProtocol(ProtPrepareSubtomograms,
+        protCtf3D = self.newProtocol(ProtCtf3DEstimation,
                                        ctfDownFactor=2,
                                        lowRes=0.002,
                                        minDefocus=1.0,
                                        maxDefocus=10,
                                        stepFocus=2000,
-                                       filesPath=self.coords,
-                                       boxSize=200,
                                        numberOfThreads=5)
-        protTomoAve.inputTomograms.set(self.protImport.outputTomograms)
-        self.launchProtocol(protTomoAve)
+        protCtf3D.inputTomoCoords.set(self.protImportCrds.outputTomoCoordinates)
+        self.launchProtocol(protCtf3D)
 #          
 #         self.assertIsNotNone(getattr(prot2D, 'outputClasses', None), 
 #                              "There was a problem with Relion 2D:\n" + prot2D.getErrorMessage())

@@ -140,11 +140,7 @@ class ProtRelionBase(EMProtocol):
                       help='If you set to *Yes*, you should select a previous'
                       'run of type *%s* class and most of the input parameters'
                       'will be taken from it.' % self.getClassName())
-        form.addParam('inputParticles', PointerParam, pointerClass='SetOfParticles',
-                      condition='not doContinue',
-                      important=True,
-                      label="Input particles",  
-                      help='Select the input images from the project.')
+        self._defineInputForm(form)
         form.addParam('maskDiameterA', IntParam, default=-1,
                       condition='not doContinue',
                       label='Particle mask diameter (A)',
@@ -422,6 +418,13 @@ class ProtRelionBase(EMProtocol):
         
         form.addParallelSection(threads=1, mpi=3)
     
+    def _defineInputForm(self, form):
+        form.addParam('inputParticles', PointerParam, pointerClass='SetOfParticles',
+              condition='not doContinue',
+              important=True,
+              label="Input particles",  
+              help='Select the input images from the project.')
+    
     def addSymmetry(self, container):
         container.addParam('symmetryGroup', StringParam, default='c1',
                       label="Symmetry", 
@@ -431,7 +434,7 @@ class ProtRelionBase(EMProtocol):
                          '* I3: 52-setting (as used in SPIDER?)                                                  \n'
                          '* I4: A different 52 setting                                                           \n'
                          'The command *relion_refine --sym D2 --print_symmetry_ops* prints a list of all symmetry operators for symmetry group D2. RELION uses XMIPP\'s libraries for symmetry operations. Therefore, look at the XMIPP Wiki for more details:  http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/WebHome?topic=Symmetry')
-
+    
     #--------------------------- INSERT steps functions --------------------------------------------  
     def _insertAllSteps(self): 
         self._initialize()

@@ -50,7 +50,7 @@ class TomogramBase(Image):
     
     def getTomoName(self):
         if self._tomoName.get():
-            return self._micName.get()
+            return self._tomoName.get()
         else:
             self.getFileName()
     
@@ -193,13 +193,13 @@ class TomoCoordinate(EMObject):
         self.setY(y)
         self.setZ(z)
     
-    def getTomogram(self):
+    def getTomoRec(self):
         """ Return the tomoRec object to which
         this coordinate is associated.
         """
         return self._tomoRecPointer.get()
     
-    def setTomogram(self, tomoRec):
+    def setTomoRec(self, tomoRec):
         """ Set the tomogram to which this reconstruction belongs. """
         self._tomoRecPointer.set(tomoRec)
         self._tomoId.set(tomoRec.getObjId())
@@ -326,6 +326,24 @@ class SetOfTomoRecs(SetOfTomogramsBase):
     
     def setTomograms(self, tomoSet):
         self._tomogramsPointer.set(tomoSet)
+    
+    def __str__(self):
+        """ String representation of a set of movies. """
+        sampling = self.getSamplingRate()
+         
+        if not sampling:
+            print "FATAL ERROR: Object %s has no sampling rate!!!" % self.getName()
+            sampling = -999.0
+        if self._firstDim.isEmpty():
+            try:
+                self._firstDim.set(self.getFirstItem().getDim())
+            except Exception, ex:
+                print "Error reading dimension: ", ex
+                import traceback
+                traceback.print_exc()
+        dimStr = str(self.getFirstItem().getDim()[0]) + " x " + str(self.getFirstItem().getDim()[1]) + " x " + str(self.getFirstItem().getDim()[3])
+        s = "%s (%d items, %s, %0.2f A/px)" % (self.getClassName(), self.getSize(), dimStr, sampling)
+        return s
 
 
 class SetOfSubtomograms(SetOfImages):
@@ -414,7 +432,7 @@ class SetOfTomoCoordinates(EMSet):
         this SetOfTomoCoordinates"""
         return self._setOfTomoRecsPointer.get()
     
-    def setMicrographs(self, tomoRecs):
+    def setTomoRecs(self, tomoRecs):
         """ Set the SetOfTomoRecs associates with 
         this set of coordinates.
          """

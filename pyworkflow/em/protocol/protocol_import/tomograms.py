@@ -30,6 +30,7 @@ In this module are protocol base classes related to EM imports of Tomograms
 
 from pyworkflow.protocol import params
 import pyworkflow.utils.path as putils
+from pyworkflow.utils.properties import Message
 
 from images import ProtImportFiles
 from micrographs import ProtImportMicBase
@@ -58,7 +59,7 @@ class ProtImportTomograms(ProtImportMicBase):
         tomoSet.setDose(self.totalDose.get())
 
 
-class ProtImportTomoRecss(ProtImportFiles):
+class ProtImportTomoRecs(ProtImportFiles):
     """Protocol to import a set of reconstructed tomograms to the project"""
     _label = 'import reconstructed tomograms'
     _outputClassName = 'SetOfTomoRecs'
@@ -70,11 +71,16 @@ class ProtImportTomoRecss(ProtImportFiles):
         form.addParam('inputTomograms', params.PointerParam, pointerClass='SetOfTomograms', 
                           label='Input tomograms',
                           help='Select the subtomograms that you want to import coordinates.')
+        form.addParam('samplingRate', params.FloatParam,  default=1.0,
+                       label=Message.LABEL_SAMP_RATE,
+                       help=Message.TEXT_SAMP_RATE)
+
+        
     
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         self._insertFunctionStep('createOutputStep', self.filesPath.get())
-
+    
     #--------------------------- STEPS functions ---------------------------------------------------
     def createOutputStep(self, importFrom, *args):
         tomoSet = self.inputTomograms.get()
@@ -93,6 +99,7 @@ class ProtImportTomoRecss(ProtImportFiles):
                 
                 tomoRec.setFileName(dest)
                 tomoRec.copyInfo(tomo)
+                tomoRec.setSamplingRate(self.samplingRate.get())
                 tomoRec.setTomogram(tomo)
                 tomoRecsSet.append(tomoRec)
         

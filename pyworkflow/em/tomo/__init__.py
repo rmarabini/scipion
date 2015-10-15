@@ -26,7 +26,7 @@
 """
 This modules contains classes related with tomography
 """
-from prepare_subtomograms_scipion import ProtPrepareSubtomograms
+from pyworkflow.em.tomo.protocol_ctf3d_estimation import ProtCtf3DEstimation
 from imodpath import getEnviron
 
 _environ = getEnviron()

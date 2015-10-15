@@ -42,7 +42,7 @@ from protocol_alignment_assign import ProtAlignmentAssign
 from protocol_batch import *
 from protocol_classes_consensus import ProtClassesConsensus, ViewerClassesConsensus
 from protocol_extract_coordinates import ProtExtractCoords
-from protocol_tomograms import ProtProcessTomograms
+from protocol_tomograms import ProtProcessTomograms, ProtExtractSubtomograms
 
 from parallel import ProtTestParallel
 

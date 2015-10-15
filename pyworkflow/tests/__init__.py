@@ -251,7 +251,7 @@ DataSet(name='SymVirus', folder='SymVirus',
 
 DataSet(name='Tomo', folder='Tomo',
         files={'allTomograms' : 'Tomograms/*.st',
-               'allCoordinates' : 'Coordinates/',
+               'allCoordinates' : 'Coordinates/*.coord',
                'allRec' : 'Rec/*.rec'
               }
        )
