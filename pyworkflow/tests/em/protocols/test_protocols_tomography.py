@@ -94,7 +94,7 @@ class TestCtf3DEstimation(TestTomogramBase):
         cls.protImportCrds = cls.runImportTomoCoords(cls.coords, cls.protImportRec.outputTomoRecs, 50)
     
     def testCtf3DEstimation(self):
-        print "Run prepare tomograms"
+        print "Run estimate CTF3Ds"
         protCtf3D = self.newProtocol(ProtCtf3DEstimation,
                                        ctfDownFactor=2,
                                        lowRes=0.002,
@@ -111,4 +111,12 @@ class TestCtf3DEstimation(TestTomogramBase):
 #                                 prot2D.outputClasses.getImages().getSamplingRate(),
 #                                 "There was a problem with the sampling rate of the particles")
 
-
+#         print "Run extracting subtomograms"
+#         protSub = self.newProtocol(ProtRelionExtractSubtomograms,
+#                                    backRadius=20)
+#         protSub.inputCoordinates.set(self.protImportCrds.outputTomoCoordinates)
+#         protSub.ctfRelations.set(protCtf3D.outpuCft3Ds)
+#         self.launchProtocol(protSub)
+        
+        
+        

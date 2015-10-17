@@ -86,6 +86,7 @@ class ProtImportTomoRecs(ProtImportFiles):
         tomoSet = self.inputTomograms.get()
         tomoRecsSet = self._createSetOfTomoRecs()
         tomoRecsSet.copyInfo(tomoSet)
+        tomoRecsSet.setSamplingRate(self.samplingRate.get())
         tomoRecsSet.setTomograms(tomoSet)
         
         for tomoRecFile, _ in self.iterFiles():

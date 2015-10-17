@@ -83,17 +83,17 @@ class TomoRec(TomogramBase):
     """
     def __init__(self, filename=None, **kwargs):
         TomogramBase.__init__(self, filename=filename, **kwargs)
-        self._tomogramPointer = Pointer(objDoStore=False)
+        self._tomogram = None
     
     def getTomogram(self):
         """ Return the micrograph object to which
         this coordinate is associated.
         """
-        return self._tomogramPointer.get()
+        return self._tomogram
     
     def setTomogram(self, tomogram):
         """ Set the tomogram to which this reconstruction belongs. """
-        self._tomogramPointer.set(tomogram)
+        self._tomogram = tomogram
 
 
 class Subtomogram(Image):
@@ -132,7 +132,7 @@ class Subtomogram(Image):
         return self.getTomoId() is not None
     
     def setTomoName(self, tomoName):
-        self._micName.set(tomoName)
+        self._tomoName.set(tomoName)
     
     def getTomoName(self):
         return self._tomoName.get()
@@ -156,7 +156,7 @@ class TomoCoordinate(EMObject):
         self._x = Integer(kwargs.get('x', None))
         self._y = Integer(kwargs.get('y', None))
         self._z = Integer(kwargs.get('z', None))
-        self._tomoRecPointer = Pointer()
+        self._tomoRec = None
         self._tomoId = Integer()
         self._tomoName = String()
     
@@ -197,11 +197,11 @@ class TomoCoordinate(EMObject):
         """ Return the tomoRec object to which
         this coordinate is associated.
         """
-        return self._tomoRecPointer.get()
+        return self._tomoRec
     
     def setTomoRec(self, tomoRec):
         """ Set the tomogram to which this reconstruction belongs. """
-        self._tomoRecPointer.set(tomoRec)
+        self._tomoRec = tomoRec
         self._tomoId.set(tomoRec.getObjId())
         self._tomoName.set(tomoRec.getTomoName())
     
@@ -236,16 +236,6 @@ class CTF3DModel(EMObject):
     
     def setCtfFile(self, ctfFile):
         self._ctfFile.set(ctfFile)
-    
-#     def getTomogram(self):
-#         """ Return the tomoRec object to which
-#         this coordinate is associated.
-#         """
-#         return self._tomogramPointer.get()
-#     
-#     def setTomogram(self, tomo):
-#         """ Set the tomogram to which this reconstruction belongs. """
-#         self._tomogramPointer.set(tomo)
     
     def getTomoCoordinate(self):
         """ Return the tomoRec object to which
@@ -284,7 +274,6 @@ class SetOfTomogramsBase(SetOfMicrographsBase):
         self.setBfactor(other.getBfactor())
     
     def __str__(self):
-        """ String representation of a set of movies. """
         sampling = self.getSamplingRate()
         
         if not sampling:
@@ -380,6 +369,24 @@ class SetOfSubtomograms(SetOfImages):
         """
         SetOfImages.copyInfo(self, other)
         self.setHasCTF(other.hasCTF())
+    
+    def __str__(self):
+        """ String representation of a set of movies. """
+        sampling = self.getSamplingRate()
+          
+        if not sampling:
+            print "FATAL ERROR: Object %s has no sampling rate!!!" % self.getName()
+            sampling = -999.0
+        if self._firstDim.isEmpty():
+            try:
+                self._firstDim.set(self.getFirstItem().getDim())
+            except Exception, ex:
+                print "Error reading dimension: ", ex
+                import traceback
+                traceback.print_exc()
+        dimX = self.getFirstItem().getDim()[0]
+        s = "%s (%d x %d x %d, %0.2f A/px)" % (self.getClassName(), dimX, dimX, dimX, sampling)
+        return s
 
 
 class SetOfTomoCoordinates(EMSet):
