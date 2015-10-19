@@ -216,14 +216,3 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
         coordKey = putils.removeBaseExt(coord.getTomoName()) + str(coord.getX()) + str(coord.getY()) + str(coord.getZ())
         return self.coordDict[coordKey] if self.coordDict[coordKey] else None
         
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        

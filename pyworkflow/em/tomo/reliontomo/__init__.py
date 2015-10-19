@@ -33,8 +33,8 @@ _logo = "relion_logo.png"
 _references = ['Scheres2012a', 'Scheres2012b', 'Chen2012']
 
 from convert import getEnviron
-# from protocol_classify3d import ProtRelionClassify3D
-# from protocol_refine3d import ProtRelionRefine3D
+from protocol_classify3dTomo import ProtRelionSubtomoClassify3D
+from protocol_refine3dTomo import ProtRelionSubtomoRefine3D
 from protocol_extract import ProtRelionExtractSubtomograms
 
 # # Wizards
