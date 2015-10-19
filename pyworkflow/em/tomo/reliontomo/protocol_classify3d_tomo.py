@@ -32,11 +32,11 @@ import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtClassify3D
 from pyworkflow.em.data import Volume
 
-from pyworkflow.em.packages.relion.protocol_base import ProtRelionBase
-from pyworkflow.em.packages.relion.convert import relionToLocation, rowToAlignment
+from pyworkflow.em.tomo.reliontomo.protocol_base_tomo import ProtRelionBaseTomo
+# from pyworkflow.em.packages.relion.convert import relionToLocation, rowToAlignment
 
 
-class ProtRelionSubtomoClassify3D(ProtClassify3D, ProtRelionBase):
+class ProtRelionSubtomoClassify3D(ProtClassify3D, ProtRelionBaseTomo):
     """    
     Protocol to classify 3D using Relion. Relion employs an empirical
     Bayesian approach to refinement of (multiple) 3D reconstructions

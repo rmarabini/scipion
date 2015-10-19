@@ -140,7 +140,11 @@ class ProtRelionBase(EMProtocol):
                       help='If you set to *Yes*, you should select a previous'
                       'run of type *%s* class and most of the input parameters'
                       'will be taken from it.' % self.getClassName())
-        self._defineInputForm(form)
+        form.addParam('inputParticles', PointerParam, pointerClass='SetOfParticles',
+              condition='not doContinue',
+              important=True,
+              label="Input particles",  
+              help='Select the input images from the project.')
         form.addParam('maskDiameterA', IntParam, default=-1,
                       condition='not doContinue',
                       label='Particle mask diameter (A)',
@@ -417,13 +421,6 @@ class ProtRelionBase(EMProtocol):
                            "--pad 2\n" + joinHalves)
         
         form.addParallelSection(threads=1, mpi=3)
-    
-    def _defineInputForm(self, form):
-        form.addParam('inputParticles', PointerParam, pointerClass='SetOfParticles',
-              condition='not doContinue',
-              important=True,
-              label="Input particles",  
-              help='Select the input images from the project.')
     
     def addSymmetry(self, container):
         container.addParam('symmetryGroup', StringParam, default='c1',

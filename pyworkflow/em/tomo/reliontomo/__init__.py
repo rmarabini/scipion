@@ -33,9 +33,9 @@ _logo = "relion_logo.png"
 _references = ['Scheres2012a', 'Scheres2012b', 'Chen2012']
 
 from convert import getEnviron
-from protocol_classify3dTomo import ProtRelionSubtomoClassify3D
-from protocol_refine3dTomo import ProtRelionSubtomoRefine3D
-from protocol_extract import ProtRelionExtractSubtomograms
+from pyworkflow.em.tomo.reliontomo.protocol_classify3d_tomo import ProtRelionSubtomoClassify3D
+from pyworkflow.em.tomo.reliontomo.protocol_refine3d_tomo import ProtRelionSubtomoRefine3D
+from pyworkflow.em.tomo.reliontomo.protocol_extract_tomo import ProtRelionExtractSubtomograms
 
 # # Wizards
 # from wizard import *

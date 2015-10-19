@@ -26,15 +26,15 @@
 """
 This module contains the protocol for 3d refinement with Relion.
 """
-import pyworkflow.protocol.params as params
-import pyworkflow.em.metadata as md
+# import pyworkflow.protocol.params as params
+from pyworkflow.em import metadata
 from pyworkflow.em.data import Volume
 from pyworkflow.em.protocol import ProtRefine3D
 
-from pyworkflow.em.packages.relion.protocol_base import ProtRelionBase
+from pyworkflow.em.tomo.reliontomo.protocol_base_tomo import ProtRelionBaseTomo
 
 
-class ProtRelionSubtomoRefine3D(ProtRefine3D, ProtRelionBase):
+class ProtRelionSubtomoRefine3D(ProtRefine3D, ProtRelionBaseTomo):
     """Protocol to refine a 3D map using Relion. Relion employs an empirical
 Bayesian approach to refinement of (multiple) 3D reconstructions
 or 2D class averages in electron cryo-microscopy (cryo-EM). Many
@@ -43,30 +43,21 @@ leads to objective and high-quality results.
     """    
     _label = '3D subtomogram auto-refine'
     IS_CLASSIFY = False
-    CHANGE_LABELS = [md.RLN_OPTIMISER_CHANGES_OPTIMAL_ORIENTS, 
-                     md.RLN_OPTIMISER_CHANGES_OPTIMAL_OFFSETS]
+    CHANGE_LABELS = [metadata.RLN_OPTIMISER_CHANGES_OPTIMAL_ORIENTS, 
+                     metadata.RLN_OPTIMISER_CHANGES_OPTIMAL_OFFSETS]
 
     PREFIXES = ['half1_', 'half2_']
     
     def __init__(self, **args):        
-        ProtRelionBase.__init__(self, **args)
+        ProtRelionBaseTomo.__init__(self, **args)
         
     def _initialize(self):
         """ This function is mean to be called after the 
         working dir for the protocol have been set. (maybe after recovery from mapper)
         """
-        ProtRelionBase._initialize(self)
+        ProtRelionBaseTomo._initialize(self)
         self.ClassFnTemplate = '%(ref)03d@%(rootDir)s/relion_it%(iter)03d_classes.mrcs'
         self.numberOfClasses.set(1) # For refinement we only need just one "class"
-    
-    #--------------------------- DEFINE param functions --------------------------------------------   
-    def _defineInputForm(self, form):
-        form.addParam('inputSubtomograms', em.PointerParam, pointerClass='SetOfSubtomograms',
-              condition='not doContinue',
-              important=True,
-              label="Input subtomograms",  
-              help='Select the input subtomograms from the project.')
-
     
     #--------------------------- INSERT steps functions --------------------------------------------  
     def _setSamplingArgs(self, args):
@@ -111,7 +102,7 @@ leads to objective and high-quality results.
                            (imgSet.getFileName(), imgStar))
         
         # Pass stack file as None to avoid write the images files
-        writeSetOfParticles(imgSet, imgStar, self._getExtraPath())
+#         writeSetOfParticles(imgSet, imgStar, self._getExtraPath())
         
         if self.doCtfManualGroups:
             self._splitInCTFGroups(imgStar)
@@ -128,22 +119,22 @@ leads to objective and high-quality results.
                     if particle is not None:
                         auxMovieParticles.append(movieParticle)
                             
-                writeSetOfParticles(auxMovieParticles,
-                                    self._getFileName('movie_particles'), None, originalSet=imgSet,
-                                    postprocessImageRow=self._postprocessImageRow)
-                mdMovies = md.MetaData(self._getFileName('movie_particles'))
-                mdParts = md.MetaData(self._getFileName('input_star'))
-                mdParts.renameColumn(md.RLN_IMAGE_NAME, md.RLN_PARTICLE_NAME)
-                mdParts.removeLabel(md.RLN_MICROGRAPH_NAME)
+#                 writeSetOfParticles(auxMovieParticles,
+#                                     self._getFileName('movie_particles'), None, originalSet=imgSet,
+#                                     postprocessImageRow=self._postprocessImageRow)
+                mdMovies = metadata.MetaData(self._getFileName('movie_particles'))
+                mdParts = metadata.MetaData(self._getFileName('input_star'))
+                mdParts.renameColumn(metadata.RLN_IMAGE_NAME, metadata.RLN_PARTICLE_NAME)
+                mdParts.removeLabel(metadata.RLN_MICROGRAPH_NAME)
                 
                 detectorPxSize = movieParticleSet.getAcquisition().getMagnification() * movieParticleSet.getSamplingRate() / 10000
-                mdAux = md.MetaData()
-                mdMovies.fillConstant(md.RLN_CTF_DETECTOR_PIXEL_SIZE, detectorPxSize)
+                mdAux = metadata.MetaData()
+                mdMovies.fillConstant(metadata.RLN_CTF_DETECTOR_PIXEL_SIZE, detectorPxSize)
                 
-                mdAux.join2(mdMovies, mdParts, md.RLN_PARTICLE_ID, md.RLN_IMAGE_ID, md.INNER_JOIN)
+                mdAux.join2(mdMovies, mdParts, metadata.RLN_PARTICLE_ID, metadata.RLN_IMAGE_ID, metadata.INNER_JOIN)
                 
-                mdAux.write(self._getFileName('movie_particles'), md.MD_OVERWRITE)
-                cleanPath(auxMovieParticles.getFileName())
+                mdAux.write(self._getFileName('movie_particles'), metadata.MD_OVERWRITE)
+#                 cleanPath(auxMovieParticles.getFileName())
     
     def createOutputStep(self):
         
@@ -160,7 +151,7 @@ leads to objective and high-quality results.
             outImgSet.setAlignmentProj()
             outImgSet.copyItems(imgSet,
                                 updateItemCallback=self._createItemMatrix,
-                                itemDataIterator=md.iterRows(outImgsFn))
+                                itemDataIterator=metadata.iterRows(outImgsFn))
             
             self._defineOutputs(outputVolume=vol)
             self._defineSourceRelation(self.inputParticles, vol)
@@ -215,7 +206,7 @@ leads to objective and high-quality results.
         summary = []
         it = self._lastIter()
         if it >= 1:
-            row = md.getFirstRow('model_general@' + self._getFileName('half1_model', iter=it))
+            row = metadata.getFirstRow('model_general@' + self._getFileName('half1_model', iter=it))
             resol = row.getValue("rlnCurrentResolution")
             summary.append("Current resolution: *%0.2f*" % resol)
         return summary
@@ -232,7 +223,7 @@ leads to objective and high-quality results.
         if not hasattr(self, 'outputVolume'):
             return ["Output volume not ready yet."]
         else:
-            return ProtRelionBase._summary(self)
+            return ProtRelionBaseTomo._summary(self)
 
     #--------------------------- UTILS functions --------------------------------------------
     def _createItemMatrix(self, item, row):
