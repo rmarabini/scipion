@@ -88,54 +88,6 @@ leads to objective and high-quality results.
                 args['--sigma_ang'] = self.movieStdRot.get()
         
     #--------------------------- STEPS functions --------------------------------------------     
-    def convertInputStep(self, particlesId):
-        """ Create the input file in STAR format as expected by Relion.
-        If the input particles comes from Relion, just link the file.
-        Params:
-            particlesId: use this parameters just to force redo of convert if 
-                the input particles are changed.
-        """
-        imgSet = self._getInputParticles()
-        imgStar = self._getFileName('input_star')
-
-        self.info("Converting set from '%s' into '%s'" %
-                           (imgSet.getFileName(), imgStar))
-        
-        # Pass stack file as None to avoid write the images files
-#         writeSetOfParticles(imgSet, imgStar, self._getExtraPath())
-        
-        if self.doCtfManualGroups:
-            self._splitInCTFGroups(imgStar)
-        
-        if not self.IS_CLASSIFY:
-            if self.realignMovieFrames:
-                movieParticleSet = self.inputMovieParticles.get()
-                
-                auxMovieParticles = self._createSetOfMovieParticles(suffix='tmp')
-                auxMovieParticles.copyInfo(movieParticleSet)
-                # Discard the movie particles that are not present in the refinement set
-                for movieParticle in movieParticleSet:
-                    particle = imgSet[movieParticle.getParticleId()]
-                    if particle is not None:
-                        auxMovieParticles.append(movieParticle)
-                            
-#                 writeSetOfParticles(auxMovieParticles,
-#                                     self._getFileName('movie_particles'), None, originalSet=imgSet,
-#                                     postprocessImageRow=self._postprocessImageRow)
-                mdMovies = metadata.MetaData(self._getFileName('movie_particles'))
-                mdParts = metadata.MetaData(self._getFileName('input_star'))
-                mdParts.renameColumn(metadata.RLN_IMAGE_NAME, metadata.RLN_PARTICLE_NAME)
-                mdParts.removeLabel(metadata.RLN_MICROGRAPH_NAME)
-                
-                detectorPxSize = movieParticleSet.getAcquisition().getMagnification() * movieParticleSet.getSamplingRate() / 10000
-                mdAux = metadata.MetaData()
-                mdMovies.fillConstant(metadata.RLN_CTF_DETECTOR_PIXEL_SIZE, detectorPxSize)
-                
-                mdAux.join2(mdMovies, mdParts, metadata.RLN_PARTICLE_ID, metadata.RLN_IMAGE_ID, metadata.INNER_JOIN)
-                
-                mdAux.write(self._getFileName('movie_particles'), metadata.MD_OVERWRITE)
-#                 cleanPath(auxMovieParticles.getFileName())
-    
     def createOutputStep(self):
         
         if not self.realignMovieFrames:

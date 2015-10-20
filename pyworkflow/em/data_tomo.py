@@ -31,8 +31,8 @@ This modules contains data classes related to Tomography workflow.
 #NOTE: Some of this importS are needed by the mapper,
 # not directly in the code
 from os.path import exists
-from pyworkflow.em.data import (EMObject, EMSet, SetOfImages,
-                                SetOfMicrographsBase, Image)
+from pyworkflow.em.data import (EMObject, EMSet, SetOfImages, Volume,
+                                SetOfMicrographsBase, Image, SetOfClasses)
 from pyworkflow.object import Float, Pointer, Integer, String, Object 
 from pyworkflow.em.convert import ImageHandler
 
@@ -229,10 +229,10 @@ class CTF3DModel(EMObject):
         EMObject.__init__(self, **kwargs)
         self._ctfFile = String()
 #         self._tomogramPointer  = Pointer()
-        self._tomoCoordinatePointer  = Pointer()
+        self._tomoCoordinatePointer  = None
     
     def getCtfFile(self):
-        self._ctfFile.get()
+        return self._ctfFile.get()
     
     def setCtfFile(self, ctfFile):
         self._ctfFile.set(ctfFile)
@@ -241,11 +241,11 @@ class CTF3DModel(EMObject):
         """ Return the tomoRec object to which
         this coordinate is associated.
         """
-        return self._tomoCoordinatePointer.get()
+        return self._tomoCoordinatePointer
     
     def setTomoCoordinate(self, tomoCoordinate):
         """ Set the tomogram to which this reconstruction belongs. """
-        self._tomoCoordinatePointer.set(tomoCoordinate)
+        self._tomoCoordinatePointer = tomoCoordinate
 
 
 class SetOfTomogramsBase(SetOfMicrographsBase):
@@ -475,3 +475,36 @@ class SetOfCTF3D(EMSet):
     
     def setTomoCoordinates(self, tomoCoordinates):
         self._tomoCoordinatesPointer.set(tomoCoordinates)
+
+
+class ClassSubtomo3D(SetOfSubtomograms):
+    """ Represent a Class that groups Particles objects.
+    Usually the representative of the class is a Volume 
+    reconstructed from the particles assigned to the class.
+    """
+    REP_TYPE = Subtomogram
+    
+    def copyInfo(self, other):
+        """ Copy basic information (id and other properties) but not _mapperPath or _size
+        from other set of micrographs to current one.
+        """
+        self.copy(other, copyId=False, ignoreAttrs=['_mapperPath', '_size'])
+        
+    def clone(self):
+        clone = self.getClass()()
+        clone.copy(self, ignoreAttrs=['_mapperPath', '_size'])
+        return clone
+        
+    def close(self):
+        # Do nothing on close, since the db will be closed by SetOfClasses
+        pass
+
+
+class SetOfClassSubtomo3D(SetOfClasses):
+    """ Store results from a 3D classification of Subtomograms. """
+    ITEM_TYPE = ClassSubtomo3D
+    REP_TYPE = Volume
+    
+    pass
+
+

@@ -40,7 +40,7 @@ from pyworkflow.em.data import SetOfClasses3D
 from pyworkflow.em.protocol import EMProtocol
 
 from constants import ANGULAR_SAMPLING_LIST, MASK_FILL_ZERO
-# from convert import convertBinaryVol, writeSqliteIterData, writeSetOfParticles
+from convert import convertBinaryVol, getEnviron#, writeSqliteIterData, writeSetOfParticles
 
 
 class ProtRelionBaseTomo(EMProtocol):
@@ -52,9 +52,9 @@ class ProtRelionBaseTomo(EMProtocol):
     some of the function have a template pattern approach to define the behaivour
     depending on the case.
     """
-    _label = '2d classify'
+    _label = '3d classify'
     IS_CLASSIFY = True
-    IS_2D = False
+#     IS_2D = False
     OUTPUT_TYPE = SetOfClasses3D
     FILE_KEYS = ['data', 'optimiser', 'sampling'] 
     CLASS_LABEL = metadata.RLN_PARTICLE_CLASS
@@ -84,7 +84,6 @@ class ProtRelionBaseTomo(EMProtocol):
         self.extraIter = self._getExtraPath('relion_it%(iter)03d_')
         myDict = {
                   'input_star': self._getPath('input_subtomograms.star'),
-                  'input_mrcs': self._getPath('input_particles.mrcs'),
                   'data_scipion': self.extraIter + 'data_scipion.sqlite',
                   'projections': self.extraIter + '%(half)sclass%(ref3d)03d_projections.sqlite',
                   'classes_scipion': self.extraIter + 'classes_scipion.sqlite',
@@ -95,12 +94,6 @@ class ProtRelionBaseTomo(EMProtocol):
                   'all_avgPmax_xmipp': self._getTmpPath('iterations_avgPmax_xmipp.xmd'),
                   'all_changes_xmipp': self._getTmpPath('iterations_changes_xmipp.xmd'),
                   'selected_volumes': self._getTmpPath('selected_volumes_xmipp.xmd'),
-                  'movie_particles': self._getPath('movie_particles.star'),
-                  'volume_shiny': self.extraIter + 'data_shiny_post.mrc:mrc',
-                  'volume_frame': self.extraIter + 'data_shiny_frame%(frame)03d_%(halve)sclass%(ref3d)03d_unfil.mrc:mrc',
-                  'guinier_frame': self.extraIter + 'data_shiny_frame%(frame)03d_guinier.star',
-                  'fsc_shiny': self.extraIter + 'data_shiny_post.star',
-                  'bfactors': self.extraIter + 'data_shiny_bfactors.star',
                   'dataFinal' : self._getExtraPath("relion_data.star"),
                   'modelFinal' : self._getExtraPath("relion_model.star"),
                   'finalvolume' : self._getExtraPath("relion_class%(ref3d)03d.mrc:mrc")
@@ -124,15 +117,12 @@ class ProtRelionBaseTomo(EMProtocol):
         # Iterations will be identify by _itXXX_ where XXX is the iteration number
         # and is restricted to only 3 digits.
         self._iterRegex = re.compile('_it(\d{3,3})_')
-        
-        
+    
     #--------------------------- DEFINE param functions --------------------------------------------   
     def _defineParams(self, form):
-        self.IS_3D = not self.IS_2D
         form.addSection(label='Input')
         # Some hidden variables to be used for conditions
         form.addHidden('isClassify', params.BooleanParam, default=self.IS_CLASSIFY)
-        form.addHidden('is2D', params.BooleanParam, default=self.IS_2D)
         
         form.addParam('doContinue', params.BooleanParam, default=False,
                       label='Continue from a previous run?',
@@ -173,11 +163,11 @@ class ProtRelionBaseTomo(EMProtocol):
                            'reference by division of the data into random subsets during the'
                            'first iteration.')
         group = form.addGroup('Reference 3D map',
-                              condition='not doContinue and not is2D')
+                              condition='not doContinue')
         group.addParam('referenceVolume', params.PointerParam, pointerClass='Volume',
                        important=True,
                        label="Input volume",
-                       condition='not doContinue and not is2D',
+                       condition='not doContinue',
                        help='Initial reference 3D map, it should have the same '
                            'dimensions and the same pixel size as your input particles.')
         group.addParam('isMapAbsoluteGreyScale', params.BooleanParam, default=False,
@@ -199,7 +189,6 @@ class ProtRelionBaseTomo(EMProtocol):
         self.addSymmetry(group)
 
         group.addParam('initialLowPassFilterA', params.FloatParam, default=60,
-                      condition='not is2D',
                       label='Initial low-pass filter (A)',
                       help='It is recommended to strongly low-pass filter your initial reference map. '
                            'If it has not yet been low-pass filtered, it may be done internally using this option. ' 
@@ -209,14 +198,14 @@ class ProtRelionBaseTomo(EMProtocol):
         form.addParam('contuinueMsg', params.LabelParam, default=True,
                       label='CTF parameters are not available in continue mode', condition='doContinue',)
         form.addParam('haveDataBeenPhaseFlipped', params.LabelParam, condition='not doContinue',
-                      label='The phase flip comes as a property of the input particles!')
+                      label="Subtomograms aren't phase flipped!")
         form.addParam('doCTF', params.BooleanParam, default=True,
                       label='Do CTF-correction?', condition='not doContinue',
                       help='If set to Yes, CTFs will be corrected inside the MAP refinement. '
                            'The resulting algorithm intrinsically implements the optimal linear, ' 
                            'or Wiener filter. Note that input particles should contains CTF parameters.')
         form.addParam('hasReferenceCTFCorrected', params.BooleanParam, default=False,
-                      condition='not is2D and not doContinue',
+                      condition='not doContinue',
                       label='Has reference been CTF-corrected?',
                       help='Set this option to Yes if the reference map represents CTF-unaffected density, '
                            'e.g. it was created using Wiener filtering inside RELION or from a PDB. If set to No, ' 
@@ -229,19 +218,6 @@ class ProtRelionBaseTomo(EMProtocol):
                            'of each CTF onward. This can be useful if the CTF model is inadequate at the lowest resolution. ' 
                            'Still, in general using higher amplitude contrast on the CTFs (e.g. 10-20%) often yields better results. '
                            'Therefore, this option is not generally recommended.')    
-        form.addParam('doCtfManualGroups', params.BooleanParam, default=False,
-                      label='Do manual grouping ctfs?', condition='not doContinue',
-                      help='Set this to Yes the CTFs will grouping manually.')
-        form.addParam('defocusRange', params.FloatParam, default=1000,
-                      label='defocus range for group creation (in Angstroms)', condition='doCtfManualGroups and not doContinue',
-                      help='Particles will be grouped by defocus.'
-                      'This parameter is the bin for an histogram.'
-                      'All particles asigned to a bin form a group')
-        form.addParam('numParticles', params.FloatParam, default=1,
-                      label='minimum size for defocus group', condition='doCtfManualGroups and not doContinue',
-                      help='If defocus group is smaller than this value, '
-                           'it will be expanded until number of particles '
-                           'per defocus group is reached')
         
         form.addSection(label='Optimisation')
         if self.IS_CLASSIFY:
@@ -273,24 +249,23 @@ class ProtRelionBaseTomo(EMProtocol):
                            'When set to <No>, then the solvent area is filled with random noise, which prevents introducing '
                            'correlations.High-resolution refinements (e.g. in 3D auto-refine) tend to work better when filling ' 
                            'the solvent area with random noise, some classifications go better when using zeros.') 
-        if self.IS_3D:
-            form.addParam('referenceMask', params.PointerParam, pointerClass='VolumeMask',
-                          label='Reference mask (optional)', allowsNull=True,
-                          help='A volume mask containing a (soft) mask with the same dimensions ' 
-                               'as the reference(s), and values between 0 and 1, with 1 being 100% protein '
-                               'and 0 being 100% solvent. The reconstructed reference map will be multiplied '
-                               'by this mask. If no mask is given, a soft spherical mask based on the <radius> '
-                               'of the mask for the experimental images will be applied.\n\n'  
-                               'In some cases, for example for non-empty icosahedral viruses, it is also useful ' 
-                               'to use a second mask. Check _Advaced_ level and select another volume mask') 
-            form.addParam('solventMask', params.PointerParam, pointerClass='VolumeMask',
-                          expertLevel=LEVEL_ADVANCED, allowsNull=True,
-                          label='Second reference mask (optional)',
-                          help='For all white (value 1) pixels in this second mask the '
-                               'corresponding pixels in the reconstructed map are set to the average value of '
-                               'these pixels. Thereby, for example, the higher density inside the virion may be '
-                               'set to a constant. Note that this second mask should have one-values inside the '
-                               'virion and zero-values in the capsid and the solvent areas.')
+        form.addParam('referenceMask', params.PointerParam, pointerClass='VolumeMask',
+                      label='Reference mask (optional)', allowsNull=True,
+                      help='A volume mask containing a (soft) mask with the same dimensions ' 
+                           'as the reference(s), and values between 0 and 1, with 1 being 100% protein '
+                           'and 0 being 100% solvent. The reconstructed reference map will be multiplied '
+                           'by this mask. If no mask is given, a soft spherical mask based on the <radius> '
+                           'of the mask for the experimental images will be applied.\n\n'  
+                           'In some cases, for example for non-empty icosahedral viruses, it is also useful ' 
+                           'to use a second mask. Check _Advaced_ level and select another volume mask') 
+        form.addParam('solventMask', params.PointerParam, pointerClass='VolumeMask',
+                      expertLevel=LEVEL_ADVANCED, allowsNull=True,
+                      label='Second reference mask (optional)',
+                      help='For all white (value 1) pixels in this second mask the '
+                           'corresponding pixels in the reconstructed map are set to the average value of '
+                           'these pixels. Thereby, for example, the higher density inside the virion may be '
+                           'set to a constant. Note that this second mask should have one-values inside the '
+                           'virion and zero-values in the capsid and the solvent areas.')
         
         if self.IS_CLASSIFY:
             form.addParam('limitResolEStep', params.FloatParam, default=-1,
@@ -306,7 +281,6 @@ class ProtRelionBaseTomo(EMProtocol):
                    'cases, values in the range of 7-12 Angstroms have proven useful.')
         
         # Change the Sampling section name depending if classify or refine 3D
-        if self.IS_CLASSIFY:
             form.addSection('Sampling')
         else:
             form.addSection('Auto-Sampling')
@@ -319,23 +293,13 @@ class ProtRelionBaseTomo(EMProtocol):
                    'This allows the use of very focused masks.This requires '
                    'that the optimal orientations of all particles are already '
                    'calculated.')
-        if self.IS_3D:
-            form.addParam('angularSamplingDeg', params.EnumParam, default=2,
-                          choices=ANGULAR_SAMPLING_LIST, 
-                          label='Angular sampling interval (deg)', condition='not isClassify or doImageAlignment',
-                          help='There are only a few discrete angular samplings possible because '
-                           'we use the HealPix library to generate the sampling of the first '
-                           'two Euler angles on the sphere. The samplings are approximate numbers ' 
-                           'and vary slightly over the sphere.')
-        else:
-            form.addParam('inplaneAngularSamplingDeg', params.FloatParam, default=5,
-                          label='In-plane angular sampling (deg)', condition="doImageAlignment",
-                          help='The sampling rate for the in-plane rotation angle (psi) in degrees.\n'
-                               'Using fine values will slow down the program. Recommended value for\n'
-                               'most 2D refinements: 5 degrees. \n\n'
-                               'If auto-sampling is used, this will be the value for the first \n'
-                               'iteration(s) only, and the sampling rate will be increased \n'
-                               'automatically after that.')
+        form.addParam('angularSamplingDeg', params.EnumParam, default=2,
+                      choices=ANGULAR_SAMPLING_LIST, 
+                      label='Angular sampling interval (deg)', condition='not isClassify or doImageAlignment',
+                      help='There are only a few discrete angular samplings possible because '
+                       'we use the HealPix library to generate the sampling of the first '
+                       'two Euler angles on the sphere. The samplings are approximate numbers ' 
+                       'and vary slightly over the sphere.')
         form.addParam('offsetSearchRangePix', params.FloatParam, default=5,
                       condition='not isClassify or doImageAlignment',
                       label='Offset search range (pix)',
@@ -350,59 +314,31 @@ class ProtRelionBaseTomo(EMProtocol):
                            'Translational sampling is also done using the adaptive approach. '
                            'Therefore, if adaptive=1, the translations will first be evaluated'
                            'on a 2x coarser grid.')
-        if self.IS_3D: 
-            if self.IS_CLASSIFY:
-                form.addParam('localAngularSearch', params.BooleanParam, default=False,
-                              condition='not is2D and doImageAlignment',
-                              label='Perform local angular search?',
-                              help='If set to Yes, then rather than performing exhaustive angular searches, '
-                                   'local searches within the range given below will be performed. A prior '
-                                   'Gaussian distribution centered at the optimal orientation in the previous '
-                                   'iteration and with a stddev of 1/3 of the range given below will be enforced.')
-                form.addParam('localAngularSearchRange', params.FloatParam, default=5.0,
-                              condition='localAngularSearch',
-                              label='Local angular search range',
-                              help='Local angular searches will be performed within +/- '
-                                   'the given amount (in degrees) from the optimal orientation '
-                                   'in the previous iteration. A Gaussian prior (also see '
-                                   'previous option) will be applied, so that orientations '
-                                   'closer to the optimal orientation in the previous iteration '
-                                   'will get higher weights than those further away.')
-                
-            else:
-                form.addParam('localSearchAutoSamplingDeg', params.EnumParam, default=4,
-                              choices=ANGULAR_SAMPLING_LIST,
-                              label='Local search from auto-sampling (deg)',
-                              help='In the automated procedure to increase the angular samplings,\n'
-                                   'local angular searches of -6/+6 times the sampling rate will\n'
-                                   'be used from this angular sampling rate onwards.')
-                
-                form.addSection("Movies")
-                form.addParam('realignMovieFrames', params.BooleanParam, default=False,
-                              label='Realign movie frames?',
-                              help='If set to Yes, then running averages of the individual frames '
-                                   'of recorded movies will be aligned as independent particles.')
-                
-                group = form.addGroup('Movie frames alignment',
-                                      condition='realignMovieFrames and doContinue')
-                group.addParam('inputMovieParticles', params.PointerParam, pointerClass='SetOfMovieParticles',
-                               allowsNull=True, important=True,
-                               label='Input movie particles')
-                group.addParam('movieAvgWindow', params.FloatParam, default=5,
-                              label='Running average window',
-                              help='The individual movie frames will be averaged using a running average window with the specified width. Use an odd number. The optimal value will depend on the SNR in the individual movie frames. For ribosomes, we used a value of 5, where each movie frame integrated approximately 1 electron per squared Angstrom.')
-                group.addParam('movieStdTrans', params.FloatParam, default=1,
-                              label='Stddev on the translations (px)',
-                              help='A Gaussian prior with the specified standard deviation will be centered at the rotations determined for the corresponding particle where all movie-frames were averaged. For ribosomes, we used a value of 2 pixels. ')
-                group.addParam('movieIncludeRotSearch', params.BooleanParam, default=False,
-                              label='Also include rotational searches?',
-                              help='If set to Yes, then running averages of the individual frames of recorded movies will also be aligned rotationally. \n'
-                                   'If one wants to perform particle polishing, then rotational alignments of the movie frames is NOT necessary and will only take more computing time.')
-                group.addParam('movieStdRot', params.FloatParam, default=1,
-                              condition='movieIncludeRotSearch',
-                              label='Stddev on the rotations (deg)',
-                              help='A Gaussian prior with the specified standard deviation will be centered at the rotations determined for the corresponding particle where all movie-frames were averaged. For ribosomes, we used a value of 1 degree')
-        
+        if self.IS_CLASSIFY:
+            form.addParam('localAngularSearch', params.BooleanParam, default=False,
+                          condition='doImageAlignment',
+                          label='Perform local angular search?',
+                          help='If set to Yes, then rather than performing exhaustive angular searches, '
+                               'local searches within the range given below will be performed. A prior '
+                               'Gaussian distribution centered at the optimal orientation in the previous '
+                               'iteration and with a stddev of 1/3 of the range given below will be enforced.')
+            form.addParam('localAngularSearchRange', params.FloatParam, default=5.0,
+                          condition='localAngularSearch',
+                          label='Local angular search range',
+                          help='Local angular searches will be performed within +/- '
+                               'the given amount (in degrees) from the optimal orientation '
+                               'in the previous iteration. A Gaussian prior (also see '
+                               'previous option) will be applied, so that orientations '
+                               'closer to the optimal orientation in the previous iteration '
+                               'will get higher weights than those further away.')
+        else:
+            form.addParam('localSearchAutoSamplingDeg', params.EnumParam, default=4,
+                          choices=ANGULAR_SAMPLING_LIST,
+                          label='Local search from auto-sampling (deg)',
+                          help='In the automated procedure to increase the angular samplings,\n'
+                               'local angular searches of -6/+6 times the sampling rate will\n'
+                               'be used from this angular sampling rate onwards.')
+            
         form.addSection('Additional')
         form.addParam('memoryPreThreads', params.IntParam, default=2,
                       label='Memory per Threads',
@@ -453,97 +389,17 @@ class ProtRelionBaseTomo(EMProtocol):
             params += ' ' + self.extraParams.get()
 
         self._insertFunctionStep('runRelionStep', params)
-        
-    def _setNormalArgs(self, args):
-        
-        maskDiameter = self.maskDiameterA.get()
-        if maskDiameter <= 0:
-            x, _, _ = self._getInputParticles().getDim()
-            maskDiameter = self._getInputParticles().getSamplingRate() * x
-        
-        args.update({'--i': self._getFileName('input_star'),
-                     '--particle_diameter': maskDiameter,
-                     '--angpix': self._getInputParticles().getSamplingRate(),
-                    })
-        self._setMaskArgs(args)
-        self._setCTFArgs(args)
-        
-        if self.maskZero == MASK_FILL_ZERO:
-            args['--zero_mask'] = ''
-            
-        if self.IS_CLASSIFY:
-            args['--K'] = self.numberOfClasses.get()
-            if self.limitResolEStep > 0:
-                args['--strict_highres_exp'] = self.limitResolEStep.get()
-            
-        
-        if self.IS_3D:
-#             args['--ref'] = convertBinaryVol(self.referenceVolume.get(), self._getTmpPath())
-            if not self.isMapAbsoluteGreyScale:
-                args['--firstiter_cc']=''
-            args['--ini_high'] = self.initialLowPassFilterA.get()
-            args['--sym'] = self.symmetryGroup.get()
-        
-        args['--memory_per_thread'] = self.memoryPreThreads.get()
-        self._setBasicArgs(args)
-        
-    def _setContinueArgs(self, args):
-        continueRun = self.continueRun.get()
-        continueRun._initialize()
-        
-        if self.IS_CLASSIFY:
-            self.copyAttributes(continueRun, 'regularisationParamT')
-        self._setBasicArgs(args)
-        
-        args['--continue'] = continueRun._getFileName('optimiser', iter=self._getContinueIter())
-    
-    def _setBasicArgs(self, args):
-        """ Return a dictionary with basic arguments. """
-        args.update({'--flatten_solvent': '',
-                     '--norm': '',
-                     '--scale': '',
-                     '--o': self._getExtraPath('relion'),
-                     '--oversampling': '1'
-                    })
-
-        if self.IS_CLASSIFY:
-            args['--tau2_fudge'] = self.regularisationParamT.get()
-            args['--iter'] = self._getnumberOfIters()
-            
-        self._setSamplingArgs(args)
-        
-                        
-    def _setCTFArgs(self, args):        
-        # CTF stuff
-        if self.doCTF:
-            args['--ctf'] = ''
-        
-        # this only can be true if is 3D.
-        if self.hasReferenceCTFCorrected:
-            args['--ctf_corrected_ref'] = ''
-            
-        if self._getInputParticles().isPhaseFlipped():
-            args['--ctf_phase_flipped'] = ''
-            
-        if self.ignoreCTFUntilFirstPeak:
-            args['--ctf_intact_first_peak'] = ''
-    
-    def _setMaskArgs(self, args):
-        if self.IS_3D:
-            if self.referenceMask.hasValue():
-                args['--solvent_mask'] = self.referenceMask.get().getFileName() #FIXE: CHANGE BY LOCATION, convert if necessary
-                
-            if self.solventMask.hasValue():
-                args['--solvent_mask2'] = self.solventMask.get().getFileName() #FIXME: CHANGE BY LOCATION, convert if necessary
     
     #--------------------------- STEPS functions --------------------------------------------       
     def convertInputStep(self, particlesId):
+        from convert import writeSetOfSubtomograms
         """ Create the input file in STAR format as expected by Relion.
         If the input particles comes from Relion, just link the file.
         Params:
             particlesId: use this parameters just to force redo of convert if 
                 the input particles are changed.
         """
+        
         imgSet = self._getInputParticles()
         imgStar = self._getFileName('input_star')
 
@@ -551,44 +407,12 @@ class ProtRelionBaseTomo(EMProtocol):
                            (imgSet.getFileName(), imgStar))
         
         # Pass stack file as None to avoid write the images files
-#         writeSetOfParticles(imgSet, imgStar, self._getExtraPath())
-        
-        if self.doCtfManualGroups:
-            self._splitInCTFGroups(imgStar)
-        
-        if not self.IS_CLASSIFY:
-            if self.realignMovieFrames:
-                movieParticleSet = self.inputMovieParticles.get()
-                
-                auxMovieParticles = self._createSetOfMovieParticles(suffix='tmp')
-                auxMovieParticles.copyInfo(movieParticleSet)
-                # Discard the movie particles that are not present in the refinement set
-                for movieParticle in movieParticleSet:
-                    particle = imgSet[movieParticle.getParticleId()]
-                    if particle is not None:
-                        auxMovieParticles.append(movieParticle)
-                            
-#                 writeSetOfParticles(auxMovieParticles,
-#                                     self._getFileName('movie_particles'), None, originalSet=imgSet,
-#                                     postprocessImageRow=self._postprocessImageRow)
-                mdMovies = metadata.MetaData(self._getFileName('movie_particles'))
-                mdParts = metadata.MetaData(self._getFileName('input_star'))
-                mdParts.renameColumn(metadata.RLN_IMAGE_NAME, metadata.RLN_PARTICLE_NAME)
-                mdParts.removeLabel(metadata.RLN_MICROGRAPH_NAME)
-                
-                detectorPxSize = movieParticleSet.getAcquisition().getMagnification() * movieParticleSet.getSamplingRate() / 10000
-                mdAux = metadata.MetaData()
-                mdMovies.fillConstant(metadata.RLN_CTF_DETECTOR_PIXEL_SIZE, detectorPxSize)
-                
-                mdAux.join2(mdMovies, mdParts, metadata.RLN_PARTICLE_ID, metadata.RLN_IMAGE_ID, metadata.INNER_JOIN)
-                
-                mdAux.write(self._getFileName('movie_particles'), metadata.MD_OVERWRITE)
-                cleanPath(auxMovieParticles.getFileName())
-        
+        writeSetOfSubtomograms(imgSet, imgStar, self._getExtraPath())
+    
     def runRelionStep(self, params):
         """ Execute the relion steps with the give params. """
         params += ' --j %d' % self.numberOfThreads.get()
-        self.runJob(self._getProgram(), params)
+        self.runJob(self._getProgram(), params, env=getEnviron())
     
     def createOutputStep(self):
         pass # should be implemented in subclasses
@@ -634,11 +458,11 @@ class ProtRelionBaseTomo(EMProtocol):
         if self.hasAttribute('numberOfIterations'):
             iterMsg += '/%d' % self._getnumberOfIters()
         summary = [iterMsg]
-        if self._getInputParticles().isPhaseFlipped():
-            msg = "Your images have been ctf-phase corrected"
-        else:
-            msg = "Your images not have been ctf-phase corrected"
-        summary += [msg]
+#         if self._getInputParticles().isPhaseFlipped():
+#             msg = "Your images have been ctf-phase corrected"
+#         else:
+#             msg = "Your images not have been ctf-phase corrected"
+#         summary += [msg]
         
         if self.doContinue:
             summary += self._summaryContinue()
@@ -710,22 +534,15 @@ class ProtRelionBaseTomo(EMProtocol):
 
         return data_classes
     
-    def _getIterData(self, it, **kwargs):
-        """ Sort the it??.data.star file by the maximum likelihood. """
-        data_sqlite = self._getFileName('data_scipion', iter=it)
-        
-        if not exists(data_sqlite):
-            data = self._getFileName('data', iter=it)
+#     def _getIterData(self, it, **kwargs):
+#         """ Sort the it??.data.star file by the maximum likelihood. """
+#         data_sqlite = self._getFileName('data_scipion', iter=it)
+#         
+#         if not exists(data_sqlite):
+#             data = self._getFileName('data', iter=it)
 #             writeSqliteIterData(data, data_sqlite, **kwargs)
-        
-        return data_sqlite
-    
-    def _splitInCTFGroups(self, imgStar):
-        """ Add a new colunm in the image star to separate the particles into ctf groups """
-#         from convert import splitInCTFGroups
-#         splitInCTFGroups(imgStar
-#                          , self.defocusRange.get()
-#                          , self.numParticles.get())
+#         
+#         return data_sqlite
     
     def _getContinueIter(self):
         continueRun = self.continueRun.get()
@@ -746,11 +563,91 @@ class ProtRelionBaseTomo(EMProtocol):
     def _getnumberOfIters(self):
         return self._getContinueIter() + self.numberOfIterations.get()
     
-    def _postprocessImageRow(self, img, imgRow):
-#         from convert import locationToRelion
-        partId = img.getParticleId()
-        magnification = img.getAcquisition().getMagnification()
-        imgRow.setValue(metadata.RLN_PARTICLE_ID, long(partId))
-        imgRow.setValue(metadata.RLN_CTF_MAGNIFICATION, magnification)
-        imgRow.setValue(metadata.RLN_MICROGRAPH_NAME, "%06d@fake_movie_%06d.mrcs" %(img.getFrameId() + 1, img.getMicId()))
+#     def _postprocessImageRow(self, img, imgRow):
+# #         from convert import locationToRelion
+#         partId = img.getParticleId()
+#         magnification = img.getAcquisition().getMagnification()
+#         imgRow.setValue(metadata.RLN_PARTICLE_ID, long(partId))
+#         imgRow.setValue(metadata.RLN_CTF_MAGNIFICATION, magnification)
+#         imgRow.setValue(metadata.RLN_MICROGRAPH_NAME, "%06d@fake_movie_%06d.mrcs" %(img.getFrameId() + 1, img.getMicId()))
+    
+    def _setNormalArgs(self, args):
         
+        maskDiameter = self.maskDiameterA.get()
+        if maskDiameter <= 0:
+            x, _, _ = self._getInputParticles().getDim()
+            maskDiameter = self._getInputParticles().getSamplingRate() * x
+        
+        args.update({'--i': self._getFileName('input_star'),
+                     '--particle_diameter': maskDiameter,
+                     '--angpix': self._getInputParticles().getSamplingRate(),
+                    })
+        self._setMaskArgs(args)
+        self._setCTFArgs(args)
+        
+        if self.maskZero == MASK_FILL_ZERO:
+            args['--zero_mask'] = ''
+            
+        if self.IS_CLASSIFY:
+            args['--K'] = self.numberOfClasses.get()
+            if self.limitResolEStep > 0:
+                args['--strict_highres_exp'] = self.limitResolEStep.get()
+        
+        args['--ref'] = convertBinaryVol(self.referenceVolume.get(), self._getTmpPath())
+        if not self.isMapAbsoluteGreyScale:
+            args['--firstiter_cc']=''
+        args['--ini_high'] = self.initialLowPassFilterA.get()
+        args['--sym'] = self.symmetryGroup.get()
+        
+        args['--memory_per_thread'] = self.memoryPreThreads.get()
+        self._setBasicArgs(args)
+        
+    def _setContinueArgs(self, args):
+        continueRun = self.continueRun.get()
+        continueRun._initialize()
+        
+        if self.IS_CLASSIFY:
+            self.copyAttributes(continueRun, 'regularisationParamT')
+        self._setBasicArgs(args)
+        
+        args['--continue'] = continueRun._getFileName('optimiser', iter=self._getContinueIter())
+    
+    def _setBasicArgs(self, args):
+        """ Return a dictionary with basic arguments. """
+        args.update({'--flatten_solvent': '',
+                     '--norm': '',
+                     '--scale': '',
+                     '--o': self._getExtraPath('relion'),
+                     '--oversampling': '1'
+                    })
+
+        if self.IS_CLASSIFY:
+            args['--tau2_fudge'] = self.regularisationParamT.get()
+            args['--iter'] = self._getnumberOfIters()
+            
+        self._setSamplingArgs(args)
+        
+                        
+    def _setCTFArgs(self, args):        
+        # CTF stuff
+        if self.doCTF:
+            args['--ctf'] = ''
+        
+        # this only can be true if is 3D.
+        if self.hasReferenceCTFCorrected:
+            args['--ctf_corrected_ref'] = ''
+            
+#         if self._getInputParticles().isPhaseFlipped():
+#             args['--ctf_phase_flipped'] = ''
+            
+        if self.ignoreCTFUntilFirstPeak:
+            args['--ctf_intact_first_peak'] = ''
+    
+    def _setMaskArgs(self, args):
+        if self.referenceMask.hasValue():
+            args['--solvent_mask'] = self.referenceMask.get().getFileName() #FIXE: CHANGE BY LOCATION, convert if necessary
+            
+        if self.solventMask.hasValue():
+            args['--solvent_mask2'] = self.solventMask.get().getFileName() #FIXME: CHANGE BY LOCATION, convert if necessary
+    
+

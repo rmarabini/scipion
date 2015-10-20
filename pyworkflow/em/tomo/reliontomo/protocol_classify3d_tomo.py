@@ -28,12 +28,13 @@ This module contains the protocol for 3d classification with relion.
 """
 
 from pyworkflow.em import metadata
-import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtClassify3D
-from pyworkflow.em.data import Volume
+from pyworkflow.em import metadata as md
+import pyworkflow.protocol.params as params 
+# from pyworkflow.em.data import Volume
 
 from pyworkflow.em.tomo.reliontomo.protocol_base_tomo import ProtRelionBaseTomo
-# from pyworkflow.em.packages.relion.convert import relionToLocation, rowToAlignment
+from convert import relionToLocation
 
 
 class ProtRelionSubtomoClassify3D(ProtClassify3D, ProtRelionBaseTomo):
@@ -49,21 +50,13 @@ class ProtRelionSubtomoClassify3D(ProtClassify3D, ProtRelionBaseTomo):
                      metadata.RLN_OPTIMISER_CHANGES_OPTIMAL_OFFSETS]
     
     def __init__(self, **args):        
-        ProtRelionBase.__init__(self, **args)
-    
-    #--------------------------- DEFINE param functions --------------------------------------------   
-    def _defineInputForm(self, form):
-        form.addParam('inputSubtomograms', params.PointerParam, pointerClass='SetOfSubtomograms',
-              condition='not doContinue',
-              important=True,
-              label="Input subtomograms",  
-              help='Select the input subtomograms from the project.')
+        ProtRelionBaseTomo.__init__(self, **args)
     
     def _initialize(self):
         """ This function is mean to be called after the 
         working dir for the protocol have been set. (maybe after recovery from mapper)
         """
-        ProtRelionBase._initialize(self)
+        ProtRelionBaseTomo._initialize(self)
     
     #--------------------------- INSERT steps functions --------------------------------------------  
     def _setSamplingArgs(self, args):
@@ -78,57 +71,9 @@ class ProtRelionSubtomoClassify3D(ProtClassify3D, ProtRelionBaseTomo):
             args['--skip_align'] = ''
     
     #--------------------------- STEPS functions --------------------------------------------
-    def convertInputStep(self, particlesId):
-        """ Create the input file in STAR format as expected by Relion.
-        If the input particles comes from Relion, just link the file.
-        Params:
-            particlesId: use this parameters just to force redo of convert if 
-                the input particles are changed.
-        """
-        imgSet = self._getInputParticles()
-        imgStar = self._getFileName('input_star')
-
-        self.info("Converting set from '%s' into '%s'" %
-                           (imgSet.getFileName(), imgStar))
-        
-        # Pass stack file as None to avoid write the images files
-        writeSetOfParticles(imgSet, imgStar, self._getExtraPath())
-        
-        if self.doCtfManualGroups:
-            self._splitInCTFGroups(imgStar)
-        
-        if not self.IS_CLASSIFY:
-            if self.realignMovieFrames:
-                movieParticleSet = self.inputMovieParticles.get()
-                
-                auxMovieParticles = self._createSetOfMovieParticles(suffix='tmp')
-                auxMovieParticles.copyInfo(movieParticleSet)
-                # Discard the movie particles that are not present in the refinement set
-                for movieParticle in movieParticleSet:
-                    particle = imgSet[movieParticle.getParticleId()]
-                    if particle is not None:
-                        auxMovieParticles.append(movieParticle)
-                            
-                writeSetOfParticles(auxMovieParticles,
-                                    self._getFileName('movie_particles'), None, originalSet=imgSet,
-                                    postprocessImageRow=self._postprocessImageRow)
-                mdMovies = md.MetaData(self._getFileName('movie_particles'))
-                mdParts = md.MetaData(self._getFileName('input_star'))
-                mdParts.renameColumn(md.RLN_IMAGE_NAME, md.RLN_PARTICLE_NAME)
-                mdParts.removeLabel(md.RLN_MICROGRAPH_NAME)
-                
-                detectorPxSize = movieParticleSet.getAcquisition().getMagnification() * movieParticleSet.getSamplingRate() / 10000
-                mdAux = md.MetaData()
-                mdMovies.fillConstant(md.RLN_CTF_DETECTOR_PIXEL_SIZE, detectorPxSize)
-                
-                mdAux.join2(mdMovies, mdParts, md.RLN_PARTICLE_ID, md.RLN_IMAGE_ID, md.INNER_JOIN)
-                
-                mdAux.write(self._getFileName('movie_particles'), md.MD_OVERWRITE)
-                cleanPath(auxMovieParticles.getFileName())
-    
     def createOutputStep(self):
-        partSet = self.inputParticles.get()
-        classes3D = self._createSetOfClasses3D(partSet)
+        partSet = self._getInputParticles()
+        classes3D = self._createSetOfClassSubtomo3D(partSet)
         self._fillClassesFromIter(classes3D, self._lastIter())
         
         self._defineOutputs(outputClasses=classes3D)
@@ -239,10 +184,10 @@ class ProtRelionSubtomoClassify3D(ProtClassify3D, ProtRelionBaseTomo):
     
     def _updateParticle(self, item, row):
         item.setClassId(row.getValue(md.RLN_PARTICLE_CLASS))
-        item.setTransform(rowToAlignment(row, em.ALIGN_3D))
+#         item.setTransform(rowToAlignment(row, em.ALIGN_3D))
         
-        item._rlnLogLikeliContribution = em.Float(row.getValue('rlnLogLikeliContribution'))
-        item._rlnMaxValueProbDistribution = em.Float(row.getValue('rlnMaxValueProbDistribution'))
+        item._rlnLogLikeliContribution = params.Float(row.getValue('rlnLogLikeliContribution'))
+        item._rlnMaxValueProbDistribution = params.Float(row.getValue('rlnMaxValueProbDistribution'))
         
     def _updateClass(self, item):
         classId = item.getObjId()
@@ -251,6 +196,10 @@ class ProtRelionSubtomoClassify3D(ProtClassify3D, ProtRelionBaseTomo):
             fn = fn + ":mrc"
             item.setAlignment3D()
             item.getRepresentative().setLocation(index, fn)
-            item._rlnclassDistribution = em.Float(row.getValue('rlnClassDistribution'))
-            item._rlnAccuracyRotations = em.Float(row.getValue('rlnAccuracyRotations'))
-            item._rlnAccuracyTranslations = em.Float(row.getValue('rlnAccuracyTranslations'))
+            item._rlnclassDistribution = params.Float(row.getValue('rlnClassDistribution'))
+            item._rlnAccuracyRotations = params.Float(row.getValue('rlnAccuracyRotations'))
+            item._rlnAccuracyTranslations = params.Float(row.getValue('rlnAccuracyTranslations'))
+            
+            
+            
+            

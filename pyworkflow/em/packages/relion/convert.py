@@ -519,8 +519,8 @@ def writeSetOfParticles(imgSet, starFile,
     setOfImagesToMd(imgSet, partMd, particleToRow, **kwargs)
     blockName = kwargs.get('blockName', 'Particles')
     partMd.write('%s@%s' % (blockName, starFile))
-    
-    
+
+
 def writeReferences(inputSet, outputRoot):
     """ Write an references star and stack files from
     a given SetOfAverages or SetOfClasses2D.

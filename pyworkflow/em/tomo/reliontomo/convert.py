@@ -24,7 +24,7 @@
 # *  e-mail address 'jmdelarosa@cnb.csic.es'
 # *
 # **************************************************************************
-from itertools import izip
+# from itertools import izip
 """
 This module contains converter functions that will serve to:
 1. Write from base classes to Relion specific files
@@ -34,6 +34,8 @@ This module contains converter functions that will serve to:
 import os
 from os.path import join
 import pyworkflow.utils as putils
+from pyworkflow.em import metadata as md
+from pyworkflow.em import constants as const
 
 
 def getEnviron():
@@ -48,8 +50,6 @@ def getEnviron():
 
 
 def writeSetOfTomograms(tomoRecSet, starFile, dirPath):
-    import pyworkflow.em.metadata as md
-    
     tomoMd = md.MetaData()
     for tomoRec in tomoRecSet:
         dest = os.path.join(dirPath, os.path.basename(tomoRec.getFileName()))
@@ -61,3 +61,76 @@ def writeSetOfTomograms(tomoRecSet, starFile, dirPath):
     tomoMd.write(starFile)
 
 
+def writeSetOfSubtomograms(subtomoSet, subtomoStar, path):
+    subtomoMd = md.MetaData()
+    setOfImagesToMd(subtomoSet, subtomoMd)
+    subtomoMd.write(subtomoStar)
+
+
+def setOfImagesToMd(imgSet, imgMd):
+    """ This function will fill Relion metadata from a SetOfMicrographs
+    Params:
+        imgSet: the set of images to be converted to metadata
+        md: metadata to be filled
+        rowFunc: this function can be used to setup the row before 
+            adding to meta
+    """
+    for img in imgSet:
+        objId = imgMd.addObject()
+        imgRow = md.Row()
+        subtomoToRow(img, imgRow)
+        imgRow.writeToMd(imgMd, objId)
+
+
+def subtomoToRow(part, partRow, **kwargs):
+    """ Set labels values from Particle to md row. """
+    coord = part.getCoordinate()
+    partRow.setValue(md.RLN_MICROGRAPH_NAME, coord.getTomoRec().getFileName())
+    partRow.setValue(md.RLN_IMAGE_COORD_X, float(coord.getX()))
+    partRow.setValue(md.RLN_IMAGE_COORD_Y, float(coord.getY()))
+    partRow.setValue(md.RLN_IMAGE_COORD_Z, float(coord.getZ()))
+    partRow.setValue(md.RLN_IMAGE_NAME, part.getFileName())
+    if part.hasCTF():
+        print "part.getCTF().getCtfFile(): ", part.getCTF().printAll()
+        partRow.setValue(md.RLN_CTF_IMAGE, part.getCTF().getCtfFile())
+
+
+def relionToLocation(filename):
+    """ Return a location (index, filename) given
+    a Relion filename with the index@filename structure. """
+    if '@' in filename:
+        indexStr, fn = filename.split('@')
+        return int(indexStr), str(fn)
+    else:
+        return const.NO_INDEX, str(filename)
+
+
+def convertBinaryVol(vol, outputDir):
+    from pyworkflow.em import ImageHandler
+    """ Convert binary volume to a format read by Relion.
+    Params:
+        vol: input volume object to be converted.
+        outputDir: where to put the converted file(s)
+    Return:
+        new file name of the volume (convrted or not).
+    """
+    
+    ih = ImageHandler()
+    # This approach can be extended when
+    # converting from a binary file format that
+    # is not read from Relion
+    def convertToMrc(fn):
+        """ Convert from a format that is not read by Relion
+        to mrc format.
+        """
+        newFn = join(outputDir, putils.replaceBaseExt(fn, 'mrc'))
+        ih.convert(fn, newFn)
+        return newFn
+        
+    ext = vol.getFileName()
+    
+    if not ext.endswith('.mrc'):
+        fn = convertToMrc(vol.getFileName())
+    else:
+        fn = vol.getFileName()
+    return fn
