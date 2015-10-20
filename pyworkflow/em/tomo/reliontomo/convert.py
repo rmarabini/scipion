@@ -91,7 +91,6 @@ def subtomoToRow(part, partRow, **kwargs):
     partRow.setValue(md.RLN_IMAGE_COORD_Z, float(coord.getZ()))
     partRow.setValue(md.RLN_IMAGE_NAME, part.getFileName())
     if part.hasCTF():
-        print "part.getCTF().getCtfFile(): ", part.getCTF().printAll()
         partRow.setValue(md.RLN_CTF_IMAGE, part.getCTF().getCtfFile())
 
 

@@ -52,6 +52,9 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
                       help='Choose some CTF estimation related to input micrographs. \n'
                            'CTF estimation is needed if you want to do phase flipping or \n'
                            'you want to associate CTF information to the particles.')
+        form.addParam('doProject3D', params.BooleanParam, default=False,
+                      label='Normalize',
+                      help='If set to True, Project sub-tomograms along Z to generate 2D particles')
         
         form.addSection(label='Preprocess')
         form.addParam('doInvert', params.BooleanParam, default=False,
@@ -113,36 +116,37 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
         if self.doInvert:
             params += ' --invert_contrast'            
         
-        wDust = self.whiteDust.get()
-        bDust = self.blackDust.get()
+        params += ' --white_dust %f' % self.whiteDust.get()
+        params += ' --black_dust %f' % self.blackDust.get()
         
-        if wDust > 0:
-            params += ' --white_dust %f' % wDust
-        if bDust > 0:
-            params += ' --black_dust %f' % bDust
+        if self.doProject3D:
+            params += ' --project3d'
  
         self.runJob(self._getProgram(), params, env=conv.getEnviron(), cwd=self._getPath())
      
     def createOutputStep(self):
-        subtomoSet = self._createSetOfSubtomograms()
-        subtomoSet.copyInfo(self.coordSet.getTomoRecs())
-        subtomoSet.setHasCTF(self.ctfRelations.hasValue())
-        self.coordDict = {}
-        
-        for coord in self.coordSet:
-            subtomoFn = self._getPath(self._getSubtomoFn(coord))
-            if subtomoFn is not None:
-                subtomo = Subtomogram()
-                subtomo.setFileName(subtomoFn)
-                subtomo.copyInfo(coord.getTomoRec())
-                subtomo.setCoordinate(coord)
-                subtomo.setTomoId(coord.getTomoId())
-                subtomo.setTomoName(coord.getTomoName())
-                if self.ctfRelations:
-                    subtomo.setCTF(self.ctfRelations.get()[coord.getObjId()])
-                subtomoSet.append(subtomo)
-        self._defineOutputs(outputSubtomograms=subtomoSet)
-        self._defineSourceRelation(self.coordSet, subtomoSet)
+        if self.doProject3D:
+            pass
+        else:
+            subtomoSet = self._createSetOfSubtomograms()
+            subtomoSet.copyInfo(self.coordSet.getTomoRecs())
+            subtomoSet.setHasCTF(self.ctfRelations.hasValue())
+            self.coordDict = {}
+            
+            for coord in self.coordSet:
+                subtomoFn = self._getPath(self._getSubtomoFn(coord))
+                if subtomoFn is not None:
+                    subtomo = Subtomogram()
+                    subtomo.setFileName(subtomoFn)
+                    subtomo.copyInfo(coord.getTomoRec())
+                    subtomo.setCoordinate(coord)
+                    subtomo.setTomoId(coord.getTomoId())
+                    subtomo.setTomoName(coord.getTomoName())
+                    if self.ctfRelations:
+                        subtomo.setCTF(self.ctfRelations.get()[coord.getObjId()])
+                    subtomoSet.append(subtomo)
+            self._defineOutputs(outputSubtomograms=subtomoSet)
+            self._defineSourceRelation(self.coordSet, subtomoSet)
     
 #--------------------------- INFO functions -------------------------------------------- 
     def _validate(self):
