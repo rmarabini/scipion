@@ -53,7 +53,7 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
                            'CTF estimation is needed if you want to do phase flipping or \n'
                            'you want to associate CTF information to the particles.')
         form.addParam('doProject3D', params.BooleanParam, default=False,
-                      label='Normalize',
+                      label='project along Z?',
                       help='If set to True, Project sub-tomograms along Z to generate 2D particles')
         
         form.addSection(label='Preprocess')

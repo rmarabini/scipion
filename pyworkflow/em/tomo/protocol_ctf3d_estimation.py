@@ -232,7 +232,7 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
     def reconstructCtf3DStep(self, tomoFn, coordNum):
         from pyworkflow.em.packages import relion
         program = "relion_reconstruct"
-        sampling = self.tomoSet.getSamplingRate()
+        sampling = self.inputCoords.getTomoRecs().getSamplingRate()
         param = {"sampling" : sampling,
                   "ctfStar" : self._getCtfStar(tomoFn, coordNum),
                   "ctf3D" : self._getCtf3D(tomoFn, coordNum),
