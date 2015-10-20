@@ -97,7 +97,7 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
                            'allow identifying more details. However, since there are fewer windows, '
                            'estimations are noisier.')
         
-        form.addParallelSection(threads=3, mpi=1)
+        form.addParallelSection(threads=3, mpi=0)
     
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -131,10 +131,10 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
         extractProg = EXTRACTTILTS_PATH
         
         args = '-InputFile %(tomogram)s -tilts -OutputFile %(tiltangles)s'
-        params = {"tomogram" : tomoFn, 
+        param = {"tomogram" : tomoFn, 
                   "tiltangles" : self._getFnPath(tomoFn, "tiltAngles.txt")
                   }
-        self.runJob(extractProg, args % params)
+        self.runJob(extractProg, args % param)
     
     def extractTiltImgStep(self, tomoFn, i):
         from imodpath import NEWSTACK_PATH
@@ -142,17 +142,17 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
         stackProg = NEWSTACK_PATH
         
         args = '-secs %(numStk)d %(tomogram)s %(tomoStck)s'
-        params = {"tomogram" : tomoFn,
+        param = {"tomogram" : tomoFn,
                   "numStk" : i-1,
                   "tomoStck" : self._getImgName(tomoFn, i)
                   }
-        self.runJob(stackProg, args % params)
+        self.runJob(stackProg, args % param)
     
     def estimateCtfStep(self, tomoFn, i):
         """ Run ctffind, 3 or 4, with required parameters """
         from pyworkflow.em.packages import xmipp3
         
-        args, program, params = self._prepareCommand()
+        args, program, param = self._prepareCommand()
         downFactor = self.ctfDownFactor.get()
         micFn = self._getImgName(tomoFn, i)
         if downFactor != 1:
@@ -163,13 +163,13 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
             micFnMrc = micFn
         
         # Update _params dictionary
-        params['micFn'] = micFnMrc
-        params['micDir'] = self._getTomoPath(tomoFn)
-        params['ctffindPSD'] = self._getFnPath(tomoFn, '%s_ctfEstimation.mrc' % pwutils.removeBaseExt(micFn))
-        params['ctffindOut'] = self._getFnPath(tomoFn, '%s_ctfEstimation.txt' % pwutils.removeBaseExt(micFn))
+        param['micFn'] = micFnMrc
+        param['micDir'] = self._getTomoPath(tomoFn)
+        param['ctffindPSD'] = self._getFnPath(tomoFn, '%s_ctfEstimation.mrc' % pwutils.removeBaseExt(micFn))
+        param['ctffindOut'] = self._getFnPath(tomoFn, '%s_ctfEstimation.txt' % pwutils.removeBaseExt(micFn))
         
         try:
-            self.runJob(program, args % params)
+            self.runJob(program, args % param)
         except Exception, ex:
             print >> sys.stderr, "ctffind has failed with micrograph %s" % micFnMrc
         pwutils.cleanPath(micFnMrc)
@@ -233,14 +233,14 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
         from pyworkflow.em.packages import relion
         program = "relion_reconstruct"
         sampling = self.tomoSet.getSamplingRate()
-        params = {"sampling" : sampling,
+        param = {"sampling" : sampling,
                   "ctfStar" : self._getCtfStar(tomoFn, coordNum),
                   "ctf3D" : self._getCtf3D(tomoFn, coordNum),
                   "boxSize" : self.inputCoords.getBoxSize()
                   }
         
         args = " --i %(ctfStar)s --o %(ctf3D)s --reconstruct_ctf %(boxSize)d --angpix %(sampling)f"
-        self.runJob(program, args % params, env=relion.getEnviron())
+        self.runJob(program, args % param, env=relion.getEnviron())
     
     def createOutputStep(self):
         ctf3DSet = self._createSetOfCTF3D(self.inputCoords)
@@ -301,7 +301,7 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
         samRate = self.tomoSet.getSamplingRate()
         acquisition = self.tomoSet.getAcquisition()
         
-        params = {'voltage': acquisition.getVoltage(),
+        param = {'voltage': acquisition.getVoltage(),
                   'sphericalAberration': acquisition.getSphericalAberration(),
                   'magnification': acquisition.getMagnification(),
                   'ampContrast': acquisition.getAmplitudeContrast(),
@@ -318,20 +318,20 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
                   }
         
         # Convert digital frequencies to spatial frequencies
-        params['lowRes'] = samRate / self.lowRes.get()
-        if params['lowRes'] > 50:
-            params['lowRes'] = 50
-        params['highRes'] = samRate / self.highRes.get()
+        param['lowRes'] = samRate / self.lowRes.get()
+        if param['lowRes'] > 50:
+            param['lowRes'] = 50
+        param['highRes'] = samRate / self.highRes.get()
         if not self.useCftfind4:
             args, program = self._argsCtffind3()
         else:
             if self.findPhaseShift:
-                params['phaseShift'] = "yes"
+                param['phaseShift'] = "yes"
             else:
-                params['phaseShift'] = "no"
+                param['phaseShift'] = "no"
             args, program = self._argsCtffind4()
         
-        return args, program, params
+        return args, program, param
     
     def _argsCtffind3(self):
         program = CTFFIND_PATH
