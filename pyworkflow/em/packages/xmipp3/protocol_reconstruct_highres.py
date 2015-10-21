@@ -33,7 +33,7 @@ from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, Bo
 from pyworkflow.utils.path import cleanPath, makePath, copyFile, moveFile, createLink
 from pyworkflow.em.protocol import ProtRefine3D
 from pyworkflow.em.data import SetOfVolumes, Volume
-from pyworkflow.em.metadata.utils import getFirstRow
+from pyworkflow.em.metadata.utils import getFirstRow, getSize
 from convert import writeSetOfParticles
 from os.path import join, exists
 from pyworkflow.em.packages.xmipp3.convert import readSetOfParticles, setXmippAttributes
@@ -412,7 +412,6 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             self.runJob('xmipp_metadata_utilities',"-i %s --set natural_join %s"%(fnImagesRejected,fnImages),numberOfMpi=1)
             cleanPath(fnUsedId)
     
-            from pyworkflow.em.metadata.utils import getSize
             Nimages=getSize(fnImages)
             Nrepeated=getSize(join(fnDirCurrent,"angles.xmd"))
             Nunique=getSize(fnUsed)
@@ -498,10 +497,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             if TsPrevious!=TsCurrent:
                 self.runJob("xmipp_image_resize","-i %s -o %s --dim %d"%(fnPreviousVol,fnReferenceVol,newXdim),numberOfMpi=1)
             else:
-                if self.nextLowPass or self.nextSpherical or self.nextPositivity or fnMask!='':
-                    copyFile(fnPreviousVol, fnReferenceVol)
-                else:
-                    createLink(fnPreviousVol, fnReferenceVol)
+                copyFile(fnPreviousVol, fnReferenceVol)
             self.runJob('xmipp_transform_filter','-i %s --fourier fsc %s --sampling %f'%(fnReferenceVol,join(fnDirPrevious,"fsc.xmd"),TsCurrent),numberOfMpi=1)
             if self.nextLowPass:
                 self.runJob('xmipp_transform_filter','-i %s --fourier low_pass %f --sampling %f'%\
@@ -590,6 +586,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 else:
                     numberGroups=1
                     ctfPresent=False
+                    fnCTFs=""
 
                 # Generate projections
                 fnReferenceVol=join(fnGlobal,"volumeRef%02d.vol"%i)
@@ -612,13 +609,17 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         else:
                             fnGroup=fnImgs
                             fnGalleryGroupMd=fnGalleryMd
+                        if getSize(fnGroup)==0: # If the group is empty
+                            continue
                         maxShift=round(self.angularMaxShift.get()*newXdim/100)
                         R=self.particleRadius.get()
                         if R<=0:
                             R=self.inputParticles.get().getDimensions()[0]/2
                         R=R*self.TsOrig/TsCurrent
-                        args='-i %s -o %s --ref %s --ctf %d@%s --Ri 0 --Ro %d --max_shift %d --search5d_shift %d --search5d_step %f --mem 2 --append --pad 2.0'%\
-                             (fnGroup,join(fnDirSignificant,"angles_group%03d.xmd"%j),fnGalleryGroup,j,fnCTFs,R,maxShift,self.shiftSearch5d.get(),self.shiftStep5d.get())
+                        args='-i %s -o %s --ref %s --Ri 0 --Ro %d --max_shift %d --search5d_shift %d --search5d_step %f --mem 2 --append --pad 2.0'%\
+                             (fnGroup,join(fnDirSignificant,"angles_group%03d.xmd"%j),fnGalleryGroup,R,maxShift,self.shiftSearch5d.get(),self.shiftStep5d.get())
+                        if ctfPresent:
+                            args+=" --ctf %d@%s"%(j,fnCTFs)
                         if self.numberOfMpi>1:
                             args+=" --mpi_job_size 2"
                         self.runJob('xmipp_angular_projection_matching',args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
@@ -848,7 +849,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             if not exists(fnAnglesQualified):
                 copyFile(fnAnglesGroup, fnAnglesQualified)
             else:
-                self.runJob("xmipp_metadata_utilities","-i %s --set union %s"%(fnAnglesQualified,fnAnglesGroup),numberOfMpi=1)
+                self.runJob("xmipp_metadata_utilities","-i %s --set union_all %s"%(fnAnglesQualified,fnAnglesGroup),numberOfMpi=1)
             cleanPath(fnAnglesGroup)
         if ctfPresent:
             cleanPath("%s/ctf_groups.xmd"%fnDirCurrent)
