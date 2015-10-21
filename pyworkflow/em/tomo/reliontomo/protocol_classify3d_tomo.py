@@ -38,7 +38,7 @@ from convert import relionToLocation
 
 
 class ProtRelionSubtomoClassify3D(ProtClassify3D, ProtRelionBaseTomo):
-    """    
+    """ 
     Protocol to classify 3D using Relion. Relion employs an empirical
     Bayesian approach to refinement of (multiple) 3D reconstructions
     or 2D class averages in electron cryo-microscopy (cryo-EM). Many
@@ -77,8 +77,7 @@ class ProtRelionSubtomoClassify3D(ProtClassify3D, ProtRelionBaseTomo):
         self._fillClassesFromIter(classes3D, self._lastIter())
         
         self._defineOutputs(outputClasses=classes3D)
-        self._defineSourceRelation(self.inputParticles, classes3D)
-
+        self._defineSourceRelation(partSet, classes3D)
 
         # create a SetOfVolumes and define its relations
         volumes = self._createSetOfVolumes()
@@ -90,7 +89,7 @@ class ProtRelionSubtomoClassify3D(ProtClassify3D, ProtRelionBaseTomo):
             volumes.append(vol)
         
         self._defineOutputs(outputVolumes=volumes)
-        self._defineSourceRelation(self.inputParticles, volumes)
+        self._defineSourceRelation(partSet, volumes)
         
         if not self.doContinue:
             self._defineSourceRelation(self.referenceVolume, classes3D)
@@ -199,7 +198,3 @@ class ProtRelionSubtomoClassify3D(ProtClassify3D, ProtRelionBaseTomo):
             item._rlnclassDistribution = params.Float(row.getValue('rlnClassDistribution'))
             item._rlnAccuracyRotations = params.Float(row.getValue('rlnAccuracyRotations'))
             item._rlnAccuracyTranslations = params.Float(row.getValue('rlnAccuracyTranslations'))
-            
-            
-            
-            

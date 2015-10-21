@@ -99,8 +99,10 @@ class EMProtocol(Protocol):
     def _createSetOfClassesVol(self, suffix=''):
         return self.__createSet(SetOfClassesVol, 'classesVol%s.sqlite', suffix)
     
-    def _createSetOfClassSubtomo3D(self, suffix=''):
-        return self.__createSet(SetOfClassSubtomo3D, 'classesSubtomo%s.sqlite', suffix)
+    def _createSetOfClassSubtomo3D(self, subtomoSet, suffix=''):
+        classes = self.__createSet(SetOfClassSubtomo3D, 'classesSubtomo%s.sqlite', suffix)
+        classes.setImages(subtomoSet)
+        return classes
     
     def _createSetOfVolumes(self, suffix=''):
         return self.__createSet(SetOfVolumes, 'volumes%s.sqlite', suffix)

@@ -104,6 +104,8 @@ class Subtomogram(Image):
         self._tomoCoordinate = None
         self._tomoId = Integer()
         self._tomoName = String()
+        self._classId = Integer()
+
         
     def hasCoordinate(self):
         return self._tomoCoordinate is not None
@@ -146,6 +148,16 @@ class Subtomogram(Image):
     
     def setCTF(self, newCTF):
         self._ctfModel = newCTF
+    
+    def getClassId(self):
+        return self._classId.get()
+    
+    def setClassId(self, classId):
+        self._classId.set(classId)
+        
+    def hasClassId(self):
+        return self._classId.hasValue()
+
 
 
 class TomoCoordinate(EMObject):
