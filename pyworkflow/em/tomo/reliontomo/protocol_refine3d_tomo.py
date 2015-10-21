@@ -75,42 +75,28 @@ leads to objective and high-quality results.
             joinHalves = "--low_resol_join_halves"
             if not joinHalves in self.extraParams.get():
                 args['--low_resol_join_halves'] = 40
-        
-        # Set movie refinement arguments
-        if self.realignMovieFrames:
-            args['--realign_movie_frames'] = self._getFileName('movie_particles')
-            args['--movie_frames_running_avg'] = self.movieAvgWindow.get()
-            args['--sigma_off'] = self.movieStdTrans.get()
-            if not self.movieIncludeRotSearch:
-                args['--skip_rotate'] = ''
-                args['--skip_maximize'] = ''
-            else:
-                args['--sigma_ang'] = self.movieStdRot.get()
-        
+    
     #--------------------------- STEPS functions --------------------------------------------     
     def createOutputStep(self):
         
-        if not self.realignMovieFrames:
-            imgSet = self._getInputParticles()
-            vol = Volume()
-            vol.setFileName(self._getExtraPath('relion_class001.mrc'))
-            vol.setSamplingRate(imgSet.getSamplingRate())
-            
-            outImgSet = self._createSetOfParticles()
-            outImgsFn = self._getFileName('data', iter=self._lastIter())
-            
-            outImgSet.copyInfo(imgSet)
-            outImgSet.setAlignmentProj()
-            outImgSet.copyItems(imgSet,
-                                updateItemCallback=self._createItemMatrix,
-                                itemDataIterator=metadata.iterRows(outImgsFn))
-            
-            self._defineOutputs(outputVolume=vol)
-            self._defineSourceRelation(self.inputParticles, vol)
-            self._defineOutputs(outputParticles=outImgSet)
-            self._defineTransformRelation(self.inputParticles, outImgSet)
-        else:
-            pass
+        imgSet = self._getInputParticles()
+        vol = Volume()
+        vol.setFileName(self._getExtraPath('relion_class001.mrc'))
+        vol.setSamplingRate(imgSet.getSamplingRate())
+        
+#         outImgSet = self._createSetOfParticles()
+#         outImgsFn = self._getFileName('data', iter=self._lastIter())
+        
+#         outImgSet.copyInfo(imgSet)
+#         outImgSet.setAlignmentProj()
+#         outImgSet.copyItems(imgSet,
+#                             updateItemCallback=self._createItemMatrix,
+#                             itemDataIterator=metadata.iterRows(outImgsFn))
+        
+        self._defineOutputs(outputVolume=vol)
+        self._defineSourceRelation(imgSet, vol)
+#         self._defineOutputs(outputParticles=outImgSet)
+#         self._defineTransformRelation(self.inputParticles, outImgSet)
     
     #--------------------------- INFO functions -------------------------------------------- 
     def _validateNormal(self):

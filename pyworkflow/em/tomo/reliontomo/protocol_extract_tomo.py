@@ -1,6 +1,6 @@
 # **************************************************************************
 # *
-# * Authors:     J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es)
+# * Authors:     Josue Gomez Blanco (jgomez@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -123,10 +123,16 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
             params += ' --project3d'
  
         self.runJob(self._getProgram(), params, env=conv.getEnviron(), cwd=self._getPath())
-     
+    
     def createOutputStep(self):
         if self.doProject3D:
-            pass
+            from convert import readSetOfParticles
+            
+            partSet = self._createSetOfParticles()
+            partSet.copyInfo(self.coordSet.getTomoRecs())
+            readSetOfParticles(self._getPath("subtomo.star"), partSet)
+            self._defineOutputs(outputParticles=partSet)
+            self._defineSourceRelation(self.coordSet, partSet)
         else:
             subtomoSet = self._createSetOfSubtomograms()
             subtomoSet.copyInfo(self.coordSet.getTomoRecs())

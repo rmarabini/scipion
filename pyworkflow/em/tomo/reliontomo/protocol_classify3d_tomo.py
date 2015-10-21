@@ -1,6 +1,6 @@
 # **************************************************************************
 # *
-# * Authors:     J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es)
+# * Authors:     Josue Gomez Blanco (jgomez@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -30,7 +30,7 @@ This module contains the protocol for 3d classification with relion.
 from pyworkflow.em import metadata
 from pyworkflow.em.protocol import ProtClassify3D
 from pyworkflow.em import metadata as md
-import pyworkflow.protocol.params as params 
+import pyworkflow.protocol.params as params
 # from pyworkflow.em.data import Volume
 
 from pyworkflow.em.tomo.reliontomo.protocol_base_tomo import ProtRelionBaseTomo
@@ -183,7 +183,7 @@ class ProtRelionSubtomoClassify3D(ProtClassify3D, ProtRelionBaseTomo):
     
     def _updateParticle(self, item, row):
         item.setClassId(row.getValue(md.RLN_PARTICLE_CLASS))
-#         item.setTransform(rowToAlignment(row, em.ALIGN_3D))
+#         item.setTransform(rowToAlignment(row, em.ALIGN_3D)) # now, the alignment is not stored.
         
         item._rlnLogLikeliContribution = params.Float(row.getValue('rlnLogLikeliContribution'))
         item._rlnMaxValueProbDistribution = params.Float(row.getValue('rlnMaxValueProbDistribution'))

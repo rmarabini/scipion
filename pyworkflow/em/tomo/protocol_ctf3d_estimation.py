@@ -40,7 +40,7 @@ from imodpath import CTFFIND_PATH, CTFFIND4_PATH
 class ProtCtf3DEstimation(ProtProcessTomograms):
     """sub-tomogram averaging in RELION
     """
-    _label = 'subtomogram averaging'
+    _label = 'ctf3D estimation'
     
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)

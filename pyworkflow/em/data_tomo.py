@@ -28,9 +28,9 @@
 This modules contains data classes related to Tomography workflow.
 """
 
-#NOTE: Some of this importS are needed by the mapper,
+#NOTE: Some of this imports are needed by the mapper,
 # not directly in the code
-from os.path import exists
+# from os.path import exists
 from pyworkflow.em.data import (EMObject, EMSet, SetOfImages, Volume,
                                 SetOfMicrographsBase, Image, SetOfClasses)
 from pyworkflow.object import Float, Pointer, Integer, String, Object 

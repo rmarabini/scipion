@@ -1,7 +1,7 @@
 # **************************************************************************
 # *
-# * Authors:     J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es)
-# *              Laura del Cano (ldelcano@cnb.csic.es)
+# * Authors:     Josue Gomez Blanco (jgomez@cnb.csic.es)
+# *
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -92,6 +92,28 @@ def subtomoToRow(part, partRow, **kwargs):
     partRow.setValue(md.RLN_IMAGE_NAME, part.getFileName())
     if part.hasCTF():
         partRow.setValue(md.RLN_CTF_IMAGE, part.getCTF().getCtfFile())
+
+
+def readSetOfParticles(filename, partSet, **kwargs):
+    """read from Relion image meta
+        filename: The metadata filename where the image are.
+        imgSet: the SetOfParticles that will be populated.
+        rowToParticle: this function will be used to convert the row to Object
+    """
+    from pyworkflow.em.packages.relion import rowToParticle
+    imgMd = md.MetaData(filename)
+    # By default remove disabled items from metadata
+    # be careful if you need to preserve the original number of items
+    if kwargs.get('removeDisabled', True):
+        imgMd.removeDisabled()
+    
+    for imgRow in md.iterRows(imgMd):
+        img = rowToParticle(imgRow, **kwargs)
+        
+        partSet.append(img)
+        
+    partSet.setHasCTF(img.hasCTF())
+#     partSet.setAlignment(kwargs['alignType'])
 
 
 def relionToLocation(filename):
