@@ -89,6 +89,7 @@ public class XmippImageWindow extends ImageWindow implements XmippIJWindow
         pixelslb = new Label("                                                ");
         add(pixelslb);
         
+
     }
 
         @Override
@@ -197,12 +198,12 @@ public class XmippImageWindow extends ImageWindow implements XmippIJWindow
             
         super.windowClosing(e);
         myClose();
+        imp.flush();
 	}
         
     public synchronized void myClose()
     {
     	closing = true;
-    	
     	XmippApplication.removeInstance(true);
     	if(maskfr != null)
     	{

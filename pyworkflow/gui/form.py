@@ -332,7 +332,7 @@ class SubclassesTreeProvider(TreeProvider):
         runs = project.getRuns()
         
         for prot in runs:
-            # Make sure we dont include previous output of the same 
+            # Make sure we don't include previous output of the same 
             # protocol, it will cause a recursive loop
             if prot.getObjId() != self.protocol.getObjId():
                 # Check if the protocol itself is one of the desired classes
@@ -402,7 +402,7 @@ class SubclassesTreeProvider(TreeProvider):
         parent = getattr(pobj, '_parentObject', None)
         if parent is None:
             label = getObjectLabel(pobj, self.mapper)
-        else: # This is an item comming from a set
+        else: # This is an item coming from a set
             label = 'item %s' % pobj.get().strId()
             
         obj = pobj.get()
@@ -908,7 +908,7 @@ class ParamWidget():
         
         def validateSelected(selectedItems):
             for item in selectedItems:
-                if not getattr(item, '_allowSelection', True):
+                if not getattr(item, '_allowsSelection', True):
                     return "Please select object of types: %s" % self.param.pointerClass.get()
 
         title = "Select object of types: %s" % self.param.pointerClass.get()
@@ -1097,7 +1097,7 @@ class FormWindow(Window):
         Params:
          title: title string of the windows.
          protocol: protocol from which the form will be generated.
-         callback: callback function to call when Save or Excecute are press.
+         callback: callback function to call when Save or Execute are press.
         """
         Window.__init__(self, title, master, icon='scipion_bn.xbm', 
                         weight=False, minsize=(600, 450), **kwargs)
@@ -1340,14 +1340,18 @@ class FormWindow(Window):
             if self.updateProtocolCallback:
                 self.updateProtocolCallback(self.protocol)
                 
+    def _getHostConfig(self):
+        """ Retrieve the hostConfig object for the select hostname"""
+        return self.protocol.getProject().getHostConfig(self.protocol.getHostName())
+        
     def _editQueueParams(self, e=None):
         """ Open the dialog to edit the queue parameters. """
         # Grab the host config from the project, since it 
         # have not been set in the protocol
-        hostConfig = self.protocol.getProject().getHostConfig(self.protocol.getHostName())
+        hostConfig = self._getHostConfig()
         queues = hostConfig.queueSystem.queues
         # If there is only one Queue and it has not parameters
-        # dont bother to showing the QueueDialog
+        # don't bother to showing the QueueDialog
         noQueueChoices = len(queues) == 1 and len(queues.values()[0]) == 0
         if noQueueChoices:
             result = queues.keys()[0], {}
@@ -1498,8 +1502,20 @@ class FormWindow(Window):
         self._close(onlySave=True)
         
     def execute(self, e=None):
+        
         if self.protocol.useQueue():
             if not self._editQueueParams():
+                return
+        else: # use queue = No
+            hostConfig = self._getHostConfig()
+            cores = self.protocol.numberOfMpi.get(1) * self.protocol.numberOfThreads.get(1)
+            mandatory = hostConfig.queueSystem.getMandatory()
+
+            if mandatory and cores >= mandatory:
+                self.showWarning("You need to submit the job to queue since you \n"
+                                 "are requesting a total of *%d* cores (MPI * threads)\n\n"
+                                 "*Note*: Your system is configured with MANDATORY = %d.\n"  
+                                 "        This value can be changed in Scipion/config/hosts.conf" % (cores, mandatory))
                 return
         
         if (self.protocol.getRunMode() == params.MODE_RESTART and 
@@ -1773,6 +1789,10 @@ class QueueDialog(Dialog):
         self.queueDict = queueDict
         self.window = window
         self.queueName, self.queueParams = window.protocol.getQueueParams()
+        # If there is only one queue and not one selected, use the first one
+        if not self.queueName and len(queueDict.keys()) == 1:
+            self.queueName = queueDict.keys()[0]
+            
         Dialog.__init__(self, window.root, "Queue parameters")
         
     def body(self, bodyFrame):
@@ -1819,7 +1839,7 @@ class QueueDialog(Dialog):
             label = tk.Label(self.content, text=label, bg='white')
             label.grid(row=r, column=0, sticky='ne', padx=5, pady=(0,5))
             var = tk.StringVar()
-            # Set the value comming in the protocol 
+            # Set the value coming in the protocol 
             var.set(self.queueParams.get(name, value))
             
             entry = tk.Entry(self.content, textvariable=var, width=15)

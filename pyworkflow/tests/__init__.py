@@ -255,3 +255,5 @@ DataSet(name='Tomo', folder='Tomo',
                'allRec' : 'Rec/*.rec'
               }
        )
+DataSet(name='xmipp_programs', folder='xmipp_programs', files={}
+       )

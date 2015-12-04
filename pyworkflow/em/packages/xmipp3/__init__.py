@@ -60,6 +60,7 @@ from viewer_reconstruct_highres import XmippReconstructHighResViewer
 
 from plotter import XmippPlotter
 
+from protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from protocol_align_volume import XmippProtAlignVolume, XmippProtAlignVolumeForWeb
 from protocol_apply_alignment import XmippProtApplyAlignment
 from protocol_break_symmetry import XmippProtAngBreakSymmetry
@@ -67,6 +68,7 @@ from protocol_cl2d_align import XmippProtCL2DAlign
 from protocol_cl2d import XmippProtCL2D
 from protocol_cltomo import XmippProtCLTomo
 # from protocol_ctf_defocus_group import XmippProtCTFDefocusGroup
+from protocol_compare_reprojections import XmippProtCompareReprojections
 from protocol_ctf_discrepancy import XmippProtCTFDiscrepancy
 from protocol_ctf_micrographs import XmippProtCTFMicrographs
 from protocol_ctf_correct_wiener2d import XmippProtCTFCorrectWiener2D
@@ -84,12 +86,10 @@ from protocol_particle_pick_consensus import XmippProtConsensusPicking
 from protocol_particle_pick import XmippProtParticlePicking 
 from protocol_particle_pick_pairs import XmippProtParticlePickingPairs
 from protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
-from protocol_projection_outliers import XmippProtProjectionOutliers
 from protocol_projmatch import XmippProtProjMatch, XmippProjMatchViewer
 from protocol_random_conical_tilt import XmippProtRCT
 from protocol_ransac import XmippProtRansac
 from protocol_reconstruct_fourier import XmippProtReconstructFourier
-from protocol_reconstruct_highres import XmippProtReconstructHighRes
 from protocol_reconstruct_significant import XmippProtReconstructSignificant
 from protocol_resolution3d import XmippProtResolution3D
 from protocol_rotational_spectra import XmippProtRotSpectra 
@@ -97,6 +97,7 @@ from protocol_screen_classes import XmippProtScreenClasses
 from protocol_screen_particles import XmippProtScreenParticles
 from protocol_split_volume import XmippProtSplitvolume
 from protocol_validate_nontilt import XmippProtValidateNonTilt
+from protocol_validate_tilt import XmippProtValidateTilt
 from protocol_volume_strain import XmippProtVolumeStrain
 
 # Wizards

@@ -102,7 +102,7 @@ class XmippProtocol():
         """ Insert the convertInputToXmipp if the inputName attribute
         is not an instance of xmippClass.
         It will return the result filename, if the 
-        convertion is needed, this will be input resultFn.
+        conversion is needed, this will be input resultFn.
         If not, it will be inputAttr.getFileName()
         """
         inputAttr = getattr(self, inputName)
@@ -112,10 +112,10 @@ class XmippProtocol():
         return inputAttr.getFileName()
          
     def convertInputToXmipp(self, inputName, xmippClass, resultFn):
-        """ This step can be used whenever a convertion is needed.
+        """ This step can be used whenever a conversion is needed.
         It will receive the inputName and get this attribute from self,
         invoke the convert function and check the result files if
-        convertion was done (otherwise the input was already in Xmipp format).
+        conversion was done (otherwise the input was already in Xmipp format).
         """
         inputAttr = getattr(self, inputName)
         inputXmipp = xmippClass.convert(inputAttr, resultFn)
@@ -126,7 +126,7 @@ class XmippProtocol():
          
     def getConvertedInput(self, inputName):
         """ Retrieve the converted input, it can be the case that
-        it is the same as input, when not convertion was done. 
+        it is the same as input, when not conversion was done. 
         """
         return getattr(self, inputName + 'Xmipp', getattr(self, inputName))
         
@@ -289,7 +289,7 @@ class XmippSet():
         """ Create new set, base on a Metadata.
         itemClass: Class that represent the items.
         A method .getFileName should be available to store the md.
-        Items contained in XmippSet are suposed to inherit from XmippMdRow.
+        Items contained in XmippSet are supposed to inherit from XmippMdRow.
         """
         self._itemClass = itemClass 
         #self._fileName = fileName      
@@ -478,6 +478,8 @@ class ProjMatcher():
         from pyworkflow.utils.path import cleanPath
         # Generate gallery of projections        
         fnGallery = self._getExtraPath('gallery.stk')
+        if volume.endswith('.mrc'):
+            volume+=":mrc"
         
         self.runJob("xmipp_angular_project_library", "-i %s -o %s --sampling_rate %f --sym %s --method fourier 1 0.25 bspline --compute_neighbors --angular_distance -1 --experimental_images %s"\
                    % (volume, fnGallery, angularSampling, symmetryGroup, images))
@@ -566,33 +568,43 @@ class HelicalFinder():
         else:
             return "helical"
 
-    def runCoarseSearch(self,fnVol,dihedral,z0,zF,zStep,rot0,rotF,rotStep,Nthr,fnOut,cylinderRadius,height):
-        args="-i %s --sym %s -z %f %f %f --rotHelical %f %f %f --thr %d -o %s"%(fnVol,self.getSymmetry(dihedral),
-                                                                                z0,zF,zStep,rot0,rotF,rotStep,Nthr,fnOut)
-        if cylinderRadius>0:
-            args+=" --mask cylinder %d %d"%(-cylinderRadius,-height)
+    def runCoarseSearch(self,fnVol,dihedral,heightFraction,z0,zF,zStep,rot0,rotF,rotStep,Nthr,fnOut,cylinderInnerRadius,cylinderOuterRadius,height,Ts):
+        args="-i %s --sym %s --heightFraction %f -z %f %f %f --rotHelical %f %f %f --thr %d -o %s --sampling %f"%(fnVol,self.getSymmetry(dihedral),heightFraction,
+                                                                                z0,zF,zStep,rot0,rotF,rotStep,Nthr,fnOut,Ts)
+        if cylinderOuterRadius>0 and cylinderInnerRadius<0:
+            args+=" --mask cylinder %d %d"%(-cylinderOuterRadius,-height)
+        elif cylinderOuterRadius>0 and cylinderInnerRadius>0:
+            args+=" --mask tube %d %d %d"%(-cylinderInnerRadius,-cylinderOuterRadius,-height)
         self.runJob('xmipp_volume_find_symmetry',args)
 
-    def runFineSearch(self, fnVol, dihedral, fnCoarse, fnFine, z0, zF, rot0, rotF, cylinderRadius, height):
+    def runFineSearch(self, fnVol, dihedral, fnCoarse, fnFine, heightFraction, z0, zF, rot0, rotF, cylinderInnerRadius, cylinderOuterRadius, height, Ts):
         md=MetaData(fnCoarse)
         objId=md.firstObject()
         rotInit=md.getValue(MDL_ANGLE_ROT,objId)
         zInit=md.getValue(MDL_SHIFT_Z,objId)
-        args="-i %s --sym %s --localHelical %f %f -o %s -z %f %f 1 --rotHelical %f %f 1 "%(fnVol,self.getSymmetry(dihedral),
-                                                                                           zInit,rotInit,fnFine,z0,zF,rot0,rotF)
-        if cylinderRadius>0:
-            args+=" --mask cylinder %d %d"%(-cylinderRadius,-height)
+        args="-i %s --sym %s --heightFraction %f --localHelical %f %f -o %s -z %f %f 1 --rotHelical %f %f 1 --sampling %f"%(fnVol,self.getSymmetry(dihedral),heightFraction,
+                                                                                           zInit,rotInit,fnFine,z0,zF,rot0,rotF,Ts)
+        if cylinderOuterRadius>0 and cylinderInnerRadius<0:
+            args+=" --mask cylinder %d %d"%(-cylinderOuterRadius,-height)
+        elif cylinderOuterRadius>0 and cylinderInnerRadius>0:
+            args+=" --mask tube %d %d %d"%(-cylinderInnerRadius,-cylinderOuterRadius,-height)
         self.runJob('xmipp_volume_find_symmetry',args)
 
-    def runSymmetrize(self, fnVol, dihedral, fnParams, fnOut, cylinderRadius, height):
+    def runSymmetrize(self, fnVol, dihedral, fnParams, fnOut, heightFraction, cylinderInnerRadius, cylinderOuterRadius, height, Ts):
         md=MetaData(fnParams)
         objId=md.firstObject()
         rot0=md.getValue(MDL_ANGLE_ROT,objId)
         z0=md.getValue(MDL_SHIFT_Z,objId)
-        args="-i %s --sym %s --helixParams %f %f -o %s"%(fnVol,self.getSymmetry(dihedral),z0,rot0,fnOut)
+        args="-i %s --sym %s --helixParams %f %f --heightFraction %f -o %s --sampling %f"%(fnVol,self.getSymmetry(dihedral),z0,rot0,heightFraction,fnOut,Ts)
         self.runJob('xmipp_transform_symmetrize',args)
-        if cylinderRadius>0:
-            args="-i %s --mask cylinder %d %d"%(fnOut,-cylinderRadius,-height)
+        doMask=False
+        if cylinderOuterRadius>0 and cylinderInnerRadius<0:
+            args="-i %s --mask cylinder %d %d"%(fnVol,-cylinderOuterRadius,-height)
+            doMask=True
+        elif cylinderOuterRadius>0 and cylinderInnerRadius>0:
+            args="-i %s --mask tube %d %d %d"%(fnVol,-cylinderInnerRadius,-cylinderOuterRadius,-height)
+            doMask=True
+        if doMask:
             self.runJob('xmipp_transform_mask',args)
             
 
@@ -675,7 +687,7 @@ class ScriptIJBase(XmippScript):
     def defineParams(self):
         self.addParamsLine('  --input <...>            : Input files to show');
         self.addParamsLine('         alias -i;');
-        self.addParamsLine('  [--memory <mem="2g">]    : Memory ammount for JVM');
+        self.addParamsLine('  [--memory <mem="2g">]    : Memory amount for JVM');
         self.addParamsLine('         alias -m;');
         self.defineOtherParams()
     

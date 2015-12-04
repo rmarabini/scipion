@@ -41,10 +41,11 @@ from os.path import dirname, join
 from pyworkflow.utils import makePath, runJob, copyTree, cleanPath
 import pyworkflow as pw
 import xmipp
-from pyworkflow.gui.dialog import askYesNo
+import pyworkflow.gui.dialog as dialog
 
 from protocol_cl2d_align import XmippProtCL2DAlign
 from protocol_cl2d import XmippProtCL2D
+from protocol_compare_reprojections import XmippProtCompareReprojections
 from protocol_ctf_discrepancy import XmippProtCTFDiscrepancy
 from protocol_extract_particles import XmippProtExtractParticles
 from protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
@@ -55,7 +56,6 @@ from protocol_particle_pick import XmippProtParticlePicking
 from protocol_particle_pick_pairs import XmippProtParticlePickingPairs
 from protocol_preprocess import XmippProtPreprocessVolumes
 from protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
-from protocol_projection_outliers import XmippProtProjectionOutliers
 from protocol_rotational_spectra import XmippProtRotSpectra
 from protocol_screen_classes import XmippProtScreenClasses
 from protocol_screen_particles import XmippProtScreenParticles
@@ -63,6 +63,7 @@ from protocol_ctf_micrographs import XmippProtCTFMicrographs
 from pyworkflow.em.showj import *
 from protocol_movie_alignment import ProtMovieAlignment
 from protocol_validate_nontilt import XmippProtValidateNonTilt
+from protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 
 class XmippViewer(Viewer):
     """ Wrapper to visualize different type of objects
@@ -82,18 +83,19 @@ class XmippViewer(Viewer):
                 SetOfImages, 
                 SetOfMovies, 
                 SetOfNormalModes, 
+                XmippProtCompareReprojections, 
                 XmippParticlePickingAutomatic, 
                 XmippProtExtractParticlesPairs, 
                 XmippProtKerdensom, 
                 ProtParticlePicking, 
                 XmippProtParticlePickingPairs,
-                XmippProtProjectionOutliers, 
                 XmippProtRotSpectra, 
                 XmippProtScreenClasses, 
                 XmippProtScreenParticles, 
                 XmippProtCTFMicrographs, 
                 ProtMovieAlignment,
-                XmippProtValidateNonTilt
+                XmippProtValidateNonTilt,
+                XmippProtAssignmentTiltPair
                 ]
     
     def __init__(self, **args):
@@ -200,6 +202,7 @@ class XmippViewer(Viewer):
             if micSet is None:
                 raise Exception('visualize: SetOfCoordinates has no micrographs set.')
             
+
             mdFn = getattr(micSet, '_xmippMd', None)
             if mdFn:
                 fn = mdFn.get()
@@ -208,7 +211,15 @@ class XmippViewer(Viewer):
                 writeSetOfMicrographs(micSet, fn)
             tmpDir = self._getTmpPath(obj.getName())
             if os.path.exists(tmpDir):
-                if not askYesNo("Question", 'Tmp folder with data associated to this object has been detected. Do you wish to load it?', self._tkRoot):
+                r = dialog.askYesNoCancel("Question", 
+                                   "It seems that you have edited this SetOfCoordinates before.\n"
+                                   "Do you wish to load the changes?\n\n"
+                                   "_Note_: If you choose *No*, the original coordinates will be loaded\n"
+                                   " and previous changes will be lost.", self._tkRoot)
+                
+                if r == dialog.RESULT_CANCEL:
+                    return
+                elif r == dialog.RESULT_NO:
                     cleanPath(tmpDir)
                     makePath(tmpDir)
                     writeSetOfCoordinates(tmpDir, obj)# always write set of coordinates instead of reading pos dir, that could have changed
@@ -216,7 +227,6 @@ class XmippViewer(Viewer):
                 makePath(tmpDir)
                 writeSetOfCoordinates(tmpDir, obj)# always write set of coordinates instead of reading pos dir, that could have changed
             
-
             self._views.append(CoordinatesObjectView(self._project, fn, tmpDir, self.protocol))
 
         elif issubclass(cls, SetOfParticles):
@@ -308,8 +318,8 @@ class XmippViewer(Viewer):
         elif issubclass(cls, XmippProtScreenClasses):
             if isinstance(obj.inputSet.get(), SetOfClasses2D):
                 fn = obj.outputClasses
-                labels = 'id enabled _size _representative._filename _xmipp_imageRef _xmipp_image1 _xmipp_maxCC'
-                labelRender = "_representative._filename _xmipp_imageRef _xmipp_image1"
+                labels = 'id enabled _size _representative._filename _xmipp_imageRef _xmipp_image _xmipp_imageResidual _xmipp_maxCC _xmipp_cost'
+                labelRender = "_representative._filename _xmipp_imageRef _xmipp_image _xmipp_imageResidual"
                 self._visualize(fn, viewParams={ORDER: labels, 
                                                           VISIBLE: labels, 
                                                           SORT_BY: '_xmipp_maxCC desc', RENDER:labelRender,
@@ -324,22 +334,15 @@ class XmippViewer(Viewer):
                                                       SORT_BY: '_xmipp_maxCC desc', RENDER:labelRender,
                                                       MODE: MODE_MD}))
         
-        elif issubclass(cls, XmippProtProjectionOutliers):
-            if isinstance(obj.inputSet.get(), SetOfClasses2D):
-                fn = obj.outputClasses
-                labels = 'id enabled _size _representative._index _representative._filename _xmipp_maxCC _xmipp_zScoreResCov _xmipp_zScoreResMean _xmipp_zScoreResVar'
-                labelRender = "_representative._filename"
-                self._visualize(fn, viewParams={ORDER: labels, 
-                                                          VISIBLE: labels, 
-                                                          SORT_BY: '_xmipp_zScoreResCov desc', RENDER:labelRender})
-            else:
-                fn = obj.outputAverages.getFileName()
-                labels = 'id enabled _index _filename  _xmipp_maxCC _xmipp_zScoreResCov _xmipp_zScoreResMean _xmipp_zScoreResVar _transform._matrix'
-                labelRender = "_filename"
-                self._views.append(ObjectView(self._project, obj.outputAverages.strId(), fn,
+        elif issubclass(cls, XmippProtCompareReprojections):
+                fn = obj.outputParticles.getFileName()
+                labels = 'id enabled _index _xmipp_image._filename _xmipp_imageRef._filename _xmipp_imageResidual._filename _xmipp_imageCovariance._filename _xmipp_cost _xmipp_zScoreResCov _xmipp_zScoreResMean _xmipp_zScoreResVar _xmipp_continuousA _xmipp_continuousB _xmipp_continuousX _xmipp_continuousY'
+                labelRender = "_xmipp_image._filename _xmipp_imageRef._filename _xmipp_imageResidual._filename _xmipp_imageCovariance._filename"
+                self._views.append(ObjectView(self._project, obj.outputParticles.strId(), fn,
                                               viewParams={ORDER: labels, 
                                                       VISIBLE: labels, 
-                                                      SORT_BY: '_xmipp_zScoreResCov desc', RENDER:labelRender}))
+                                                      SORT_BY: '_xmipp_cost asc', RENDER:labelRender,
+                                                      MODE: MODE_MD}))
             
         elif issubclass(cls, XmippParticlePickingAutomatic):
             micSet = obj.getInputMicrographs()
@@ -353,11 +356,17 @@ class XmippViewer(Viewer):
             posDir = obj._getExtraPath()  
             memory = '%dg'%obj.memory.get(), 
             launchSupervisedPickerGUI(micsfn, posDir, obj, mode='review', memory=memory)
-            
+
+         # We need this case to happens before the ProtParticlePicking one
+        elif issubclass(cls, XmippProtAssignmentTiltPair):
+            if obj.getOutputsSize() >= 1:
+                coordsSet = obj.getCoordsTiltPair()
+                self._visualize(coordsSet)  
+                
         elif issubclass(cls, ProtParticlePicking):
             if obj.getOutputsSize() >= 1:
                 coordsSet = obj.getCoords()
-                self._visualize(coordsSet)    
+                self._visualize(coordsSet)
             
         elif issubclass(cls, ProtMovieAlignment):
             outputMics = obj.outputMicrographs
