@@ -37,7 +37,9 @@ from pyworkflow.utils.path import cleanPath
 
 from pyworkflow.em import metadata
 from pyworkflow.em.data import SetOfClasses3D
+from pyworkflow.em.data_tomo import SetOfSubtomograms, writeSetOfVolumes
 from pyworkflow.em.protocol import EMProtocol
+
 
 from constants import ANGULAR_SAMPLING_LIST, MASK_FILL_ZERO
 from convert import convertBinaryVol, getEnviron#, writeSqliteIterData, writeSetOfParticles
@@ -129,7 +131,7 @@ class ProtRelionBaseTomo(EMProtocol):
                       help='If you set to *Yes*, you should select a previous'
                       'run of type *%s* class and most of the input parameters'
                       'will be taken from it.' % self.getClassName())
-        form.addParam('inputSubtomograms', params.PointerParam, pointerClass='SetOfSubtomograms',
+        form.addParam('inputSubtomograms', params.PointerParam, pointerClass='SetOfSubtomograms, SetOfVolumes',
               condition='not doContinue',
               important=True,
               label="Input subtomograms",  
@@ -407,7 +409,10 @@ class ProtRelionBaseTomo(EMProtocol):
                            (imgSet.getFileName(), imgStar))
         
         # Pass stack file as None to avoid write the images files
-        writeSetOfSubtomograms(imgSet, imgStar, self._getExtraPath())
+        if isinstance(imgSet, SetOfSubtomograms):
+            writeSetOfSubtomograms(imgSet, imgStar, self._getExtraPath())
+        else:
+            writeSetOfVolumes(imgSet, imgStar, self._getExtraPath())
     
     def runRelionStep(self, params):
         """ Execute the relion steps with the give params. """

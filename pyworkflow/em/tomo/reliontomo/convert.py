@@ -63,11 +63,17 @@ def writeSetOfTomograms(tomoRecSet, starFile, dirPath):
 
 def writeSetOfSubtomograms(subtomoSet, subtomoStar, path):
     subtomoMd = md.MetaData()
-    setOfImagesToMd(subtomoSet, subtomoMd)
+    setOfImagesToMd(subtomoSet, subtomoMd, subtomoToRow)
     subtomoMd.write(subtomoStar)
 
 
-def setOfImagesToMd(imgSet, imgMd):
+def writeSetOfVolumes(volSet, volStar, path):
+    volMd = md.MetaData()
+    setOfImagesToMd(volSet, volMd, volToRow)
+    volMd.write(volStar)
+
+
+def setOfImagesToMd(imgSet, imgMd, imageToRow):
     """ This function will fill Relion metadata from a SetOfMicrographs
     Params:
         imgSet: the set of images to be converted to metadata
@@ -78,12 +84,12 @@ def setOfImagesToMd(imgSet, imgMd):
     for img in imgSet:
         objId = imgMd.addObject()
         imgRow = md.Row()
-        subtomoToRow(img, imgRow)
+        imageToRow(img, imgRow)
         imgRow.writeToMd(imgMd, objId)
 
 
 def subtomoToRow(part, partRow, **kwargs):
-    """ Set labels values from Particle to md row. """
+    """ Set labels values from Subtomogram to md row. """
     coord = part.getCoordinate()
     partRow.setValue(md.RLN_MICROGRAPH_NAME, coord.getTomoRec().getFileName())
     partRow.setValue(md.RLN_IMAGE_COORD_X, float(coord.getX()))
@@ -93,6 +99,11 @@ def subtomoToRow(part, partRow, **kwargs):
     if part.hasCTF():
         partRow.setValue(md.RLN_CTF_IMAGE, part.getCTF().getCtfFile())
 
+
+def volToRow(part, partRow, **kwargs):
+    """ Set labels values from Volume to md row. """
+    partRow.setValue(md.RLN_IMAGE_NAME, part.getFileName())
+    
 
 def readSetOfParticles(filename, partSet, **kwargs):
     """read from Relion image meta
