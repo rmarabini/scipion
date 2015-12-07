@@ -101,10 +101,11 @@ class ProtRelionSubtomoClassify3D(ProtClassify3D, ProtRelionBaseTomo):
         return summary message for NORMAL EXECUTION. 
         """
         errors = []
-        partSizeX, _, _ = self._getInputParticles().getDim()
-        volSizeX, _, _ = self.referenceVolume.get().getDim()
-        if partSizeX != volSizeX:
-            errors.append('Volume and particles dimensions must be equal!!!')
+        if self.referenceVolume.get() is not None:
+            partSizeX, _, _ = self._getInputParticles().getDim()
+            volSizeX, _, _ = self.referenceVolume.get().getDim()
+            if partSizeX != volSizeX:
+                errors.append('Volume and particles dimensions must be equal!!!')
 
         return errors
     

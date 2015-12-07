@@ -37,12 +37,12 @@ from pyworkflow.utils.path import cleanPath
 
 from pyworkflow.em import metadata
 from pyworkflow.em.data import SetOfClasses3D
-from pyworkflow.em.data_tomo import SetOfSubtomograms, writeSetOfVolumes
+from pyworkflow.em.data_tomo import SetOfSubtomograms
 from pyworkflow.em.protocol import EMProtocol
 
 
 from constants import ANGULAR_SAMPLING_LIST, MASK_FILL_ZERO
-from convert import convertBinaryVol, getEnviron#, writeSqliteIterData, writeSetOfParticles
+from convert import convertBinaryVol, getEnviron, writeSetOfSubtomograms, writeSetOfVolumes
 
 
 class ProtRelionBaseTomo(EMProtocol):
@@ -167,7 +167,7 @@ class ProtRelionBaseTomo(EMProtocol):
         group = form.addGroup('Reference 3D map',
                               condition='not doContinue')
         group.addParam('referenceVolume', params.PointerParam, pointerClass='Volume',
-                       important=True,
+                       allowsNull=True,
                        label="Input volume",
                        condition='not doContinue',
                        help='Initial reference 3D map, it should have the same '
@@ -394,7 +394,6 @@ class ProtRelionBaseTomo(EMProtocol):
     
     #--------------------------- STEPS functions --------------------------------------------       
     def convertInputStep(self, particlesId):
-        from convert import writeSetOfSubtomograms
         """ Create the input file in STAR format as expected by Relion.
         If the input particles comes from Relion, just link the file.
         Params:
@@ -597,8 +596,9 @@ class ProtRelionBaseTomo(EMProtocol):
             args['--K'] = self.numberOfClasses.get()
             if self.limitResolEStep > 0:
                 args['--strict_highres_exp'] = self.limitResolEStep.get()
-        
-        args['--ref'] = convertBinaryVol(self.referenceVolume.get(), self._getTmpPath())
+        refVol = self.referenceVolume.get()
+        if refVol is not None:
+            args['--ref'] = convertBinaryVol(refVol, self._getTmpPath())
         if not self.isMapAbsoluteGreyScale:
             args['--firstiter_cc']=''
         args['--ini_high'] = self.initialLowPassFilterA.get()
