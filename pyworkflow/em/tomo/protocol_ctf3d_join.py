@@ -69,6 +69,7 @@ class ProtCtf3DJoin(ProtProcessTomograms):
 
         self._defineOutputs(outputTomoCoordinates=outCtf3DSet)
         self._defineOutputs(outputCft3Ds=outCtf3DSet)
+        self._defineCtfRelation(outCoordSet, outCtf3DSet)
 
     #--------------------------- INFO functions --------------------------------------------
     def _validate(self):
