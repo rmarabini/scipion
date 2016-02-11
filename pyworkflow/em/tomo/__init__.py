@@ -26,7 +26,9 @@
 """
 This modules contains classes related with tomography
 """
+
 from pyworkflow.em.tomo.protocol_ctf3d_estimation import ProtCtf3DEstimation
+from pyworkflow.em.tomo.protocol_ctf3d_join import ProtCtf3DJoin
 from imodpath import getEnviron
 
 _environ = getEnviron()
