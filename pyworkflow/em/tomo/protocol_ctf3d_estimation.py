@@ -122,7 +122,8 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
             for coord in self.inputCoords:
                 reconsDep = self._insertFunctionStep("reconstructCtf3DStep", tomoFn, coord.getObjId(), prerequisites=[writeDeps])
                 reconsDeps.append(reconsDep)
-            self._insertFunctionStep("createOutputStep", prerequisites=reconsDeps)
+
+        self._insertFunctionStep("createOutputStep", prerequisites=reconsDeps)
     
     #--------------------------- STEPS functions ---------------------------------------------------
     def extractTiltAnglesStep(self,  tomoFn):
@@ -253,7 +254,7 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
                 ctf3D.setTomoCoordinate(coord)
                 ctf3DSet.append(ctf3D)
         
-        self._defineOutputs(outpuCft3Ds=ctf3DSet)
+        self._defineOutputs(outputCft3Ds=ctf3DSet)
         self._defineCtfRelation(self.inputTomoCoords, ctf3DSet)
     
     #--------------------------- INFO functions --------------------------------------------
