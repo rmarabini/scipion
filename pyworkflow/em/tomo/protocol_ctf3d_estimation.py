@@ -97,7 +97,7 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
                            'allow identifying more details. However, since there are fewer windows, '
                            'estimations are noisier.')
         
-        form.addParallelSection(threads=3, mpi=0)
+        form.addParallelSection(threads=3, mpi=1)
     
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -122,7 +122,6 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
             for coord in self.inputCoords:
                 reconsDep = self._insertFunctionStep("reconstructCtf3DStep", tomoFn, coord.getObjId(), prerequisites=[writeDeps])
                 reconsDeps.append(reconsDep)
-
         self._insertFunctionStep("createOutputStep", prerequisites=reconsDeps)
     
     #--------------------------- STEPS functions ---------------------------------------------------
@@ -245,14 +244,17 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
     
     def createOutputStep(self):
         ctf3DSet = self._createSetOfCTF3D(self.inputCoords)
-        for tomo in self.tomoSet:
+        tomoDict = {}
+	for tomo in self.tomoSet:
             tomoFn = tomo.getFileName()
-            for coord in self.inputCoords:
-                ctf3D = CTF3DModel()
-                ctf3D.setObjId(coord.getObjId())
-                ctf3D.setCtfFile(self._getCtf3D(tomoFn, coord.getObjId()))
-                ctf3D.setTomoCoordinate(coord)
-                ctf3DSet.append(ctf3D)
+	    tomoDict[tomo.getTomoName()] = tomoFn
+	    
+        for coord in self.inputCoords:
+            ctf3D = CTF3DModel()
+            ctf3D.setObjId(coord.getObjId())
+            ctf3D.setCtfFile(self._getCtf3D(tomoDict.get(coord.getTomoName()), coord.getObjId()))
+            ctf3D.setTomoCoordinate(coord)
+            ctf3DSet.append(ctf3D)
         
         self._defineOutputs(outputCft3Ds=ctf3DSet)
         self._defineCtfRelation(self.inputTomoCoords, ctf3DSet)
