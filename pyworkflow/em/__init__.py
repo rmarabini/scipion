@@ -37,7 +37,7 @@ from data_tomo import *
 from protocol import *
 from constants import *
 from convert import *
-from tomo import ProtCtf3DEstimation # Change this as getProtocols method
+from tomo import *
 from pyworkflow.em.tomo.reliontomo import (ProtRelionExtractSubtomograms,
                                            ProtRelionSubtomoClassify3D,
                                            ProtRelionSubtomoRefine3D) # Change this as getProtocols method

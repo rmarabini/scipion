@@ -55,9 +55,17 @@ class ProtCtf3DJoin(ProtProcessTomograms):
     #--------------------------- STEPS functions ---------------------------------------------------
 
     def createOutputStep(self):
-        outCoordSet = self._createSetOfTomoCoordinates()
+        outTomoRecSet = self._createSetOfTomoRecs()
+        outCoordSet = self._createSetOfTomoCoordinates(outTomoRecSet)
         outCtf3DSet = self._createSetOfCTF3D(outCoordSet)
 
+	firstCtf3DSet = self.inputCtfs[0].get()
+	outCtf3DSet.copyInfo(firstCtf3DSet)
+	firstCoordSet = firstCtf3DSet.getTomoCoordinates()
+	outCoordSet.copyInfo(firstCoordSet)
+	firstTomoRecSet = firstCoordSet.getTomoRecs()
+	outTomoRecSet.copyInfo(firstTomoRecSet)
+	
         for ctfPointer in self.inputCtfs:
             ctf3DSet = ctfPointer.get()
             for ctf3D in ctf3DSet:
@@ -66,8 +74,13 @@ class ProtCtf3DJoin(ProtProcessTomograms):
                 coord = ctf3D.getTomoCoordinate()
                 coord.copyObjId(ctf3D)
                 outCoordSet.append(coord)
+		tomoRec = coord.getTomoRec()
+		tomoRec.copyObjId(coord)
+		outTomoRecSet.append(tomoRec)
 
-        self._defineOutputs(outputTomoCoordinates=outCtf3DSet)
+        
+        self._defineOutputs(outputTomoRecs=outTomoRecSet)
+        self._defineOutputs(outputTomoCoordinates=outCoordSet)
         self._defineOutputs(outputCft3Ds=outCtf3DSet)
         self._defineCtfRelation(outCoordSet, outCtf3DSet)
 
