@@ -194,7 +194,7 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
         
         for coord in self.coordSet.iterItems(orderBy='_tomoId'):
             tomoId = coord.getTomoId()
-        
+            print "IDs: ", tomoId, lastTomoId
             if tomoId != lastTomoId:
                 # we need to close previous opened file
                 if f:

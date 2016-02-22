@@ -73,6 +73,7 @@ class ProtCtf3DJoin(ProtProcessTomograms):
             firstCoord = firstCtf3D.getTomoCoordinate()
             tomoRec = firstCoord.getTomoRec()
             tomoRec.setObjId(None)
+            outTomoRecSet.append(tomoRec)
             
             for ctf3D in ctf3DSet:
                 ctf3D.setObjId(None)
@@ -83,7 +84,6 @@ class ProtCtf3DJoin(ProtProcessTomograms):
                 outCtf3DSet.append(ctf3D)
                 outCoordSet.append(coord)
             
-            outTomoRecSet.append(tomoRec)
         
         self._defineOutputs(outputTomoRecs=outTomoRecSet)
         self._defineOutputs(outputTomoCoordinates=outCoordSet)
