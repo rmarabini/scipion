@@ -68,14 +68,21 @@ class ProtCtf3DJoin(ProtProcessTomograms):
         
         for ctfPointer in self.inputCtfs:
             ctf3DSet = ctfPointer.get()
+            
+            firstCtf3D = ctf3DSet.getFirstItem()
+            firstCoord = firstCtf3D.getTomoCoordinate()
+            tomoRec = firstCoord.getTomoRec()
+            tomoRec.setObjId(None)
+            
             for ctf3D in ctf3DSet:
                 ctf3D.setObjId(None)
-                outCtf3DSet.append(ctf3D)
                 coord = ctf3D.getTomoCoordinate()
                 coord.copyObjId(ctf3D)
+                coord.setTomoRec(tomoRec)
+                ctf3D.setTomoCoordinate(coord)
+                outCtf3DSet.append(ctf3D)
                 outCoordSet.append(coord)
-            tomoRec = coord.getTomoRec()
-            tomoRec.setObjId(None)
+            
             outTomoRecSet.append(tomoRec)
         
         self._defineOutputs(outputTomoRecs=outTomoRecSet)
