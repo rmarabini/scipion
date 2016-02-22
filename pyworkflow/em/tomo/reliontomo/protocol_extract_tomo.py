@@ -194,7 +194,6 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
         
         for coord in self.coordSet.iterItems(orderBy='_tomoId'):
             tomoId = coord.getTomoId()
-            print "IDs: ", tomoId, lastTomoId
             if tomoId != lastTomoId:
                 # we need to close previous opened file
                 if f:
@@ -202,7 +201,6 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
                     print "Micrograph %s (%d)" % (lastTomoId, c)
                     c = 0
                 f = open(posDict[tomoId], 'w+')
-                print "posFn: ", posFn
                 lastTomoId = tomoId
             c += 1
             f.write(" %d   %d   %d\n" % (coord.getX(), coord.getY(), coord.getZ()))
