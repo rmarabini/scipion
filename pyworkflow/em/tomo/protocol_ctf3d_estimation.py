@@ -240,7 +240,7 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
             ctf3DMd.write("data_images@%s" % ctf3DStar)
     
     def reconstructCtf3DStep(self, tomoFn, coordNum):
-        from pyworkflow.em.packages import relion
+        from pyworkflow.em.packages.relion.convert import getEnviron
         program = "relion_reconstruct"
         sampling = self.inputCoords.getTomoRecs().getSamplingRate()
         param = {"sampling" : sampling,
@@ -251,7 +251,7 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
         
         args = " --i %(ctfStar)s --o %(ctf3D)s --reconstruct_ctf %(boxSize)d --angpix %(sampling)f"
         
-        self.runJob(program, args % param, env=relion.getEnviron())
+        self.runJob(program, args % param, env=getEnviron())
     
     def createOutputStep(self):
         ctf3DSet = self._createSetOfCTF3D(self.inputCoords)
