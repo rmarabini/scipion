@@ -103,7 +103,7 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
     def _insertAllSteps(self):
         """Insert the steps to preprocess the tomograms
         """
-        ctfDepsList = []
+        
         reconsDeps = []
         self.inputCoords = self.inputTomoCoords.get()
         self.tomoSet = self.inputCoords.getTomoRecs().getTomograms()
@@ -112,15 +112,24 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
             tomoFn = tomo.getFileName()
             numbOfMics = tomo.getDim()[3]
             
-            extractDeps = self._insertFunctionStep("extractTiltAnglesStep", tomoFn, prerequisites=ctfDepsList)
+            extractDeps = self._insertFunctionStep("extractTiltAnglesStep", 
+                                                   tomoFn, prerequisites=reconsDeps)
+            ctfDepsList = []
             for i in range(1, numbOfMics+1):
-                tiltImgDeps = self._insertFunctionStep("extractTiltImgStep", tomo.getFileName(), i, prerequisites=[extractDeps])
-                ctfDeps = self._insertFunctionStep("estimateCtfStep", tomoFn, i, prerequisites=[tiltImgDeps])
+                tiltImgDeps = self._insertFunctionStep("extractTiltImgStep", 
+                                                       tomo.getFileName(), i, 
+                                                       prerequisites=[extractDeps])
+                ctfDeps = self._insertFunctionStep("estimateCtfStep", tomoFn, 
+                                                   i, prerequisites=[tiltImgDeps])
                 ctfDepsList.append(ctfDeps)
-            writeDeps = self._insertFunctionStep("writeStarCtf3DStep", tomo.getFileName(), numbOfMics, prerequisites=ctfDepsList)
+            writeDeps = self._insertFunctionStep("writeStarCtf3DStep", 
+                                                 tomo.getFileName(), numbOfMics, 
+                                                 prerequisites=ctfDepsList)
             
             for coord in self.inputCoords:
-                reconsDep = self._insertFunctionStep("reconstructCtf3DStep", tomoFn, coord.getObjId(), prerequisites=[writeDeps])
+                reconsDep = self._insertFunctionStep("reconstructCtf3DStep", 
+                                                     tomoFn, coord.getObjId(), 
+                                                     prerequisites=[writeDeps])
                 reconsDeps.append(reconsDep)
         self._insertFunctionStep("createOutputStep", prerequisites=reconsDeps)
     
@@ -240,15 +249,16 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
                   }
         
         args = " --i %(ctfStar)s --o %(ctf3D)s --reconstruct_ctf %(boxSize)d --angpix %(sampling)f"
+        
         self.runJob(program, args % param, env=relion.getEnviron())
     
     def createOutputStep(self):
         ctf3DSet = self._createSetOfCTF3D(self.inputCoords)
         tomoDict = {}
-	for tomo in self.tomoSet:
+        for tomo in self.tomoSet:
             tomoFn = tomo.getFileName()
-	    tomoDict[tomo.getTomoName()] = tomoFn
-	    
+            tomoDict[tomo.getTomoName()] = tomoFn
+        
         for coord in self.inputCoords:
             ctf3D = CTF3DModel()
             ctf3D.setObjId(coord.getObjId())
