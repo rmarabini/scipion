@@ -126,7 +126,7 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
                                                  tomo.getFileName(), numbOfMics, 
                                                  prerequisites=ctfDepsList)
             
-            for coord in self.inputCoords:
+            for coord in self.inputCoords.iterItems(where='_tomoId=%d' % tomo.getObjId()):
                 reconsDep = self._insertFunctionStep("reconstructCtf3DStep", 
                                                      tomoFn, coord.getObjId(), 
                                                      prerequisites=[writeDeps])
