@@ -109,6 +109,7 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
         self.tomoSet = self.inputCoords.getTomoRecs().getTomograms()
         
         for tomo in self.tomoSet:
+            tomoId = tomo.getObjId()
             tomoFn = tomo.getFileName()
             numbOfMics = tomo.getDim()[3]
             
@@ -122,11 +123,11 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
                 ctfDeps = self._insertFunctionStep("estimateCtfStep", tomoFn, 
                                                    i, prerequisites=[tiltImgDeps])
                 ctfDepsList.append(ctfDeps)
-            writeDeps = self._insertFunctionStep("writeStarCtf3DStep", 
+            writeDeps = self._insertFunctionStep("writeStarCtf3DStep", tomoId, 
                                                  tomo.getFileName(), numbOfMics, 
                                                  prerequisites=ctfDepsList)
             
-            for coord in self.inputCoords.iterItems(where='_tomoId=%d' % tomo.getObjId()):
+            for coord in self.inputCoords.iterItems(where='_tomoId=%d' % tomoId):
                 reconsDep = self._insertFunctionStep("reconstructCtf3DStep", 
                                                      tomoFn, coord.getObjId(), 
                                                      prerequisites=[writeDeps])
@@ -183,13 +184,13 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
             print >> sys.stderr, "ctffind has failed with micrograph %s" % micFnMrc
         pwutils.cleanPath(micFnMrc)
     
-    def writeStarCtf3DStep(self, tomoFn, numbOfMics):
+    def writeStarCtf3DStep(self, tomoId, tomoFn, numbOfMics):
         import math
         import pyworkflow.em.metadata as md
         
         sizeX, _, _, sizeZ = self.tomoSet.getFirstItem().getDim()
         
-        for coord in self.inputCoords:
+        for coord in self.inputCoords.iterItems(where='_tomoId=%d' % tomoId):
             
             ctf3DStar = self._getCtfStar(tomoFn, coord.getObjId())
             ctf3DMd = md.MetaData()
