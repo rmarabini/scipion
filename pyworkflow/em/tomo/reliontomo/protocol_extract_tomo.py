@@ -203,7 +203,12 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
                 f = open(posDict[tomoId], 'w+')
                 lastTomoId = tomoId
             c += 1
-            f.write(" %d   %d   %d\n" % (coord.getX(), coord.getY(), coord.getZ()))
+            
+            boxSize = self.coordSet.getBoxSize()
+            (x, y, z) = coord.getPosition()
+            
+            if (x > boxSize/2) and (y > boxSize/2) and (z > boxSize/2):
+                f.write(" %d   %d   %d\n" % (x, y, z))
         
         if f:
             f.close()
