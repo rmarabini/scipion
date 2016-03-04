@@ -209,6 +209,7 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
             
             if (x > boxSize/2) and (y > boxSize/2) and (z > boxSize/2):
                 f.write(" %d   %d   %d\n" % (x, y, z))
+                print "SIZE: ", x, y, z
         
         if f:
             f.close()
