@@ -140,8 +140,8 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
             self.coordDict = {}
             
             for coord in self.coordSet:
-                subtomoFn = self._getPath(self._getSubtomoFn(coord))
-                if subtomoFn is not None:
+                if self._getSubtomoFn(coord) is not None:
+                    subtomoFn = self._getPath(self._getSubtomoFn(coord))
                     subtomo = Subtomogram()
                     subtomo.setFileName(subtomoFn)
                     subtomo.copyInfo(coord.getTomoRec())
@@ -194,6 +194,7 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
         
         for coord in self.coordSet.iterItems(orderBy='_tomoId'):
             tomoId = coord.getTomoId()
+        
             if tomoId != lastTomoId:
                 # we need to close previous opened file
                 if f:
@@ -204,12 +205,24 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
                 lastTomoId = tomoId
             c += 1
             
-            boxSize = self.coordSet.getBoxSize()
+            radius = self.coordSet.getBoxSize()/2
+            tomoRec = coord.getTomoRec()
+            (xDim, yDim, zDim, n) = tomoRec.getDim()
+            if n > 1:
+                zDim = n
+            
             (x, y, z) = coord.getPosition()
             
-            if (x > boxSize/2) and (y > boxSize/2) and (z > boxSize/2):
+            validator = ((x > radius) and (x < xDim - radius)
+                          and (y > radius) and (y < yDim - radius)
+                          and (z > radius) and (z < zDim - radius))
+            print "SIZE: ", coord.getPosition(), xDim, yDim, zDim, validator
+            
+            if ((x > radius) and (x < xDim - radius)
+                and (y > radius) and (y < yDim - radius)
+                and (z > radius) and (z < zDim - radius)):
+                
                 f.write(" %d   %d   %d\n" % (x, y, z))
-                print "SIZE: ", x, y, z
         
         if f:
             f.close()
@@ -229,5 +242,5 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
                 key = tomoBsName + x + y + z
                 self.coordDict[key] = subtomoFn
         coordKey = putils.removeBaseExt(coord.getTomoName()) + str(coord.getX()) + str(coord.getY()) + str(coord.getZ())
-        return self.coordDict[coordKey] if self.coordDict[coordKey] else None
+        return self.coordDict.get(coordKey, None)
         
