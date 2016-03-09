@@ -342,14 +342,14 @@ class SetOfTomoRecs(SetOfTomogramsBase):
                 print "Error reading dimension: ", ex
                 import traceback
                 traceback.print_exc()
-	firstItem = self.getFirstItem()
-	if firstItem is None or firstItem.getDim() is None:
-	    dimStr = "No-Dim"
-	else:
-	    x, y, z, n = firstItem.getDim()
+        firstItem = self.getFirstItem()
+        if firstItem is None or firstItem.getDim() is None:
+            dimStr = "No-Dim"
+        else:
+            x, y, z, n = firstItem.getDim()
             dimStr = '%d x %d x %d' % (x, y, n)
-        s = "%s (%d items, %s, %0.2f A/px)" % (self.getClassName(), self.getSize(), dimStr, sampling)
-        return s
+            s = "%s (%d items, %s, %0.2f A/px)" % (self.getClassName(), self.getSize(), dimStr, sampling)
+            return s
 
 
 class SetOfSubtomograms(SetOfImages):
@@ -477,7 +477,7 @@ class SetOfTomoCoordinates(EMSet):
         s = "%s (%d items, %s)" % (self.getClassName(), self.getSize(), boxStr)
         
         return s
-	
+    
     def copyInfo(self, other):
         """ Copy basic information (id and other properties) but not _mapperPath or _size
         from other set of micrographs to current one.

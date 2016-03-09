@@ -242,15 +242,14 @@ class ProtImportCoordinates(ProtImportFiles, ProtParticlePicking):
 class ProtImportTomoCoordinates(ProtImportFiles, ProtParticlePicking):
     """ Protocol to import a set of coordinates from reconstructed tomograms"""
     _label = 'import subtomogram coordinates'
-    
+
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         ProtImportFiles._defineParams(self, form)
-        
+
         form.addParam('inputTomoRecs', PointerParam, pointerClass='SetOfTomoRecs', 
                           label='Input reconstructed tomograms',
                           help='Select the subtomograms that you want to import coordinates.')
-        
         form.addParam('boxSize', IntParam, label='Box size')
         form.addParam('scale', FloatParam,
                       label='Scale', default=1,
