@@ -392,3 +392,75 @@ class ProtSubSet(ProtSets):
             return ["The elements of %s that also are referenced in %s" %
                     (self.inputFullSet.getName(), self.inputSubSet.getName()),
                     "are now in %s" % getattr(self, key).getName()]
+
+
+class ProtGetSubtomoFormClasses(ProtSets):
+    """ Protocol obtain a SetOfSubtomograms from a SetOfClassSubtomo3D.
+This protocol should be deprecated when all classes tomogram's classes
+can be properly show.
+    """
+    _label = 'get subtomograms'
+
+    #--------------------------- DEFINE param functions --------------------------------------------
+    def _defineParams(self, form):
+        form.addSection(label='Input')
+
+        form.addParam('inputSet', pwprot.params.PointerParam,
+                      pointerClass='SetOfClassSubtomo3D',
+                      label="Input set", important=True,
+                      help='Select the SetOfClassSubtomo3D that you want to'
+                           ' select a SetOfSubtomograms.')
+        form.addParam('class3DSelection', pwprot.params.NumericRangeParam, default='1',
+                      label='Classes list',
+                      help='')
+    
+    #--------------------------- INSERT steps functions --------------------------------------------
+    def _insertAllSteps(self):
+        self._insertFunctionStep('createOutputStep')
+    
+    #--------------------------- STEPS functions --------------------------------------------
+    def createOutputStep(self):
+        inputSet = self.inputSet.get()
+        refsList = self._getListFromRangeString(self.class3DSelection.get())
+        
+        subtomoSet = self._createSetOfSubtomograms()
+        subtomoSet.copyInfo(inputSet.getFirstItem())
+        for refVol in refsList:
+            ClassSubtomo = inputSet[refVol]
+            if ClassSubtomo is not None:
+                for subtomo in ClassSubtomo:
+                    finalSubtomo = subtomo.clone()
+                    subtomoSet.append(finalSubtomo)
+        
+        self._defineOutputs(outputSubtomograms=subtomoSet)
+        self._defineSourceRelation(inputSet, subtomoSet)
+
+    #--------------------------- INFO functions --------------------------------------------
+    def _validate(self):
+        errors = []
+        return errors
+    
+    def _summary(self):
+        return []
+    
+    #--------------------------- UTILS functions --------------------------------------------
+    def _getListFromRangeString(self, rangeStr):
+        ''' Create a list of integer from a string with range definitions
+        Examples:
+        "1,5-8,10" -> [1,5,6,7,8,10]
+        "2,6,9-11" -> [2,6,9,10,11]
+        "2 5, 6-8" -> [2,5,6,7,8]
+        '''
+        elements = rangeStr.split(',')
+        values = []
+        for e in elements:
+            if '-' in e:
+                limits = e.split('-')
+                values += range(int(limits[0]), int(limits[1])+1)
+            else:
+                # If values are separated by comma also splitted 
+                values += map(int, e.split())
+        return values
+
+
+
