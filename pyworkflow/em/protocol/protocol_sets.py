@@ -441,7 +441,11 @@ can be properly show.
         return errors
     
     def _summary(self):
-        return []
+        summary = []
+        if hasattr(self, 'outputSubtomograms'):
+            summary.append("Number of subtomograms selected: %d" % self.outputSubtomograms.getSize())
+
+        return summary
     
     #--------------------------- UTILS functions --------------------------------------------
     def _getListFromRangeString(self, rangeStr):
