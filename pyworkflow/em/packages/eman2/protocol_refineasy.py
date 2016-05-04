@@ -23,17 +23,14 @@
 # *  e-mail address 'jgomez@cnb.csic.es'
 # *
 # **************************************************************************
-from pyworkflow.em.packages.eman2.convert import createEmanProcess
-"""
-This sub-package contains wrapper around EMAN initialmodel program
-"""
 
 import os
 import re
 from os.path import exists
 from glob import glob
 import pyworkflow.em as em
-from pyworkflow.em.packages.eman2.eman2 import getEmanProgram, getVersion
+from pyworkflow.em.packages.eman2.eman2 import getEmanProgram, validateVersion
+from pyworkflow.em.packages.eman2.convert import createEmanProcess
 from pyworkflow.protocol.params import (PointerParam, FloatParam, IntParam, EnumParam,
                                         StringParam, BooleanParam)
 from pyworkflow.utils.path import cleanPattern, makePath, createLink
@@ -285,13 +282,9 @@ at each refinement step. The resolution you specify is a target, not the filter 
         vol.setFileName(self._getFileName("volume",run=numRun, iter=iterN))
         vol.copyInfo(partSet)
         
-        self._execEmanProcess(numRun, iterN)
         newPartSet = self._createSetOfParticles()
         newPartSet.copyInfo(partSet)
-        newPartSet.setAlignment(em.ALIGN_PROJ)
-        newPartSet.copyItems(partSet,
-                             updateItemCallback=self._createItemMatrix,
-                             itemDataIterator=self._iterTextFile(iterN))
+        self._fillDataFromIter(newPartSet, iterN)
         
         self._defineOutputs(outputVolume=vol)
         self._defineSourceRelation(self._getInputParticlesPointer(), vol)
@@ -301,32 +294,29 @@ at each refinement step. The resolution you specify is a target, not the filter 
     #--------------------------- INFO functions -------------------------------------------- 
     def _validate(self):
         errors = []
-        if not getVersion():
-            errors.append("We couldn't detect EMAN version. ")
-            errors.append("Please, check your configuration file and change EMAN2DIR.")
-            errors.append("The path should contains either '2.11' or '2.12' ")
-            errors.append("to properly detect the version.")
+        validateVersion(self, errors)
 
-        samplingRate = self._getInputParticles().getSamplingRate()
-        if self.resol.get() < 2*samplingRate:
-            errors.append("Target resolution is smaller than 2*samplingRate value. This is impossible.")
+        particles = self._getInputParticles()
+        samplingRate = particles.getSamplingRate()
+
+        if self.resol <  2 * samplingRate:
+            errors.append("\nTarget resolution is smaller than 2*samplingRate value. This is impossible.")
         
         if not self.doContinue:
-            partSizeX, _, _ = self._getInputParticles().getDim()
-            volSizeX, _, _ = self.input3DReference.get().getDim()
-            if partSizeX != volSizeX:
-                errors.append('Volume and particles dimensions must be equal!!!')
+            self._validateDim(particles, self.input3DReference.get(), errors,
+                              'Input particles', 'Reference volume')
 
         return errors
     
     def _summary(self):
         summary = []
-        if not hasattr(self, 'outputVolumes'):
+        if not hasattr(self, 'outputVolume'):
             summary.append("Output volumes not ready yet.")
         else:
-            pass
-#             summary.append("Input Images: %s" % self.inputSet.get().getNameId())
-#             summary.append("Output volume: %s" % self.outputVolume.get())
+            inputSize = self._getInputParticles().getSize()
+            outputSize = self.outputParticles.get().getSize()
+            diff = inputSize - outputSize
+            summary.append("Warning!!! There are %d particles belonging to empty classes." % diff)
         return summary
     
     #--------------------------- UTILS functions --------------------------------------------
@@ -410,7 +400,10 @@ at each refinement step. The resolution you specify is a target, not the filter 
         f.close()
     
     def _createItemMatrix(self, item, rowList):
-        item.setTransform(rowToAlignment(rowList[1:], alignType=em.ALIGN_PROJ))
+        if rowList[1] == 1:
+            item.setTransform(rowToAlignment(rowList[2:], alignType=em.ALIGN_PROJ))
+        else:
+            setattr(item, "_appendItem", False)
     
     def _getIterNumber(self, index):
         """ Return the list of iteration files, give the iterTemplate. """
@@ -422,27 +415,22 @@ at each refinement step. The resolution you specify is a target, not the filter 
             if s:
                 result = int(s.group(1)) # group 1 is 3 digits iteration number
         return result
-        
+    
     def _lastIter(self):
         return self._getIterNumber(-1)
 
     def _firstIter(self):
         return self._getIterNumber(0) or 1
-
+    
     def _getIterData(self, it):
-        from convert import writeSqliteIterData
         data_sqlite = self._getFileName('data_scipion', iter=it)
-        partSet = self._getInputParticles()
         if not exists(data_sqlite):
-            clsFn = self._getFileName("cls", run=self._getRun(), iter=it)
-            classesFn = self._getFileName("classes", run=self._getRun(), iter=it)
-            angles = self._getBaseName('angles', iter=it)
-            
-            proc = createEmanProcess(args='read %s %s %s %s' 
-                         % (self._getParticlesStack(), clsFn, classesFn, angles),
-                         direc=self._getExtraPath())
-            proc.wait()
-            writeSqliteIterData(partSet, data_sqlite, self._createItemMatrix, self._iterTextFile(it))
+            iterImgSet = em.SetOfParticles(filename=data_sqlite)
+            iterImgSet.copyInfo(self._getInputParticles())
+            self._fillDataFromIter(iterImgSet, it)
+            iterImgSet.write()
+            iterImgSet.close()
+        
         return data_sqlite
     
     def _getInputParticlesPointer(self):
@@ -453,8 +441,18 @@ at each refinement step. The resolution you specify is a target, not the filter 
     def _getInputParticles(self):
         return self._getInputParticlesPointer().get()
     
+    def _fillDataFromIter(self, imgSet, iterN):
+        numRun = self._getRun()
+        self._execEmanProcess(numRun, iterN)
+        initPartSet = self._getInputParticles()
+        imgSet.setAlignmentProj()
+        partIter = iter(initPartSet.iterItems(orderBy=['_micId', 'id'], direction='ASC'))
+        
+        imgSet.copyItems(partIter,
+                         updateItemCallback=self._createItemMatrix,
+                         itemDataIterator=self._iterTextFile(iterN))
+    
     def _execEmanProcess(self, numRun, iterN):
-        from pyworkflow.utils.path import cleanPath
         clsFn = self._getFileName("cls", run=numRun, iter=iterN)
         classesFn = self._getFileName("classes", run=numRun, iter=iterN)
         angles = self._getFileName('angles', iter=iterN)
@@ -463,6 +461,5 @@ at each refinement step. The resolution you specify is a target, not the filter 
             proc = createEmanProcess(args='read %s %s %s %s'
                                      % (self._getParticlesStack(), clsFn, classesFn,
                                         self._getBaseName('angles', iter=iterN)),
-                                     direc=self._getExtraPath())
+                                        direc=self._getExtraPath())
             proc.wait()
-

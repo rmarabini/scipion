@@ -1167,6 +1167,39 @@ class Protocol(Step):
     @classmethod 
     def getClassPackageName(cls):
         return cls.getClassPackage().__name__.replace('pyworkflow.protocol.scipion', 'scipion')
+
+    @classmethod
+    def validatePackageVersion(cls, varName, errors):
+        """
+        Function to validate the the package version specified in configuration file
+        ~/.config/scipion/scipion.conf is among the available options and it is
+        properly installed.
+        Params:
+            package: the package object (ej: eman2 or relion). Package should contain the
+                     following methods: getVersion(), getSupportedVersions()
+            varName: the expected environment var containing the path (and version)
+            errors: list to added error if found
+        """
+        package = cls.getClassPackage()
+        packageName = cls.getClassPackageName()
+        varValue = os.environ[varName]
+        versions = ','.join(package.getSupportedVersions())
+
+        errorMsg = None
+
+        if not package.getVersion():
+            errors.append("We could not detect *%s* version. " % packageName)
+            errorMsg = "The path value should contains a valid version (%s)." % versions
+        elif not os.path.exists(varValue):
+            errors.append("Path of %s does not exists." % varName)
+            errorMsg = "Check installed packages and versions with command:\n *scipion install --help*"
+
+        if errorMsg:
+            errors.append("%s = %s" % (varName, varValue))
+            errors.append("Please, modify %s value in the configuration file:" % varName)
+            errors.append("*~/.config/scipion/scipion.conf*")
+            errors.append(errorMsg)
+            errors.append("After fixed, you NEED TO RESTART THE PROJECT WINDOW")
         
     @classmethod
     def getClassLabel(cls):
@@ -1341,7 +1374,7 @@ class Protocol(Step):
             if useKeyLabel:
                 label = cite['id']
             else:
-                label = cite['author'].split('and')[0].split(',')[0].strip()
+                label = cite['author'].split(' and ')[0].split(',')[0].strip()
                 label += ', et.al, %s, %s' % (cite['journal'], cite['year'])
             
             return '[[%s][%s]] ' % (cite['doi'].strip(), label)
@@ -1474,6 +1507,12 @@ class Protocol(Step):
 
     def allowsDelete(self, obj):
         return False
+    
+    def legacyCheck(self):
+        """ Hook defined to run some compatibility checks
+        before display the protocol.
+        """
+        pass
 
                 
 #---------- Helper functions related to Protocols --------------------

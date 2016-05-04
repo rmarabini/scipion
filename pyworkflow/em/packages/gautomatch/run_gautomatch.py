@@ -1,6 +1,7 @@
+#!/usr/bin/env python
 # **************************************************************************
 # *
-# * Authors:     Carlos Oscar Sorzano (coss@cnb.csic.es)
+# * Authors:     J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -20,25 +21,22 @@
 # * 02111-1307  USA
 # *
 # *  All comments concerning this program package may be sent to the
-# *  e-mail address 'coss@cnb.csic.es'
+# *  e-mail address 'jmdelarosa@cnb.csic.es'
 # *
 # **************************************************************************
-"""
-This sub-package contains data and protocol classes
-wrapping Pytom programs http://www.pytom.org
-"""
-from bibtex import _bibtex # Load bibtex dict with references
 
-_logo = 'pytomLogo.jpg'
+import sys
 
-import convert
+from convert import runGautomatch
 
 
-_environ = convert.getEnviron()
+if __name__ == '__main__':
+    micName = sys.argv[1]
+    refStack = sys.argv[2]
+    workDir = sys.argv[3]
+    args = " ".join(sys.argv[4:])
 
-from protocol_import import ProtPyTomImport
-from protocol_autofocus_classify import ProtAutofocusClassify
-from protocol_frm_alignment import ProtFrmAlign
+    runGautomatch(micName, refStack, workDir, args)
 
-from viewer import PyTomAutofocusViewer, PyTomFrmAlignmentViewer
+
 

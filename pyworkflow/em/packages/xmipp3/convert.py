@@ -488,6 +488,7 @@ def particleToRow(part, partRow, **kwargs):
         partRow.setValue(xmipp.MDL_MICROGRAPH_ID, long(part.getMicId()))
         partRow.setValue(xmipp.MDL_MICROGRAPH, str(part.getMicId()))
 
+
 def rowToClass(classRow, classItem):
     """ Method base to create a class2D, class3D or classVol from
     a row of a metadata
@@ -497,7 +498,8 @@ def rowToClass(classRow, classItem):
     if classRow.containsLabel(xmipp.MDL_IMAGE):
         index, filename = xmippToLocation(classRow.getValue(xmipp.MDL_IMAGE))
         img = classItem.REP_TYPE()
-        classItem.setObjId(classRow.getObjId())
+        # class id should be set previously from MDL_REF
+#         classItem.setObjId(classRow.getObjId())
 #         img.copyObjId(classItem)
         img.setLocation(index, filename)
         img.setSamplingRate(classItem.getSamplingRate())
@@ -981,12 +983,11 @@ def __readSetOfClasses(classBaseSet, readSetFunc,
     
     for objId in classesMd:
         classItem = classesSet.ITEM_TYPE()
-        classItem.setObjId(objId)
         classRow = rowFromMd(classesMd, objId)
+        # class id should be set in rowToClass function using MDL_REF
         classItem = rowToClass(classRow, classItem)
-        # FIXME: the following is only valid for SetOfParticles
+
         classBaseSet.copyInfo(classItem, classesSet.getImages())
-        #classItem.copyInfo(classesSet.getImages())
         
         if preprocessClass:
             preprocessClass(classItem, classRow)
@@ -1427,3 +1428,15 @@ def createClassesFromImages(inputImages, inputMd,
 
 def createItemMatrix(item, row, align):
     item.setTransform(rowToAlignment(row, alignType=align))
+
+
+def createParamPhantomFile(filename, dimX, partSetMd, phFlip=False, ctfCorr=False):
+    f = open(filename,'w')
+    str = "# XMIPP_STAR_1 *\n#\ndata_block1\n_dimensions2D '%d %d'\n" % (dimX, dimX)
+    str += "_projAngleFile %s\n" % partSetMd
+    str += "_ctfPhaseFlipped %d\n_ctfCorrected %d\n" % (phFlip, ctfCorr)
+    str += "_applyShift 1\n_noisePixelLevel    '0 0'\n"
+    f.write(str)
+    f.close()
+    
+    

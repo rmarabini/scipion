@@ -36,12 +36,13 @@ from pyworkflow.protocol.params import (BooleanParam, PointerParam, FloatParam,
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.utils.path import cleanPath
 
+import pyworkflow.em as em
 import pyworkflow.em.metadata as md
 from pyworkflow.em.data import SetOfClasses3D
 from pyworkflow.em.protocol import EMProtocol
 
 from constants import ANGULAR_SAMPLING_LIST, MASK_FILL_ZERO
-from convert import convertBinaryVol, writeSqliteIterData, writeSetOfParticles, getVersion
+from convert import convertBinaryVol, writeSetOfParticles, getVersion
 
 
 class ProtRelionBase(EMProtocol):
@@ -209,8 +210,6 @@ class ProtRelionBase(EMProtocol):
         form.addSection(label='CTF')
         form.addParam('contuinueMsg', LabelParam, default=True,
                       label='CTF parameters are not available in continue mode', condition='doContinue',)
-        form.addParam('haveDataBeenPhaseFlipped', LabelParam, condition='not doContinue',
-                      label='The phase flip comes as a property of the input particles!')
         form.addParam('doCTF', BooleanParam, default=True,
                       label='Do CTF-correction?', condition='not doContinue',
                       help='If set to Yes, CTFs will be corrected inside the MAP refinement. '
@@ -223,6 +222,15 @@ class ProtRelionBase(EMProtocol):
                            'e.g. it was created using Wiener filtering inside RELION or from a PDB. If set to No, ' 
                            'then in the first iteration, the Fourier transforms of the reference projections ' 
                            'are not multiplied by the CTFs.')
+        form.addParam('haveDataBeenPhaseFlipped', LabelParam, condition='not doContinue',
+                      label='Have data been phase-flipped?      (Don\'t answer, see help)', 
+                      help='The phase-flip status is recorded and managed by Scipion. \n'
+                           'In other words, when you import or extract particles, \n'
+                           'Scipion will record whether or not phase flipping has been done.\n\n'
+                           'Note that CTF-phase flipping is NOT a necessary pre-processing step \n'
+                           'for MAP-refinement in RELION, as this can be done inside the internal\n'
+                           'CTF-correction. However, if the phases have been flipped, the program\n'
+                           'will handle it.')
         form.addParam('ignoreCTFUntilFirstPeak', BooleanParam, default=False,
                       expertLevel=LEVEL_ADVANCED,
                       label='Ignore CTFs until first peak?', condition='not doContinue',
@@ -572,6 +580,7 @@ class ProtRelionBase(EMProtocol):
                                     postprocessImageRow=self._postprocessImageRow)
                 mdMovies = md.MetaData(self._getFileName('movie_particles'))
                 mdParts = md.MetaData(self._getFileName('input_star'))
+
                 if getVersion() == "1.4":
                     mdParts.renameColumn(md.RLN_IMAGE_NAME, md.RLN_PARTICLE_ORI_NAME)
                 else:
@@ -598,11 +607,8 @@ class ProtRelionBase(EMProtocol):
     #--------------------------- INFO functions -------------------------------------------- 
     def _validate(self):
         errors = []
-        if not getVersion():
-            errors.append("We couldn't detect Relion version. ")
-            errors.append("Please, check your configuration file and change RELION_HOME.")
-            errors.append("The path should contains either '1.3' or '1.4' ")
-            errors.append("to properly detect the version.")
+        self.validatePackageVersion('RELION_HOME', errors)
+
         if self.doContinue:
             continueProtocol = self.continueRun.get()
             if (continueProtocol is not None and
@@ -637,15 +643,20 @@ class ProtRelionBase(EMProtocol):
     
     def _summary(self):
         self._initialize()
-        iterMsg = 'Iteration %d' % self._lastIter()
-        if self.hasAttribute('numberOfIterations'):
-            iterMsg += '/%d' % self._getnumberOfIters()
-        summary = [iterMsg]
-        if self._getInputParticles().isPhaseFlipped():
-            msg = "Your images have been ctf-phase corrected"
+
+        lastIter = self._lastIter()
+
+        if lastIter is not None:
+            iterMsg = 'Iteration %d' % lastIter
+            if self.hasAttribute('numberOfIterations'):
+                iterMsg += '/%d' % self._getnumberOfIters()
         else:
-            msg = "Your images not have been ctf-phase corrected"
-        summary += [msg]
+            iterMsg = 'No iteration finished yet.'
+        summary = [iterMsg]
+
+        flip = '' if self._getInputParticles().isPhaseFlipped() else 'not '
+        flipMsg = "Your images have %sbeen ctf-phase corrected" % flip
+        summary.append(flipMsg)
         
         if self.doContinue:
             summary += self._summaryContinue()
@@ -722,8 +733,11 @@ class ProtRelionBase(EMProtocol):
         data_sqlite = self._getFileName('data_scipion', iter=it)
         
         if not exists(data_sqlite):
-            data = self._getFileName('data', iter=it)
-            writeSqliteIterData(data, data_sqlite, **kwargs)
+            iterImgSet = em.SetOfParticles(filename=data_sqlite)
+            iterImgSet.copyInfo(self._getInputParticles())
+            self._fillDataFromIter(iterImgSet, it)
+            iterImgSet.write()
+            iterImgSet.close()
         
         return data_sqlite
     

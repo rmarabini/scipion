@@ -75,7 +75,7 @@ class ImageHandler(object):
         
         return outLocation
     
-    def _existsLocation(self, location):
+    def existsLocation(self, location):
         """ Return True if a given location exists. 
         Location have the same meaning than in _convertToLocation.
         """
@@ -93,33 +93,56 @@ class ImageHandler(object):
         if ':' in fn:
             fn = fn.split(':')[0]
 
-        return fn
+        return os.path.exists(fn)
         
-    def convert(self, inputObj, outputObj, dataType=None):
+    def convert(self, inputObj, outputObj, dataType=None, transform=None):
         """ Convert from one image to another.
         inputObj and outputObj can be: tuple, string, or Image subclass 
         (see self._convertToLocation)
+        transform: if not None, apply this transformation
         """
-        # Read from input
-        self._img.read(self._convertToLocation(inputObj))
-        
-        if dataType is not None:
-            self._img.convert2DataType(dataType)
-        # Write to output
-        self._img.write(self._convertToLocation(outputObj))
-        
+        inputLoc = self._convertToLocation(inputObj)
+        outputLoc = self._convertToLocation(outputObj)
+
+        if (inputLoc[1].lower().endswith('dm4') or
+            outputLoc[1].lower().endswith('.img')):
+            # FIXME Since now we can not read dm4 format in Scipion natively
+            # we are opening an Eman2 process to read the dm4 file
+            from pyworkflow.em.packages.eman2.convert import convertImage
+            convertImage(inputLoc, outputLoc)
+        else:
+            # Read from input
+            self._img.read(inputLoc)
+
+            if dataType is not None:
+                self._img.convert2DataType(dataType)
+
+            if transform is not None:
+                self._img.applyTransforMatScipion(transform.getMatrixAsList())
+            # Write to output
+            self._img.write(outputLoc)
+
     def convertStack(self, inputFn, outputFn, inFormat=None, outFormat=None):
         """ convert format of stack file. Output/input format is
         specified by outFormat/inFormat. If outFormat/inFomat=None then
         there will be inferred from extension
         """
-        #get input dim
-        (x,y,z,n) = xmipp.getImageSize(inputFn)
-        #Create empty output stack for efficiency
-        xmipp.createEmptyFile(outputFn,x,y,z,n)
-        # handle image formats
-        for i in range(1, n+1):
-            self.convert((i, inputFn), (i, outputFn))
+        if (inputFn.lower().endswith('.dm4') or
+            outputFn.lower().endswith('.img')):
+            # FIXME Since now we can not read dm4 format in Scipion natively
+            # or writing recent .img format
+            # we are opening an Eman2 process to read the dm4 file
+            from pyworkflow.em.packages.eman2.convert import convertImage
+            convertImage(inputFn, outputFn)
+        else:
+            #get input dim
+            (x,y,z,n) = xmipp.getImageSize(inputFn)
+            n = max(z, n)
+            #Create empty output stack for efficiency
+            xmipp.createEmptyFile(outputFn,x,y,1,n)
+            # handle image formats
+            for i in range(1, n+1):
+                self.convert((i, inputFn), (i, outputFn))
         
     def getDimensions(self, locationObj):
         """ It will return a tuple with the images dimensions.
@@ -127,28 +150,25 @@ class ImageHandler(object):
             (x, y, z, n) where x, y, z are image dimensions (z=1 for 2D) and 
             n is the number of elements if stack.
         """
-        
-        if self._existsLocation(locationObj):
-            
+        if self.existsLocation(locationObj):
             location = self._convertToLocation(locationObj)
             fn = location[1]
             ext = getExt(fn).lower()
-            
-#             print "Extension %s" % ext
-            
+
             if ext == '.png' or ext == '.jpg':
-#                 print "Reading with PIL"
                 im = PIL.Image.open(fn)
                 x, y = im.size # (width,height) tuple
                 return x, y, 1, 1
-            
+            elif ext == '.dm4' or ext == '.img':
+                # FIXME Since now we can not read dm4 format in Scipion natively
+                # or recent .img format
+                # we are opening an Eman2 process to read the dm4 file
+                from pyworkflow.em.packages.eman2.convert import getImageDimensions
+                return getImageDimensions(fn) # we are ignoring index here
             else:
-#                 print "Reading with Xmipp"
                 self._img.read(location, xmipp.HEADER)
-                x, y, z, n = self._img.getDimensions()
-                return x, y, z, n
-        
-        else: 
+                return self._img.getDimensions()
+        else:
             return None, None, None, None
         
     def read(self, inputObj):
@@ -263,6 +283,23 @@ class ImageHandler(object):
         is implemented in the xmipp binding."""
         return xmipp.FileName(imgFn).isImage()
 
+    @classmethod
+    def getVolFileName(cls, location):
+        if isinstance(location, tuple):
+            fn = location[1]
+        elif isinstance(location, basestring):
+            fn = location
+        elif hasattr(location, 'getLocation'): #this include Image and subclasses
+            # In this case inputLoc should be a subclass of Image
+            fn = location.getLocation()[1]
+        else:
+            raise Exception('Can not match object %s to (index, location)' % type(location))
+
+        if fn.endswith('.mrc') or fn.endswith('.map'):
+            fn += ':mrc'
+
+        return fn
+
 
 def downloadPdb(pdbId, pdbFile, log=None):
     pdbGz = pdbFile + ".gz"
@@ -293,7 +330,7 @@ def __downloadPdb(pdbId, pdbGz, log):
     
     if success:
         # Download  file
-        _fileIn = "%s/%s%s%s" % (pdborgDirectory, prefix, pdbId, suffix) 
+        _fileIn = "%s/%s%s%s" % (pdborgDirectory, prefix, pdbId.lower(), suffix) 
         _fileOut = pdbGz
         try:
             ftp.retrbinary("RETR %s" % _fileIn, open(_fileOut, "wb").write)
