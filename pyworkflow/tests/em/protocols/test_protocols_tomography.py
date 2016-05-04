@@ -24,11 +24,12 @@
 # *
 # **************************************************************************
 
-import sys, unittest
+from pyworkflow.tests import BaseTest, DataSet, setupTestProject
+from pyworkflow.em.protocol import (ProtImportTomograms,
+                                    ProtImportTomoRecs,
+                                    ProtImportTomoCoordinates)
+from pyworkflow.em.packages.relion.tomo import ProtCtf3DEstimation
 
-from pyworkflow.em import *
-from pyworkflow.tests import *
-from pyworkflow.em.tomo import *
 
 
 # Some utility functions to import Tomograms that are used
@@ -80,8 +81,6 @@ class TestTomogramBase(BaseTest):
         if protImportCrds.outputTomoCoordinates is None:
             raise Exception('Import of images: %s, failed. outputTomograms is None.' % pattern)
         return protImportCrds
-
-    
 
 
 class TestCtf3DEstimation(TestTomogramBase):

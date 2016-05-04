@@ -23,34 +23,36 @@
 # *  e-mail address 'jmdelarosa@cnb.csic.es'
 # *
 # **************************************************************************
-from pyworkflow.em.data_tomo import CTF3DModel
 """
 This script is a re-implementation of 'prepare_subtomograms.py' script that
 was written by Tanmay Bharat to support sub-tomogram averaging in RELION.
 """
 import sys
 from os.path import basename, join
+
 from pyworkflow.protocol import params
 import pyworkflow.utils.path as pwutils
-from pyworkflow.utils.properties import Message
-from pyworkflow.em.protocol import EMProtocol, ProtProcessTomograms, STEPS_PARALLEL, LEVEL_ADVANCED
-from imodpath import CTFFIND_PATH, CTFFIND4_PATH
+import pyworkflow.utils.properties as prop
+
+import pyworkflow.em as em
+from pyworkflow.em.protocol import ProtCtf3D, STEPS_PARALLEL
+import pyworkflow.em.packages.imod as imod
 
 
-class ProtCtf3DEstimation(ProtProcessTomograms):
+class ProtCtf3DEstimation(ProtCtf3D):
     """sub-tomogram averaging in RELION
     """
     _label = 'ctf3D estimation'
     
     def __init__(self, **args):
-        EMProtocol.__init__(self, **args)
+        ProtCtf3D.__init__(self, **args)
         self.stepsExecutionMode = STEPS_PARALLEL
     
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
-        form.addSection(label=Message.LABEL_CTF_ESTI)
+        form.addSection(label=prop.Message.LABEL_CTF_ESTI)
         form.addParam('inputTomoCoords', params.PointerParam, important=True,
-                      label=Message.LABEL_INPUT_CRD_TOM,
+                      label=prop.Message.LABEL_INPUT_CRD_TOM,
                        pointerClass='SetOfTomoCoordinates')
         form.addParam('ctfDownFactor', params.FloatParam, default=1.,
               label='CTF Downsampling factor',
@@ -82,7 +84,7 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
         line.addParam('highRes', params.FloatParam, default=0.35,
                       label='Highest')
         # Switched (microns) by 'in microns' by fail in the identifier with jquery
-        line = form.addLine('Defocus search range (microns)', expertLevel=LEVEL_ADVANCED,
+        line = form.addLine('Defocus search range (microns)', expertLevel=params.LEVEL_ADVANCED,
                             help='Select _minimum_ and _maximum_ values for defocus search range (in microns).'
                                  'Underfocus is represented by a positive number.')
         line.addParam('minDefocus', params.FloatParam, default=0.25, 
@@ -91,7 +93,7 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
                       label='Max')
         form.addParam('stepFocus', params.FloatParam, default=2000.0,
               label='Defocus step size for search (A)')
-        form.addParam('windowSize', params.IntParam, default=256, expertLevel=LEVEL_ADVANCED,
+        form.addParam('windowSize', params.IntParam, default=256, expertLevel=params.LEVEL_ADVANCED,
                       label='Window size',
                       help='The PSD is estimated from small patches of this size. Bigger patches '
                            'allow identifying more details. However, since there are fewer windows, '
@@ -103,7 +105,6 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
     def _insertAllSteps(self):
         """Insert the steps to preprocess the tomograms
         """
-        
         reconsDeps = []
         self.inputCoords = self.inputTomoCoords.get()
         self.tomoSet = self.inputCoords.getTomoRecs().getTomograms()
@@ -136,9 +137,8 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
     
     #--------------------------- STEPS functions ---------------------------------------------------
     def extractTiltAnglesStep(self,  tomoFn):
-        from imodpath import EXTRACTTILTS_PATH
         
-        extractProg = EXTRACTTILTS_PATH
+        extractProg = imod.EXTRACTTILTS_PATH
         
         args = '-InputFile %(tomogram)s -tilts -OutputFile %(tiltangles)s'
         param = {"tomogram" : tomoFn, 
@@ -147,9 +147,9 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
         self.runJob(extractProg, args % param)
     
     def extractTiltImgStep(self, tomoFn, i):
-        from imodpath import NEWSTACK_PATH
+#         from imodpath import NEWSTACK_PATH
         
-        stackProg = NEWSTACK_PATH
+        stackProg = imod.NEWSTACK_PATH
         
         args = '-secs %(numStk)d %(tomogram)s %(tomoStck)s'
         param = {"tomogram" : tomoFn,
@@ -160,7 +160,7 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
     
     def estimateCtfStep(self, tomoFn, i):
         """ Run ctffind, 3 or 4, with required parameters """
-        from pyworkflow.em.packages import xmipp3
+        import pyworkflow.em.packages.xmipp3 as xmipp3
         
         args, program, param = self._prepareCommand()
         downFactor = self.ctfDownFactor.get()
@@ -240,7 +240,6 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
             ctf3DMd.write("data_images@%s" % ctf3DStar)
     
     def reconstructCtf3DStep(self, tomoFn, coordNum):
-        from pyworkflow.em.packages.relion.convert import getEnviron
         program = "relion_reconstruct"
         sampling = self.inputCoords.getTomoRecs().getSamplingRate()
         param = {"sampling" : sampling,
@@ -251,7 +250,7 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
         
         args = " --i %(ctfStar)s --o %(ctf3D)s --reconstruct_ctf %(boxSize)d --angpix %(sampling)f"
         
-        self.runJob(program, args % param, env=getEnviron())
+        self.runJob(program, args % param)
     
     def createOutputStep(self):
         ctf3DSet = self._createSetOfCTF3D(self.inputCoords)
@@ -261,7 +260,7 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
             tomoDict[tomo.getTomoName()] = tomoFn
         
         for coord in self.inputCoords:
-            ctf3D = CTF3DModel()
+            ctf3D = em.CTF3DModel()
             ctf3D.setObjId(coord.getObjId())
             ctf3D.setCtfFile(self._getCtf3D(tomoDict.get(coord.getTomoName()), coord.getObjId()))
             ctf3D.setTomoCoordinate(coord)
@@ -348,7 +347,8 @@ class ProtCtf3DEstimation(ProtProcessTomograms):
         return args, program, param
     
     def _argsCtffind3(self):
-        program = CTFFIND_PATH
+        from pyworkflow.em.packages.grigoriefflab import CTFFIND_PATH
+        program = 'export NATIVEMTZ=kk ; ' + CTFFIND_PATH
         args = """ --old-school-input << eof > %(ctffindOut)s 
 %(micFn)s
 %(ctffindPSD)s
@@ -359,6 +359,7 @@ eof
         return args, program
     
     def _argsCtffind4(self):
+        from pyworkflow.em.packages.grigoriefflab import CTFFIND4_PATH
         program = 'export OMP_NUM_THREADS=1; ' + CTFFIND4_PATH
         args = """ << eof
 %(micFn)s

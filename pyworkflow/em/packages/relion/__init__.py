@@ -42,6 +42,12 @@ from protocol_polish import ProtRelionPolish
 from protocol_autopick import ProtRelionAutopickFom, ProtRelionAutopick
 from protocol_subtract import ProtRelionSubtract
 
+from tomo import (ProtRelionSubtomoClassify3D,
+                  ProtRelionSubtomoRefine3D,
+                  ProtRelionExtractSubtomograms,
+                  ProtCtf3DEstimation)
+
+
 # Wizards
 from wizard import *
 

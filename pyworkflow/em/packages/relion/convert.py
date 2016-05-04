@@ -36,6 +36,7 @@ from os.path import join, basename
 import numpy
 from collections import OrderedDict
 
+
 from pyworkflow.object import ObjectWrap, String, Integer
 from pyworkflow.utils import Environ
 from pyworkflow.utils.path import (createLink, cleanPath, copyFile,
@@ -519,6 +520,18 @@ def setOfImagesToMd(imgSet, imgMd, imgToFunc, **kwargs):
         imgRow.writeToMd(imgMd, objId)
 
 
+def subtomoToRow(part, partRow, **kwargs):
+    """ Set labels values from Subtomogram to md row. """
+    coord = part.getCoordinate()
+    partRow.setValue(md.RLN_MICROGRAPH_NAME, coord.getTomoRec().getFileName())
+    partRow.setValue(md.RLN_IMAGE_COORD_X, float(coord.getX()))
+    partRow.setValue(md.RLN_IMAGE_COORD_Y, float(coord.getY()))
+    partRow.setValue(md.RLN_IMAGE_COORD_Z, float(coord.getZ()))
+    partRow.setValue(md.RLN_IMAGE_NAME, part.getFileName())
+    if part.hasCTF():
+        partRow.setValue(md.RLN_CTF_IMAGE, part.getCTF().getCtfFile())
+
+
 def writeSetOfParticles(imgSet, starFile,
                         outputDir, **kwargs):
     """ This function will write a SetOfImages as Relion meta
@@ -533,6 +546,24 @@ def writeSetOfParticles(imgSet, starFile,
     setOfImagesToMd(imgSet, partMd, particleToRow, **kwargs)
     blockName = kwargs.get('blockName', 'Particles')
     partMd.write('%s@%s' % (blockName, starFile))
+
+
+def writeSetOfTomograms(tomoRecSet, starFile, dirPath):
+    tomoMd = md.MetaData()
+    for tomoRec in tomoRecSet:
+        dest = os.path.join(dirPath, os.path.basename(tomoRec.getFileName()))
+        createLink(tomoRec.getFileName(), dest)
+        objId = tomoMd.addObject()
+        imgRow = md.Row()
+        imgRow.setValue(md.RLN_MICROGRAPH_NAME, join("extra", os.path.basename(tomoRec.getFileName())))
+        imgRow.writeToMd(tomoMd, objId)
+    tomoMd.write(starFile)
+
+
+def writeSetOfSubtomograms(subtomoSet, subtomoStar, path):
+    subtomoMd = md.MetaData()
+    setOfImagesToMd(subtomoSet, subtomoMd, subtomoToRow)
+    subtomoMd.write(subtomoStar)
 
 
 def writeReferences(inputSet, outputRoot):
@@ -573,6 +604,17 @@ def writeSetOfMicrographs(micSet, starFile, **kwargs):
     setOfImagesToMd(micSet, micMd, micrographToRow, **kwargs)
     blockName = kwargs.get('blockName', 'Particles')
     micMd.write('%s@%s' % (blockName, starFile))
+
+
+def writeSetOfVolumes(volSet, volStar, path):
+    volMd = md.MetaData()
+    setOfImagesToMd(volSet, volMd, volToRow)
+    volMd.write(volStar)
+
+
+def volToRow(part, partRow, **kwargs):
+    """ Set labels values from Volume to md row. """
+    partRow.setValue(md.RLN_IMAGE_NAME, part.getFileName())
 
 
 def writeSqliteIterData(imgStar, imgSqlite, **kwargs):

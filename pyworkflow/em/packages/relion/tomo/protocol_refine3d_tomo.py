@@ -31,7 +31,7 @@ from pyworkflow.em import metadata
 from pyworkflow.em.data import Volume
 from pyworkflow.em.protocol import ProtRefine3D
 
-from pyworkflow.em.tomo.reliontomo.protocol_base_tomo import ProtRelionBaseTomo
+from protocol_base_tomo import ProtRelionBaseTomo
 
 
 class ProtRelionSubtomoRefine3D(ProtRefine3D, ProtRelionBaseTomo):

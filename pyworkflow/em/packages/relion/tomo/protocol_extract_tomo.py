@@ -31,7 +31,8 @@ from pyworkflow.em import RELATION_CTF, Subtomogram
 from pyworkflow.protocol import params
 from pyworkflow.em.protocol import ProtExtractSubtomograms
 
-import convert as conv
+from pyworkflow.em.packages.relion.convert import (writeSetOfTomograms,
+                                                   readSetOfParticles)
 
 class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
     """ Wrapper to Relion preprocess program.
@@ -97,7 +98,7 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
         If the input particles comes from Relion, just link the file. 
         """
         recSet = self.coordSet.getTomoRecs()
-        conv.writeSetOfTomograms(recSet, self.starTomoFn, self._getExtraPath())
+        writeSetOfTomograms(recSet, self.starTomoFn, self._getExtraPath())
         self._writeSetOfTomoCoords()
     
     def extractStep(self):
@@ -121,12 +122,11 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
         
         if self.doProject3D:
             params += ' --project3d'
- 
-        self.runJob(self._getProgram(), params, env=conv.getEnviron(), cwd=self._getPath())
+        
+        self.runJob(self._getProgram(), params, cwd=self._getPath())
     
     def createOutputStep(self):
         if self.doProject3D:
-            from convert import readSetOfParticles
             
             partSet = self._createSetOfParticles()
             partSet.copyInfo(self.coordSet.getTomoRecs())
@@ -212,11 +212,6 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
                 zDim = n
             
             (x, y, z) = coord.getPosition()
-            
-            validator = ((x > radius) and (x < xDim - radius)
-                          and (y > radius) and (y < yDim - radius)
-                          and (z > radius) and (z < zDim - radius))
-            print "SIZE: ", coord.getPosition(), xDim, yDim, zDim, validator
             
             if ((x > radius) and (x < xDim - radius)
                 and (y > radius) and (y < yDim - radius)

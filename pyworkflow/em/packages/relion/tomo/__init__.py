@@ -24,11 +24,10 @@
 # *
 # **************************************************************************
 """
-This modules contains classes related with tomography
+This sub-package will contains Relion protocols for tomography
 """
 
-from pyworkflow.em.tomo.protocol_ctf3d_estimation import ProtCtf3DEstimation
-from pyworkflow.em.tomo.protocol_ctf3d_join import ProtCtf3DJoin
-from imodpath import getEnviron
-
-_environ = getEnviron()
+from protocol_classify3d_tomo import ProtRelionSubtomoClassify3D
+from protocol_refine3d_tomo import ProtRelionSubtomoRefine3D
+from protocol_extract_tomo import ProtRelionExtractSubtomograms
+from protocol_ctf3d_estimation import ProtCtf3DEstimation

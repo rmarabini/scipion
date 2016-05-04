@@ -33,8 +33,8 @@ from pyworkflow.em import metadata as md
 import pyworkflow.protocol.params as params
 # from pyworkflow.em.data import Volume
 
-from pyworkflow.em.tomo.reliontomo.protocol_base_tomo import ProtRelionBaseTomo
-from convert import relionToLocation
+from .protocol_base_tomo import ProtRelionBaseTomo
+from pyworkflow.em.packages.relion.convert import relionToLocation
 
 
 class ProtRelionSubtomoClassify3D(ProtClassify3D, ProtRelionBaseTomo):

@@ -40,9 +40,11 @@ from pyworkflow.em.data import SetOfClasses3D
 from pyworkflow.em.data_tomo import SetOfSubtomograms
 from pyworkflow.em.protocol import EMProtocol
 
-
-from constants import ANGULAR_SAMPLING_LIST, MASK_FILL_ZERO
-from convert import convertBinaryVol, getEnviron, writeSetOfSubtomograms, writeSetOfVolumes
+from pyworkflow.em.packages.relion.constants import (ANGULAR_SAMPLING_LIST,
+                                                     MASK_FILL_ZERO)
+from pyworkflow.em.packages.relion.convert import (convertBinaryVol,
+                                                   writeSetOfSubtomograms,
+                                                   writeSetOfVolumes)
 
 
 class ProtRelionBaseTomo(EMProtocol):
@@ -416,7 +418,7 @@ class ProtRelionBaseTomo(EMProtocol):
     def runRelionStep(self, params):
         """ Execute the relion steps with the give params. """
         params += ' --j %d' % self.numberOfThreads.get()
-        self.runJob(self._getProgram(), params, env=getEnviron())
+        self.runJob(self._getProgram(), params)
     
     def createOutputStep(self):
         pass # should be implemented in subclasses
