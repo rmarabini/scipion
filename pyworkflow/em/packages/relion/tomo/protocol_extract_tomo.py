@@ -151,8 +151,9 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
                     if self.ctfRelations:
                         subtomo.setCTF(self.ctfRelations.get()[coord.getObjId()])
                     subtomoSet.append(subtomo)
-            self._defineOutputs(outputSubtomograms=subtomoSet)
-            self._defineSourceRelation(self.coordSet, subtomoSet)
+        print "subtomoSet Size: ", subtomoSet.getSize()
+        self._defineOutputs(outputSubtomograms=subtomoSet)
+        self._defineSourceRelation(self.coordSet, subtomoSet)
     
 #--------------------------- INFO functions -------------------------------------------- 
     def _validate(self):
