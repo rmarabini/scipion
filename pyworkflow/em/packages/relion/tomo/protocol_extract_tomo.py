@@ -27,9 +27,11 @@
 import os
 #  
 import pyworkflow.utils.path as putils
-from pyworkflow.em import RELATION_CTF, Subtomogram
-from pyworkflow.protocol import params
+
+from pyworkflow.em import Subtomogram
+from pyworkflow.em.constants import RELATION_CTF
 from pyworkflow.em.protocol import ProtExtractSubtomograms
+from pyworkflow.protocol import params
 
 from pyworkflow.em.packages.relion.convert import (writeSetOfTomograms,
                                                    readSetOfParticles)
@@ -150,6 +152,7 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
                     subtomo.setTomoName(coord.getTomoName())
                     if self.ctfRelations:
                         subtomo.setCTF(self.ctfRelations.get()[coord.getObjId()])
+                    print "subtomo: ", subtomo.printAll()
                     subtomoSet.append(subtomo)
         print "subtomoSet Size: ", subtomoSet.getSize()
         self._defineOutputs(outputSubtomograms=subtomoSet)
