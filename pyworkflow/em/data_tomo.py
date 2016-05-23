@@ -97,7 +97,7 @@ class TomoRec(TomogramBase):
 
 
 class Subtomogram(Image):
-    """ Represents an EM Particle object """
+    """ Represents an EM Subtomogram object """
     def __init__(self, **args):
         Image.__init__(self, **args)
         self._ctfModel = None
@@ -335,13 +335,6 @@ class SetOfTomoRecs(SetOfTomogramsBase):
         if not sampling:
             print "FATAL ERROR: Object %s has no sampling rate!!!" % self.getName()
             sampling = -999.0
-        if self._firstDim.isEmpty():
-            try:
-                self._firstDim.set(self.getFirstItem().getDim())
-            except Exception, ex:
-                print "Error reading dimension: ", ex
-                import traceback
-                traceback.print_exc()
         firstItem = self.getFirstItem()
         if firstItem is None or firstItem.getDim() is None:
             dimStr = "No-Dim"
@@ -389,19 +382,22 @@ class SetOfSubtomograms(SetOfImages):
     
     def __str__(self):
         """ String representation of a set of movies. """
-        sampling = self.getSamplingRate()
+#         sampling = self.getSamplingRate()
           
-        if not sampling:
-            print "FATAL ERROR: Object %s has no sampling rate!!!" % self.getName()
-            sampling = -999.0
-        if self._firstDim.isEmpty():
-            try:
-                self._firstDim.set(self.getFirstItem().getDim())
-            except Exception, ex:
-                print "Error reading dimension: ", ex
-                import traceback
-                traceback.print_exc()
-        dimX = self.getFirstItem().getDim()[0]
+#         if not sampling:
+#             print "FATAL ERROR: Object %s has no sampling rate!!!" % self.getName()
+#             sampling = -999.0
+#         if self._firstDim.isEmpty():
+#             try:
+#                 self._firstDim.set(self.getFirstItem().getDim())
+#             except Exception, ex:
+#                 print "Error reading dimension: ", ex
+#                 import traceback
+#                 traceback.print_exc()
+#         dimX = self.getFirstItem().getDim()[0]
+        # For testing purposes:
+        dimX = 1000
+        sampling = 1.1
         s = "%s (%d x %d x %d, %0.2f A/px)" % (self.getClassName(), dimX, dimX, dimX, sampling)
         return s
 
