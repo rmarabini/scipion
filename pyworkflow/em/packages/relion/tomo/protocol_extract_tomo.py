@@ -152,9 +152,7 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
                     subtomo.setTomoName(coord.getTomoName())
                     if self.ctfRelations:
                         subtomo.setCTF(self.ctfRelations.get()[coord.getObjId()])
-                    print "subtomo: ", subtomo.printAll()
                     subtomoSet.append(subtomo)
-        print "subtomoSet Size: ", subtomoSet.getSize()
         self._defineOutputs(outputSubtomograms=subtomoSet)
         self._defineSourceRelation(self.coordSet, subtomoSet)
     
@@ -226,8 +224,7 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
         if f:
             f.close()
             print "Micrograph %s (%d)" % (lastTomoId, c)
-
-
+    
     def _getSubtomoFn(self, coord):
         import pyworkflow.em.metadata as md
         if self.coordDict == {}:
