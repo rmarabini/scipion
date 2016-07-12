@@ -20,19 +20,16 @@
 # * 02111-1307  USA
 # *
 # *  All comments concerning this program package may be sent to the
-# *  e-mail address 'jgomez@cnb.csic.es'
+# *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
 
 
 import pyworkflow.em.packages.spider as spider
-from pyworkflow.em.convert import ImageHandler
 from pyworkflow.em.protocol import ProtImportParticles
-from pyworkflow.em.packages.spider.convert import writeSetOfImages
 
-from pyworkflow.tests import setupTestProject, DataSet, unittest, BaseTest
+from pyworkflow.tests import setupTestProject, DataSet
 from pyworkflow.tests.em.workflows.test_workflow import TestWorkflow
-import os
 
   
    
@@ -50,9 +47,11 @@ class TestSpiderAlign(TestWorkflow):
         self.launchProtocol(protAlign)
         className = protAlign.getClassName()
         self.assertIsNotNone(protAlign.outputParticles,
-                             "There was a problem with the %s outputParticles" % className)
+                             "There was a problem with the %s outputParticles"
+                             % className)
         self.assertIsNotNone(protAlign.outputAverage,
-                             "There was a problem with the %s outputAverage" % className)
+                             "There was a problem with the %s outputAverage"
+                             % className)
         self.assertTrue(protAlign.outputParticles.hasAlignment2D(),
                         "outputParticles have no alignment registered")
         return protAlign
@@ -65,13 +64,16 @@ class TestSpiderAlign(TestWorkflow):
         self.launchProtocol(protImport)
         # check that input images have been imported (a better way to do this?)
         if protImport.outputParticles is None:
-            raise Exception('Import of images: %s, failed. outputParticles is None.' % self.particlesFn)
+            raise Exception('Import of images: %s, failed. outputParticles '
+                            'is None.' % self.particlesFn)
         
         protFilter = self.newProtocol(spider.SpiderProtFilter)
         protFilter.inputParticles.set(protImport)
         protFilter.inputParticles.setExtended('outputParticles')
         self.launchProtocol(protFilter)
-        self.assertIsNotNone(protFilter.outputParticles, "There was a problem with the SpiderProtFilter outputParticles")
+        self.assertIsNotNone(protFilter.outputParticles,
+                             "There was a problem with the SpiderProtFilter "
+                             "outputParticles")
 
         self.runAlignment(protFilter, spider.SpiderProtAlignAPSR,
                           objLabel='align apsr')
