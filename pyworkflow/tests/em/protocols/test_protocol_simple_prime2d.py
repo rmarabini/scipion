@@ -26,6 +26,7 @@
 
 
 import pyworkflow.em.packages.simple as simple
+from pyworkflow.em import ImageHandler
 from pyworkflow.em.protocol import ProtImportParticles
 
 from pyworkflow.tests import setupTestProject, DataSet
@@ -57,7 +58,6 @@ class TestSimplePrime2D(TestWorkflow):
         return protAlign
 
     def test_prime2D(self):
-        """ Run an Import particles protocol. """
         protImport = self.newProtocol(ProtImportParticles,
                                       filesPath=self.particlesFn,
                                       samplingRate=3.5)
@@ -66,13 +66,20 @@ class TestSimplePrime2D(TestWorkflow):
         if protImport.outputParticles is None:
             raise Exception('Import of images: %s, failed. outputParticles '
                             'is None.' % self.particlesFn)
-        
+
+        n = 4
         protClassify = self.newProtocol(simple.ProtPrime2D,
-                                        numberOfClasses=4,
+                                        numberOfClasses=n,
                                         maskRadius=45)
         protClassify.inputParticles.set(protImport.outputParticles)
         self.launchProtocol(protClassify)
-        self.assertIsNotNone(protClassify.outputClasses,
-                             "There was a problem with the simple - prime 2D "
-                             "outputClasses")
+        classes = getattr(protClassify, 'outputClasses', None)
+        self.assertIsNotNone(classes, "There was a problem with the "
+                                      "simple - prime 2D outputClasses")
+
+        # Do some basic validations
+        self.assertEqual(classes.getSize(), n)
+        firstClass = classes.getFirstItem()
+        ih = ImageHandler()
+        self.assertTrue(ih.existsLocation(firstClass.getRepresentative()))
 
