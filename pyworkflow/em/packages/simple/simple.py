@@ -25,20 +25,56 @@
 # **************************************************************************
 
 import os
+from collections import OrderedDict
 
 from pyworkflow.utils import Environ
 
 
 
 def getEnviron():
-    """ Create the needed environment for Xmipp programs. """
+    """ Create the needed environment for SIMPLE programs. """
     environ = Environ(os.environ)
     SIMPLEBIN = os.path.join(os.environ['SIMPLE_HOME'], 'bin')
+    SIMPLEAPPS = os.path.join(os.environ['SIMPLE_HOME'], 'apps')
     environ.update({
                     'SIMPLEBIN': SIMPLEBIN,
                     'SIMPLEPATH': os.environ['SIMPLE_HOME'],
                     'SIMPLESYS': os.environ['SIMPLE_HOME'],
-                    'PATH': SIMPLEBIN + os.pathsep + os.path.join(os.environ['SIMPLE_HOME'], 'apps')
+                    'PATH': os.pathsep.join([SIMPLEBIN, SIMPLEAPPS])
                     }, 
                    position=Environ.BEGIN)
     return environ
+
+
+class SimpleDocFile(object):
+    """ Handler class to read/write SIMPLE docfile. """
+
+    def __init__(self, filename, mode='r'):
+        self._file = open(filename, mode)
+        self._count = 0
+
+    def writeValues(self, *values):
+        """ Write values in spider docfile. """
+        self._count += 1
+        # write data lines
+        line = "%5d %2d" % (self._count, len(values))
+        for v in values:
+            line += " %11g" % float(v)
+
+        print >> self._file, line
+
+    def iterValues(self):
+        for line in self._file:
+            line = line.strip()
+            if not line.startswith(';'):
+                row = OrderedDict()
+                for token in line.split():
+                    key, value = token.split("=")
+                    row[key] = value
+                yield row
+
+    def __iter__(self):
+        return self.iterValues()
+
+    def close(self):
+        self._file.close()

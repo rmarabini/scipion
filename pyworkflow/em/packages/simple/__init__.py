@@ -38,4 +38,5 @@ _environ = getEnviron()
 
 # from viewer import *
 from protocol_prime import ProtPrime
+from protocol_prime_2d import ProtPrime2D
 
