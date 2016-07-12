@@ -1,7 +1,6 @@
 # **************************************************************************
 # *
-# * Authors:     Carlos Oscar Sorzano (coss@cnb.csic.es)
-# *              J.M. de la Rosa Trevin (jmdelarosa@cnb.csic.es)
+# * Authors:     J.M. de la Rosa Trevin (jmdelarosa@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -25,16 +24,30 @@
 # *
 # **************************************************************************
 
-from bibtex import _bibtex # Load bibtex dict with references
 
-_logo = "simple_logo.png"
-
-from simple import *
-
-_environ = getEnviron()
-
-from protocol_prime import ProtPrime
+from pyworkflow.em.wizard import *
 from protocol_prime_2d import ProtPrime2D
 
-from wizard import SimpleParticleMaskRadiusWizard
+
+
+class SimpleParticleMaskRadiusWizard(ParticleMaskRadiusWizard):
+    _targets = [(ProtPrime2D, ['maskRadius'])]
+    
+    def _getParameters(self, protocol):
+        label, value = self._getInputProtocol(self._targets, protocol)
+        protParams = {}
+        protParams['input']= protocol.inputParticles
+        protParams['label']= label
+        protParams['value']= value
+        return protParams
+    
+    def _getProvider(self, protocol):
+        _objs = self._getParameters(protocol)['input']
+        return ParticleMaskRadiusWizard._getListProvider(self, _objs)
+    
+    def show(self, form):
+        params = self._getParameters(form.protocol)
+        _value = params['value']
+        _label = params['label']
+        ParticleMaskRadiusWizard.show(self, form, _value, _label, UNIT_PIXEL)
 

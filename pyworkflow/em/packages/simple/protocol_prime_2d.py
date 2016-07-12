@@ -30,6 +30,7 @@ import pyworkflow.protocol.params as params
 import pyworkflow.em as em
 
 import simple
+from convert import rowToAlignment
 
 
 
@@ -50,6 +51,10 @@ class ProtPrime2D(em.ProtClassify2D):
                       label="Number of classes",
                       help="")
 
+        form.addParam('maskRadius', params.IntParam, default=-1,
+                      label='Particle mask radius (px)',
+                      help='')
+
         form.addParallelSection(threads=4, mpi=0)
     
     #--------------------------- INSERT steps functions ------------------------
@@ -61,7 +66,7 @@ class ProtPrime2D(em.ProtClassify2D):
 
     #--------------------------- STEPS functions -------------------------------
     def convertInputStep(self):
-        self.inputParticles.get().writeStack(self._getExtraPath("particles.mrcs"))
+        self.inputParticles.get().writeStack(self.getParticlesStack())
             
     def runPrime2D(self):
         # simple_prime2D_init stk=<stack.ext> smpd=<sampling distance(in A)>
@@ -70,11 +75,14 @@ class ProtPrime2D(em.ProtClassify2D):
 
         inputParticles = self.inputParticles.get()
         xdim, _, _ = inputParticles.getDimensions()
+        # If mask radius is -1, use half of the particle size
+        maskRadius = self.maskRadius.get() if self.maskRadius < 0 else xdim / 2
+
         # We will run simple_prime2d in the extra folder, so 'particles.mrcs'
         # should be there
         args = " stk=particles.mrcs"
         args += " smpd=%f" % inputParticles.getSamplingRate()
-        args += " msk=30" #FIXME
+        args += " msk=%d" % maskRadius
         args += " ncls=%d" % self.numberOfClasses
         args += " nthr=%d" % self.numberOfThreads
 
@@ -97,14 +105,11 @@ class ProtPrime2D(em.ProtClassify2D):
 
 
     def createOutputStep(self):
-        lastIter = self.getLastIteration()
-        docFile = self._getExtraPath('prime2D_doc%d.txt' % lastIter)
-        doc = simple.SimpleDocFile(docFile)
+        classes2D = self._createSetOfClasses2D(self.inputParticles.get())
+        self._fillClassesFromIter(classes2D, self.getLastIteration())
 
-        for row in doc:
-            print row
-
-        doc.close()
+        self._defineOutputs(outputClasses=classes2D)
+        self._defineSourceRelation(self.inputParticles, classes2D)
 
     #--------------------------- INFO functions --------------------------------
     def _validate(self):
@@ -121,10 +126,51 @@ class ProtPrime2D(em.ProtClassify2D):
     def _methods(self):
         return []
 
-    # --------------------------- INFO functions -------------------------------
+    # --------------------------- UTILS functions ------------------------------
+    def getNumberOfClasses(self):
+        return self.numberOfClasses.get()
+
+    def getDocFile(self, iteration=None):
+        """ Return the document file with alignment parameters for the given
+        iteration, if None passed, return the last iteration.
+        """
+        if iteration is None:
+            iteration = self.getLastIteration()
+
+        return self._getExtraPath("prime2D_doc%d.txt" % iteration)
+
+    def getClassesStack(self, iteration=None):
+        if iteration is None:
+            iteration = self.getLastIteration()
+
+        return self._getExtraPath("cavgs_iter%d.mrc" % iteration)
+
+    def getParticlesStack(self):
+        return self._getExtraPath('particles.mrcs')
+
     def getLastIteration(self):
         lastIter = 1
-        pattern = self._getExtraPath("prime2D_doc%d.txt")
-        while os.path.exists(pattern % lastIter):
+        while os.path.exists(self.getDocFile(lastIter)):
             lastIter += 1
         return lastIter - 1
+
+    def _fillClassesFromIter(self, clsSet, iteration):
+        """ Create the SetOfClasses2D from a given iteration. """
+        self._iter = iteration
+        self._count = 0
+        doc = simple.SimpleDocFile(self.getDocFile(iteration))
+        clsSet.classifyItems(updateItemCallback=self._updateParticle,
+                             updateClassCallback=self._updateClass,
+                             itemDataIterator=doc.iterValues())
+        doc.close()
+
+    def _updateParticle(self, item, row):
+        self._count += 1
+        item.setClassId(int(float(row['class'])))
+        item.setTransform(rowToAlignment(row, em.ALIGN_2D))
+        item.setLocation((self._count, self.getParticlesStack()))
+
+    def _updateClass(self, item):
+        item.setAlignment2D()
+        fn = self.getClassesStack(self._iter) + ":mrcs"
+        item.getRepresentative().setLocation(item.getObjId(), fn)
