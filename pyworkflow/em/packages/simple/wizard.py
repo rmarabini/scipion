@@ -24,10 +24,8 @@
 # *
 # **************************************************************************
 
-
 from pyworkflow.em.wizard import *
 from protocol_prime_2d import ProtPrime2D
-
 
 
 class SimpleParticleMaskRadiusWizard(ParticleMaskRadiusWizard):
@@ -51,3 +49,28 @@ class SimpleParticleMaskRadiusWizard(ParticleMaskRadiusWizard):
         _label = params['label']
         ParticleMaskRadiusWizard.show(self, form, _value, _label, UNIT_PIXEL)
 
+
+class SimpleFilterParticlesWizard(FilterParticlesWizard):
+    _targets = [(ProtPrime2D, ['lowPassFilter'])]
+
+    def _getParameters(self, protocol):
+        label, value = self._getInputProtocol(self._targets, protocol)
+        protParams = {'unit': UNIT_ANGSTROM}
+
+        protParams['input'] = protocol.inputParticles
+        protParams['label'] = label
+        protParams['value'] = value
+        protParams['mode'] = 0 # Low pass filter mode
+        return protParams
+
+    def _getProvider(self, protocol):
+        _objs = self._getParameters(protocol)['input']
+        return FilterParticlesWizard._getListProvider(self, _objs)
+
+    def show(self, form):
+        params = self._getParameters(form.protocol)
+        _value = params['value']
+        _label = params['label']
+        _mode = params['mode']
+        _unit = params['unit']
+        FilterParticlesWizard.show(self, form, _value, _label, _mode, _unit)
