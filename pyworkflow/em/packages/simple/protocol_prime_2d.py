@@ -27,14 +27,26 @@
 import os
 
 import pyworkflow.protocol.params as params
+import pyworkflow.utils as pwutils
 import pyworkflow.em as em
 
 import simple
-from convert import rowToAlignment
-
+from convert import rowToAlignment, writeSetOfParticles
 
 
 class ProtPrime2D(em.ProtClassify2D):
+    """
+    This protocol wraps the *simple_prime2D* program,
+    which is a reference-free 2D alignment/clustering algorithm adopted
+    from the prime3D probabilistic ab initio 3D reconstruction algorithm.
+
+    It is assumed that the images are phase-flipped
+    (phase flipping can be done inside the protocol using simple_stackops).
+
+    Do not search the origin shifts initially, when the cluster centers are
+    of low quality. If your images are far off centre, you can select to
+    pre-align them (internally using simple_stackops with option shalgn=yes).
+    """
     _label = 'prime 2d'
 
     #--------------------------- DEFINE param functions ------------------------
@@ -55,34 +67,109 @@ class ProtPrime2D(em.ProtClassify2D):
                       label='Particle mask radius (px)',
                       help='')
 
+        form.addParam('lowPassFilter', params.IntParam, default=20,
+                      label='Low pass filter (A)')
+
+        form.addParam('doPhaseFlip', params.BooleanParam, default=True,
+                      label='Phase flip input particles?',
+                      help='Phase flip the input particles if they contains '
+                           'CTF information and have not already been flipped.')
+
+        form.addParam('doAlign', params.BooleanParam, default=False,
+                      label='Align input particles?',
+                      help="")
+
         form.addParallelSection(threads=4, mpi=0)
     
     #--------------------------- INSERT steps functions ------------------------
     
     def _insertAllSteps(self):
-        self._insertFunctionStep('convertInputStep')
+        self._insertFunctionStep('convertInputStep',
+                                 self.inputParticles.getUniqueId())
+
+        if self.doPhaseFlip:
+            self._insertFunctionStep('phaseFlipStep')
+
+        if self.doAlign:
+            self._insertFunctionStep('alignStep')
+
         self._insertFunctionStep('runPrime2D')
         self._insertFunctionStep('createOutputStep')
 
     #--------------------------- STEPS functions -------------------------------
-    def convertInputStep(self):
-        self.inputParticles.get().writeStack(self.getParticlesStack())
-            
+
+    def convertInputStep(self, inputId):
+        writeSetOfParticles(self.inputParticles.get(), self.getParticlesStack(),
+                            None, self._getExtraPath('ctfparams.txt'))
+
+    def phaseFlipStep(self):
+        inputParticles = self.inputParticles.get()
+
+        if not inputParticles.hasCTF():
+            self.info('Input particles does not have CTF information. '
+                      'NOT phase flipping.')
+            return
+
+        if inputParticles.isPhaseFlipped():
+            self.info('Input particles are already phase flipped. '
+                      'NOT phase flipping again.')
+            return
+
+        # simple_stackops stk=ptcls.mrc smpd=2 deftab=ctfparams.txt
+        # ctf=flip kv=300 cs=2.7 fraca=0.07 outstk=ptcls_phflip.mrc
+        acq = inputParticles.getAcquisition()
+        outputName = "particles_phflip.mrcs"
+
+        args = " stk=particles.mrcs deftab=ctfparams.txt ctf=flip"
+        args += " smpd=%f" % inputParticles.getSamplingRate()
+        args += " kv=%f" % acq.getVoltage()
+        args += " cs=%f" % acq.getSphericalAberration()
+        args += " fraca=%f" % acq.getAmplitudeContrast()
+        args += " outstk=%s" % outputName
+
+        self.info("Phase flipping input particles.")
+        self.runJob("simple_stackops", args, cwd=self._getExtraPath())
+
+        # Replace the initial converted stack with the phase flipped one
+        pwutils.moveFile(self._getExtraPath(outputName),
+                         self.getParticlesStack())
+
+    def alignStep(self):
+        inputParticles = self.inputParticles.get()
+
+        # $ simple_stackops stk=particles.spi smpd=1.62 msk=60
+        # shalgn=yes trs=3.5 lp=20 nthr=8 outstk=particles_sh.spi
+        acq = inputParticles.getAcquisition()
+        outputName = "particles_sh.mrcs"
+
+        args = " stk=particles.mrcs shalgn=yes "
+        args += " smpd=%f" % inputParticles.getSamplingRate()
+        args += " msk=%d" % self.getMaskRadius()
+        args += " lp=%d" % self.lowPassFilter
+        args += " trs=3.5" #FIXME
+        args += " nthr=%d" % self.numberOfThreads
+        args += " outstk=%s" % outputName
+
+        self.info("Aligning input particles.")
+        self.runJob("simple_stackops", args, cwd=self._getExtraPath())
+
+        # Replace the initial converted stack with the phase flipped one
+        pwutils.moveFile(self._getExtraPath(outputName),
+                         self.getParticlesStack())
+
     def runPrime2D(self):
         # simple_prime2D_init stk=<stack.ext> smpd=<sampling distance(in A)>
         # msk=<mask radius(in pixels)> ncls=<nr of clusters>
         # [nthr=<nr of OpenMP threads{1}>] [oritab=<input doc>]
 
         inputParticles = self.inputParticles.get()
-        xdim, _, _ = inputParticles.getDimensions()
-        # If mask radius is -1, use half of the particle size
-        maskRadius = self.maskRadius.get() if self.maskRadius < 0 else xdim / 2
 
         # We will run simple_prime2d in the extra folder, so 'particles.mrcs'
         # should be there
         args = " stk=particles.mrcs"
         args += " smpd=%f" % inputParticles.getSamplingRate()
-        args += " msk=%d" % maskRadius
+        args += " msk=%d" % self.getMaskRadius()
+        args += " lp=%d" % self.lowPassFilter
         args += " ncls=%d" % self.numberOfClasses
         args += " nthr=%d" % self.numberOfThreads
 
@@ -127,6 +214,12 @@ class ProtPrime2D(em.ProtClassify2D):
         return []
 
     # --------------------------- UTILS functions ------------------------------
+    def getMaskRadius(self):
+        # If mask radius is -1, use half of the particle size
+        xdim, _, _ = self.inputParticles.get().getDimensions()
+
+        return self.maskRadius.get() if self.maskRadius < 0 else xdim / 2
+
     def getNumberOfClasses(self):
         return self.numberOfClasses.get()
 
