@@ -24,6 +24,7 @@
 # *
 # **************************************************************************
 
+from collections import OrderedDict
 import numpy as np
 
 from pyworkflow.em.constants import ALIGN_2D, ALIGN_3D, ALIGN_PROJ
@@ -34,7 +35,6 @@ from pyworkflow.em.data import Transform
 from simple import SimpleDocFile
 
     
-
 SHIFTX = 'x'
 SHIFTY = 'y'
 
@@ -45,20 +45,32 @@ ANGLE_PHI = 'e3' # rot in xmipp
 FLIP = 'flip'
 
 
-
-def writeSetOfImages(imgSet, stackFn, selFn):
+def writeSetOfParticles(imgSet, stackFn, docFn, ctfFn):
     """ This function will write a SetOfParticles as a Spider stack and selfile.
     Params:
         imgSet: the SetOfParticles instance.
         stackFn: the filename where to write the stack.
-        selFn: the filename of the Spider selection file.
+        docFn: the filename to write the information about the particles.
+        ctfFn: the filename to write the ctf information
     """
-    doc = SimpleDocFile(selFn, 'w+')
-
-    # FIXME: Write the values from the SetOfParticles
-
+    doc = SimpleDocFile(ctfFn, 'w+')
     imgSet.writeStack(stackFn, applyTransform=True)
+
+    ctfRow = OrderedDict()
+
+    for particle in imgSet:
+        ctfModelToRow(particle.getCTF(), ctfRow)
+        doc.writeRow(ctfRow)
+
     doc.close()
+
+
+def ctfModelToRow(ctfModel, ctfRow):
+    """ Set labels values from ctfModel to md row. """
+    # Convert defocus values to microns
+    ctfRow['dfx'] = ctfModel.getDefocusU() / 10000
+    ctfRow['dfy'] = ctfModel.getDefocusV() / 10000
+    ctfRow['angast'] = ctfModel.getDefocusAngle()
 
 
 #-------------- Geometry conversions -----------------
