@@ -53,15 +53,16 @@ class SimpleDocFile(object):
         self._file = open(filename, mode)
         self._count = 0
 
-    def writeValues(self, *values):
-        """ Write values in spider docfile. """
+    def writeRow(self, row):
+        """ Write a row to the data file.
+        Each row should contains values in the form of key=value.
+        """
         self._count += 1
-        # write data lines
-        line = "%5d %2d" % (self._count, len(values))
-        for v in values:
-            line += " %11g" % float(v)
 
-        print >> self._file, line
+        for value in row.iteritems(): # value is a tuple key, value
+            self._file.write("%s=%s " % value)
+
+        self._file.write("\n")
 
     def iterValues(self):
         for line in self._file:
