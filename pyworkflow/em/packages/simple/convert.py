@@ -53,16 +53,17 @@ def writeSetOfParticles(imgSet, stackFn, docFn, ctfFn):
         docFn: the filename to write the information about the particles.
         ctfFn: the filename to write the ctf information
     """
-    doc = SimpleDocFile(ctfFn, 'w+')
     imgSet.writeStack(stackFn, applyTransform=True)
 
-    ctfRow = OrderedDict()
+    if imgSet.hasCTF():
+        doc = SimpleDocFile(ctfFn, 'w+')
+        ctfRow = OrderedDict()
 
-    for particle in imgSet:
-        ctfModelToRow(particle.getCTF(), ctfRow)
-        doc.writeRow(ctfRow)
+        for particle in imgSet:
+            ctfModelToRow(particle.getCTF(), ctfRow)
+            doc.writeRow(ctfRow)
 
-    doc.close()
+        doc.close()
 
 
 def ctfModelToRow(ctfModel, ctfRow):
