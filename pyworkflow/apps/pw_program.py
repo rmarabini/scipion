@@ -53,6 +53,9 @@ if __name__ == '__main__':
     elif program.startswith('b'):
         import pyworkflow.em.packages.bsoft as bsoft
         env = bsoft.getEnviron()
+    elif program.startswith('simple'):
+        import pyworkflow.em.packages.simple as simple
+        env = simple.getEnviron()
     
     pwutils.runJob(None, program, params, env=env)
          
