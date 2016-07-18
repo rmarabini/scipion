@@ -69,6 +69,7 @@ class TestSimplePrime2D(TestWorkflow):
 
         n = 4
         protClassify = self.newProtocol(simple.ProtPrime2D,
+                                        generateReferences=True,
                                         numberOfClasses=n,
                                         maskRadius=45)
         protClassify.inputParticles.set(protImport.outputParticles)

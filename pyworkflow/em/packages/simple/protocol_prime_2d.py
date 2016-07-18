@@ -31,7 +31,7 @@ import pyworkflow.utils as pwutils
 import pyworkflow.em as em
 
 import simple
-from convert import rowToAlignment, writeSetOfParticles
+from convert import rowToAlignment, writeSetOfParticles, writeSetOfClasses2D
 
 
 class ProtPrime2D(em.ProtClassify2D):
@@ -53,18 +53,38 @@ class ProtPrime2D(em.ProtClassify2D):
     
     def _defineParams(self, form):
         form.addSection('Input')
+
+        form.addParam('generateReferences', params.BooleanParam, default=True,
+                      label='Generate initial references?',
+                      help='If you select *Yes*, you should provide as input '
+                           'a SetOfClasses2D to use the averages as reference '
+                           'and reclassify the images.\n'
+                           'If *No*, then you should provide the as input '
+                           'a SetOfParticles and the number of classes.')
+
         form.addParam('inputParticles', params.PointerParam,
-                      #pointerCondition='hasCTF', # or just a warning?
                       pointerClass='SetOfParticles',
+                      condition='generateReferences',
                       label="Input particles", important=True,
                       help='')
 
         form.addParam('numberOfClasses', params.IntParam,
+                      condition='generateReferences',
                       label="Number of classes",
                       help="")
 
+        form.addParam('inputClasses', params.PointerParam,
+                      pointerClass='SetOfClasses2D',
+                      condition='not generateReferences',
+                      label="Input 2D classes", important=True,
+                      help='')
+
         form.addParam('maskRadius', params.IntParam, default=-1,
                       label='Particle mask radius (px)',
+                      help='')
+
+        form.addParam('originShift', params.IntParam, default=0,
+                      label='Search origin shifts (px)',
                       help='')
 
         form.addParam('lowPassFilter', params.IntParam, default=20,
@@ -93,14 +113,37 @@ class ProtPrime2D(em.ProtClassify2D):
         if self.doAlign:
             self._insertFunctionStep('alignStep')
 
-        self._insertFunctionStep('runPrime2D')
+        if self.generateReferences:
+            self._insertFunctionStep('runPrime2DInitStep')
+
+        self._insertFunctionStep('runPrime2DStep')
         self._insertFunctionStep('createOutputStep')
 
     #--------------------------- STEPS functions -------------------------------
 
     def convertInputStep(self, inputId):
-        writeSetOfParticles(self.inputParticles.get(), self.getParticlesStack(),
-                            None, self._getExtraPath('ctfparams.txt'))
+        stackFn = self.getParticlesStack()
+        ctfFn = self._getExtraPath('ctfparams.txt')
+
+        if self.generateReferences:
+            writeSetOfParticles(self.inputParticles.get(), stackFn, None, ctfFn)
+        else:
+            inputClasses = self.inputClasses.get()
+            clsStack = self._getExtraPath('startcavgs.mrc')
+            docFn = self._getExtraPath('prime2D_startdoc.txt')
+            writeSetOfClasses2D(inputClasses, clsStack, stackFn, docFn, ctfFn)
+            # SIMPLE_DOC2CAVGS stk=<stack.ext> smpd=<sampling distance(in A)>
+            # msk=<mask radius(in pixels)> ncls=<nr of clusters>
+            # oritab=<previous clustering doc> which_iter=<iteration nr>
+            # [mul=<shift multiplication factor{1}>] [nthr=<nr of OpenMP threads{1}>]
+            # args = " stk=particles.mrcs "
+            # args += " oritab=prime2D_startdoc.txt "
+            # args += " smpd=%f" % inputClasses.getFirstItem().getSamplingRate()
+            # args += " ncls=%d" % inputClasses.getSize()
+            # args += " msk=%d" % self.getMaskRadius()
+            # args += " nthr=%d" % self.numberOfThreads
+            # args += " which_iter=1"
+            # self.runJob("simple_doc2cavgs", args, cwd=self._getExtraPath())
 
     def phaseFlipStep(self):
         inputParticles = self.inputParticles.get()
@@ -157,11 +200,11 @@ class ProtPrime2D(em.ProtClassify2D):
         pwutils.moveFile(self._getExtraPath(outputName),
                          self.getParticlesStack())
 
-    def runPrime2D(self):
-        # simple_prime2D_init stk=<stack.ext> smpd=<sampling distance(in A)>
-        # msk=<mask radius(in pixels)> ncls=<nr of clusters>
-        # [nthr=<nr of OpenMP threads{1}>] [oritab=<input doc>]
-
+    def _getCommonArgs(self):
+        """ Return common command line argument for programs:
+        - simple_prime2D_init
+        - simple_prime2D
+        """
         inputParticles = self.inputParticles.get()
 
         # We will run simple_prime2d in the extra folder, so 'particles.mrcs'
@@ -173,23 +216,19 @@ class ProtPrime2D(em.ProtClassify2D):
         args += " ncls=%d" % self.numberOfClasses
         args += " nthr=%d" % self.numberOfThreads
 
-        self.runJob("simple_prime2D_init", args, cwd=self._getExtraPath())
+        return args
 
-        # simple_prime2D stk=<stack.ext> smpd=<sampling distance(in A)>
-        # msk=<mask radius(in pixels)> ncls=<nr of clusters>
-        # refs=<initial_references.ext> oritab=<previous clustering doc>
-        # [lp=<low-pass limit(in A){20}>] [trs=<origin shift(in pixels){0}>]
-        # [nthr=<nr of OpenMP threads{1}>] [startit=<start iteration>]
-        # [hp=<high-pass limit(in A)>] [srch_inpl=<yes|no{yes}>]
-        # ** less commonly used**
-        # [maxits=<max iterations{500}>] [inner=<inner mask radius(in pixels)>]
-        # [width=<pixels falloff inner mask(in pixels){10}>]
+    def runPrime2DInitStep(self):
+        self.runJob("simple_prime2D_init", self._getCommonArgs(),
+                    cwd=self._getExtraPath())
 
-        # Reusing same arguments from simple_prime2D_init
+    def runPrime2DStep(self):
+        args = self._getCommonArgs()
+        if self.originShift > 0:
+            args += " trs=%d" % self.originShift
         args += " refs=startcavgs.mrc"
         args += " oritab=prime2D_startdoc.txt"
         self.runJob("simple_prime2D", args, cwd=self._getExtraPath())
-
 
     def createOutputStep(self):
         classes2D = self._createSetOfClasses2D(self.inputParticles.get())

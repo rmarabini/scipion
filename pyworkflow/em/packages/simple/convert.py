@@ -27,6 +27,7 @@
 from collections import OrderedDict
 import numpy as np
 
+from pyworkflow.em import ImageHandler
 from pyworkflow.em.constants import ALIGN_2D, ALIGN_3D, ALIGN_PROJ
 from pyworkflow.em.transformations import (translation_from_matrix,
                                            euler_matrix, euler_from_matrix)
@@ -42,6 +43,8 @@ ANGLE_PSI = 'e1' # in-plane, xmipp psi
 ANGLE_THE = 'e2' # tilt in xmipp
 ANGLE_PHI = 'e3' # rot in xmipp
 
+CLASS = 'class'
+
 FLIP = 'flip'
 
 
@@ -56,14 +59,49 @@ def writeSetOfParticles(imgSet, stackFn, docFn, ctfFn):
     imgSet.writeStack(stackFn, applyTransform=True)
 
     if imgSet.hasCTF():
-        doc = SimpleDocFile(ctfFn, 'w+')
+        ctfDoc = SimpleDocFile(ctfFn, 'w+')
         ctfRow = OrderedDict()
 
         for particle in imgSet:
             ctfModelToRow(particle.getCTF(), ctfRow)
-            doc.writeRow(ctfRow)
+            ctfDoc.writeRow(ctfRow)
 
-        doc.close()
+        ctfDoc.close()
+
+
+def writeSetOfClasses2D(clsSet, clsStack, stackFn, docFn, ctfFn):
+    """ This function will write a SetOfClasses2D as a MRC stack and docfile.
+    Params:
+        clsSet: the SetOfClasses2D instance.
+        stackFn: the filename where to write the stack.
+        docFn: the filename to write the information about the particles.
+        ctfFn: the filename to write the ctf information
+    """
+    ih = ImageHandler()
+    i = 0
+    writeCTF = clsSet.getFirstItem().hasCTF() and ctfFn is not None
+
+    doc = SimpleDocFile(docFn, 'w+')
+    row = OrderedDict()
+    if writeCTF:
+        ctfDoc = SimpleDocFile(ctfFn, 'w+')
+        ctfRow = OrderedDict()
+
+    for c, cls2D in enumerate(clsSet):
+        row[CLASS] = c + 1
+        ih.convert(cls2D.getRepresentative(), (c+1, clsStack))
+        for particle in cls2D:
+            i += 1
+            ih.convert(particle, (i, stackFn))
+            alignmentToRow(particle.getTransform(), row, ALIGN_2D)
+            doc.writeRow(row)
+            if writeCTF:
+                ctfModelToRow(particle.getCTF(), ctfRow)
+                ctfDoc.writeRow(ctfRow)
+
+    doc.close()
+    if writeCTF:
+        ctfDoc.close()
 
 
 def ctfModelToRow(ctfModel, ctfRow):
@@ -163,7 +201,7 @@ def alignmentToRow(alignment, alignmentRow, alignType):
             otherwise matrix is 3D (3D volume alignment or projection)
     """
     is2D = alignType == ALIGN_2D
-    inverseTransform = alignType == ALIGN_PROJ
+    inverseTransform = alignType != ALIGN_PROJ
     #only flip is meaninfull if 2D case
     #in that case the 2x2 determinant is negative
     flip = False
@@ -196,7 +234,7 @@ def alignmentToRow(alignment, alignmentRow, alignType):
     
     if is2D:
         angle = angles[0] + angles[2]
-        alignmentRow[ANGLE_PSI] = angle
+        alignmentRow[ANGLE_PHI] = angle
     else:
         #if alignType == ALIGN_3D:
         alignmentRow[ANGLE_PHI] = angles[0]
