@@ -77,5 +77,11 @@ class SimpleDocFile(object):
     def __iter__(self):
         return self.iterValues()
 
+    def getLastRow(self):
+        lastRow = None
+        for row in self:
+            lastRow = row
+        return lastRow
+
     def close(self):
         self._file.close()

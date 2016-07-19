@@ -65,6 +65,10 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
                       label='Search for the symmetry axis?',
                       help='')
 
+        form.addParam('extraParams', params.StringParam,
+                      label='Extra parameters',
+                      help='')
+
         form.addParallelSection(threads=4, mpi=0)
     
     #--------------------------- INSERT steps functions ------------------------
@@ -73,18 +77,20 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
         self._insertFunctionStep('convertInputStep',
                                  self.inputSet.getUniqueId())
 
-        sym = self.symmetry.get().lower()
+        sym = self.getSym()
         initSym = 'c1' if self.searchSymAxis else sym
         self._insertFunctionStep('prime3DInitStep', initSym)
         # The following files should be output from the prime 3d - init step
         initVol, initOritab = 'startvol_state1.mrc', 'prime3D_startdoc.txt'
+        self.finalRoot = self.getRoot(initSym)
         self._insertFunctionStep('prime3DStep', initSym, initVol, initOritab)
 
         if self.searchSymAxis:
-            self._insertStep('findSymAxisStep', initVol, initOritab)
+            self._insertFunctionStep('findSymAxisStep')
             # The following files should be produced after finding symmetry axis
-            vol, oritab = "", ""
-            self._insertStep('prime3DStep', sym, vol, oritab)
+            vol, oritab = "recvol_state1.mrc", "sym_%s.txt" % sym
+            self.finalRoot = self.getRoot(sym)
+            self._insertFunctionStep('prime3DStep', sym, vol, oritab)
 
 
         self._insertFunctionStep('createOutputStep')
@@ -112,27 +118,51 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
         self.runJob("simple_prime3D_init", args, cwd=self._getExtraPath())
 
     def prime3DStep(self, sym, vol, oritab):
-        args = self._getCommonArgs()
-        args += " vol1=%s" % vol
+        root = self._getExtraPath(self.getRoot(sym))
+        pwutils.makePath(root)
+        args = self._getCommonArgs(prefix='../')
+        args += " vol1=../%s" % vol
+        args += " oritab=../%s" % oritab
         args += " pgrp=%s" % sym
-        args += " oritab=%s" % oritab
+        args += " %s " % self.extraParams.get()
 
-        self.runJob("simple_prime3D", args, cwd=self._getExtraPath())
+        self.runJob("simple_prime3D", args, cwd=root)
 
-    def findSymAxisStep(self, vol, oritab):
+    def findSymAxisStep(self):
         # $ simple_symsrch vol1=prime3D_round_16/recvol_state1.spi smpd=1.62 msk=60
         # oritab=prime3D_round_16/prime3Ddoc_16.txt pgrp=d7 outfile=sym_d7.txt nthr=8
         # lp=20 > SYMOUT
-        args = self._getCommonArgs(stk=False)
-        args += " vol1=%s" % vol
-        args += " oritab=%s" % oritab
-        args += " lp=%d" % 20 # FIXME use lowpass filter output from prime3d
-        args += " "
+        root = self.getRoot('c1') # Get root from previous prime 3D
+        docFile = self.getDocFile(root)
+        volFile = self.getVolFile(root)
+        symFile = 'sym_%s.txt' % self.getSym()
+        doc = simple.SimpleDocFile(docFile)
+        row = doc.getLastRow()
+        doc.close()
 
-    def _getCommonArgs(self, stk=True):
+        args = self._getCommonArgs(stk=False)
+        args += " vol1=%s" % volFile.replace(self._getExtraPath(), '.')
+        args += " oritab=%s" % docFile.replace(self._getExtraPath(), '.')
+        args += " pgrp=%s" % self.getSym()
+        args += " lp=%s" % row['lp']
+        args += " outfile=%s" % symFile
+        # Find symmetry axis
+        self.runJob("simple_symsrch", args, cwd=self._getExtraPath())
+
+        # Check some files that need to be produced
+        if not os.path.exists(self._getExtraPath(symFile)):
+            raise Exception('Expected file %s not produced.' % symFile)
+
+        # Now reconstruct with the defined symmetry
+        args = self._getCommonArgs()
+        args += " oritab=%s" % symFile
+        args += " pgrp=%s" % self.getSym()
+        self.runJob("simple_eo_recvol", args, cwd=self._getExtraPath())
+
+    def _getCommonArgs(self, stk='particles.mrcs', prefix=''):
         inputSet = self.inputSet.get()
 
-        args = " stk=particles.mrcs" if stk else ""
+        args = " stk=%s%s" % (prefix, stk) if stk else ""
         args += " smpd=%f" % inputSet.getSamplingRate()
         args += " msk=%d" % self.getMaskRadius()
         args += " nthr=%d" % self.numberOfThreads
@@ -140,9 +170,8 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
         return args
 
     def createOutputStep(self):
-        return
-        vol = em.Volume()
-        vol.setFileName()
+        volFile = self._getExtraPath(self.getVolFile(self.finalRoot))
+        vol = em.Volume(volFile)
         vol.setSamplingRate(self.inputSet.get().getSamplingRate())
 
         self._defineOutputs(outputVol=vol)
@@ -173,3 +202,32 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
     def getInitOutputs(self):
         return ['startvol_state1.mrc', 'prime3D_startdoc.txt']
 
+    def getRoot(self, sym):
+        return 'prime3D_%s' % sym
+
+    def getSym(self):
+        return self.symmetry.get().lower()
+
+    def getDocFile(self, root, iteration=None):
+        """ Return the document file with alignment parameters for the given
+        iteration, if None passed, return the last iteration.
+        """
+        if iteration is None:
+            iteration = self.getLastIteration(root)
+
+        return self._getExtraPath(root, "prime3D_doc%d.txt" % iteration)
+
+    def getVolFile(self, root, iteration=None):
+        """ Return the document file with alignment parameters for the given
+        iteration, if None passed, return the last iteration.
+        """
+        if iteration is None:
+            iteration = self.getLastIteration(root)
+
+        return self._getExtraPath(root, "recvol_state1_iter%d.mrc" % iteration)
+
+    def getLastIteration(self, root):
+        lastIter = 1
+        while os.path.exists(self.getVolFile(root, lastIter)):
+            lastIter += 1
+        return lastIter - 1
