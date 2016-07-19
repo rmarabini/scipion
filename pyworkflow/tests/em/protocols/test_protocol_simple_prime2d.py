@@ -86,7 +86,8 @@ class TestSimplePrime(TestWorkflow):
 
         protInitial = self.newProtocol(simple.ProtPrime3DInitial,
                                        objLabel='from classes',
-                                       maskRadius=45)
+                                       maskRadius=45,
+                                       symmetry='d6')
         protInitial.inputSet.set(protClassify.outputClasses)
         self.launchProtocol(protInitial)
 
