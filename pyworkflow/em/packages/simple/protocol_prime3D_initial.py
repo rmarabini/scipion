@@ -92,7 +92,7 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
             self.finalRoot = self.getRoot(sym)
             self._insertFunctionStep('prime3DStep', sym, vol, oritab)
 
-        if isinstance(self.inputSet.get(), em.writeSetOfClasses2D):
+        if isinstance(self.inputSet.get(), em.SetOfClasses2D):
             self._insertFunctionStep('mapClassesToParticlesStep')
 
         self._insertFunctionStep('createOutputStep')
