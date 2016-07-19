@@ -57,12 +57,13 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
                       label='Particle mask radius (px)',
                       help='')
 
-        form.addParam('lowPassFilter', params.IntParam, default=20,
-                      label='Low pass filter (A)')
-
         form.addParam('symmetry', params.StringParam, default='c1',
                       label='Symmetry group',
                       help='Possibilities are: cn|dn|t|o|i{c1}')
+
+        form.addParam('searchSymAxis', params.BooleanParam, default=False,
+                      label='Search for the symmetry axis?',
+                      help='')
 
         form.addParallelSection(threads=4, mpi=0)
     
@@ -71,7 +72,21 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
     def _insertAllSteps(self):
         self._insertFunctionStep('convertInputStep',
                                  self.inputSet.getUniqueId())
-        self._insertFunctionStep('reconstructStep')
+
+        sym = self.symmetry.get().lower()
+        initSym = 'c1' if self.searchSymAxis else sym
+        self._insertFunctionStep('prime3DInitStep', initSym)
+        # The following files should be output from the prime 3d - init step
+        initVol, initOritab = 'startvol_state1.mrc', 'prime3D_startdoc.txt'
+        self._insertFunctionStep('prime3DStep', initSym, initVol, initOritab)
+
+        if self.searchSymAxis:
+            self._insertStep('findSymAxisStep', initVol, initOritab)
+            # The following files should be produced after finding symmetry axis
+            vol, oritab = "", ""
+            self._insertStep('prime3DStep', sym, vol, oritab)
+
+
         self._insertFunctionStep('createOutputStep')
 
     #--------------------------- STEPS functions -------------------------------
@@ -90,28 +105,44 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
         else:
             raise Exception('Unexpected input type: %s' % type(inputSet))
 
-    def reconstructStep(self):
-        # simple_prime3D_init stk=selected_cavgs.spi smpd=1.62 msk=60 nthr=8 lp=20
+    def prime3DInitStep(self, initSym):
         args = self._getCommonArgs()
+        args += " pgrp=%s" % initSym
 
         self.runJob("simple_prime3D_init", args, cwd=self._getExtraPath())
 
-    def _getCommonArgs(self):
+    def prime3DStep(self, sym, vol, oritab):
+        args = self._getCommonArgs()
+        args += " vol1=%s" % vol
+        args += " pgrp=%s" % sym
+        args += " oritab=%s" % oritab
+
+        self.runJob("simple_prime3D", args, cwd=self._getExtraPath())
+
+    def findSymAxisStep(self, vol, oritab):
+        # $ simple_symsrch vol1=prime3D_round_16/recvol_state1.spi smpd=1.62 msk=60
+        # oritab=prime3D_round_16/prime3Ddoc_16.txt pgrp=d7 outfile=sym_d7.txt nthr=8
+        # lp=20 > SYMOUT
+        args = self._getCommonArgs(stk=False)
+        args += " vol1=%s" % vol
+        args += " oritab=%s" % oritab
+        args += " lp=%d" % 20 # FIXME use lowpass filter output from prime3d
+        args += " "
+
+    def _getCommonArgs(self, stk=True):
         inputSet = self.inputSet.get()
 
-        # We will run simple_prime2d in the extra folder, so 'particles.mrcs'
-        # should be there
-        args = " stk=particles.mrcs"
+        args = " stk=particles.mrcs" if stk else ""
         args += " smpd=%f" % inputSet.getSamplingRate()
         args += " msk=%d" % self.getMaskRadius()
-        args += " lp=%d" % self.lowPassFilter
         args += " nthr=%d" % self.numberOfThreads
 
         return args
 
     def createOutputStep(self):
+        return
         vol = em.Volume()
-        vol.setFileName(self._getExtraPath('startvol_state1.mrc'))
+        vol.setFileName()
         vol.setSamplingRate(self.inputSet.get().getSamplingRate())
 
         self._defineOutputs(outputVol=vol)
@@ -138,4 +169,7 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
         xdim, _, _ = self.inputSet.get().getDimensions()
 
         return self.maskRadius.get() if self.maskRadius < 0 else xdim / 2
+
+    def getInitOutputs(self):
+        return ['startvol_state1.mrc', 'prime3D_startdoc.txt']
 
