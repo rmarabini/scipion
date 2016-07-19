@@ -58,15 +58,32 @@ def writeSetOfParticles(imgSet, stackFn, docFn, ctfFn):
     """
     imgSet.writeStack(stackFn, applyTransform=True)
 
-    if imgSet.hasCTF():
+    writeCTF = imgSet.hasCTF() and ctfFn is not None
+    writeDoc = docFn is not None
+
+    if writeCTF:
         ctfDoc = SimpleDocFile(ctfFn, 'w+')
         ctfRow = OrderedDict()
 
-        for particle in imgSet:
-            ctfModelToRow(particle.getCTF(), ctfRow)
-            ctfDoc.writeRow(ctfRow)
+    if writeDoc:
+        doc = SimpleDocFile(docFn, 'w+')
+        row = OrderedDict()
 
+    if writeCTF or writeDoc:
+        for particle in imgSet:
+
+            if writeCTF:
+                ctfModelToRow(particle.getCTF(), ctfRow)
+                ctfDoc.writeRow(ctfRow)
+
+            if writeDoc:
+                pass
+
+    if writeCTF:
         ctfDoc.close()
+
+    if writeDoc:
+        doc.close()
 
 
 def writeSetOfClasses2D(clsSet, clsStack, stackFn, docFn, ctfFn):
@@ -80,29 +97,33 @@ def writeSetOfClasses2D(clsSet, clsStack, stackFn, docFn, ctfFn):
     ih = ImageHandler()
     i = 0
     writeCTF = clsSet.getFirstItem().hasCTF() and ctfFn is not None
+    writeParticles = stackFn is not None
 
-    doc = SimpleDocFile(docFn, 'w+')
-    row = OrderedDict()
+    if writeParticles:
+        doc = SimpleDocFile(docFn, 'w+')
+        row = OrderedDict()
     if writeCTF:
         ctfDoc = SimpleDocFile(ctfFn, 'w+')
         ctfRow = OrderedDict()
 
     for c, cls2D in enumerate(clsSet):
-        row[CLASS] = c + 1
         ih.convert(cls2D.getRepresentative(), (c+1, clsStack))
-        for particle in cls2D:
-            i += 1
-            ih.convert(particle, (i, stackFn))
-            alignmentToRow(particle.getTransform(), row, ALIGN_2D)
-            doc.writeRow(row)
-            if writeCTF:
-                ctfModelToRow(particle.getCTF(), ctfRow)
-                ctfDoc.writeRow(ctfRow)
+        if writeCTF or writeParticles:
+            for particle in cls2D:
+                i += 1
+                if writeParticles:
+                    row[CLASS] = c + 1
+                    ih.convert(particle, (i, stackFn))
+                    alignmentToRow(particle.getTransform(), row, ALIGN_2D)
+                    doc.writeRow(row)
+                if writeCTF:
+                    ctfModelToRow(particle.getCTF(), ctfRow)
+                    ctfDoc.writeRow(ctfRow)
 
-    doc.close()
+    if writeParticles:
+        doc.close()
     if writeCTF:
         ctfDoc.close()
-
 
 def ctfModelToRow(ctfModel, ctfRow):
     """ Set labels values from ctfModel to md row. """
