@@ -110,7 +110,12 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
         return args
 
     def createOutputStep(self):
-        pass
+        vol = em.Volume()
+        vol.setFileName(self._getExtraPath('startvol_state1.mrc'))
+        vol.setSamplingRate(self.inputSet.get().getSamplingRate())
+
+        self._defineOutputs(outputVol=vol)
+        self._defineSourceRelation(self.inputSet, vol)
 
     #--------------------------- INFO functions --------------------------------
     def _validate(self):

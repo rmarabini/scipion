@@ -34,45 +34,33 @@ from pyworkflow.tests.em.workflows.test_workflow import TestWorkflow
 
   
    
-class TestSimplePrime2D(TestWorkflow):
+class TestSimplePrime(TestWorkflow):
     @classmethod
     def setUpClass(cls):    
         # Create a new project
         setupTestProject(cls)
         cls.dataset = DataSet.getDataSet('mda')
         cls.particlesFn = cls.dataset.getFile('particles')
-
-    def runAlignment(self, protFilter, AlignmentClass, **kwargs):
-        protAlign = self.newProtocol(AlignmentClass, **kwargs)
-        protAlign.inputParticles.set(protFilter.outputParticles)
-        self.launchProtocol(protAlign)
-        className = protAlign.getClassName()
-        self.assertIsNotNone(protAlign.outputParticles,
-                             "There was a problem with the %s outputParticles"
-                             % className)
-        self.assertIsNotNone(protAlign.outputAverage,
-                             "There was a problem with the %s outputAverage"
-                             % className)
-        self.assertTrue(protAlign.outputParticles.hasAlignment2D(),
-                        "outputParticles have no alignment registered")
-        return protAlign
-
-    def test_prime2D(self):
-        protImport = self.newProtocol(ProtImportParticles,
-                                      filesPath=self.particlesFn,
+        protImport = cls.newProtocol(ProtImportParticles,
+                                      filesPath=cls.particlesFn,
                                       samplingRate=3.5)
-        self.launchProtocol(protImport)
+
+        cls.launchProtocol(protImport)
         # check that input images have been imported (a better way to do this?)
         if protImport.outputParticles is None:
             raise Exception('Import of images: %s, failed. outputParticles '
-                            'is None.' % self.particlesFn)
+                            'is None.' % cls.particlesFn)
 
+        cls.protImport = protImport
+
+
+    def test_prime2D(self):
         n = 4
         protClassify = self.newProtocol(simple.ProtPrime2D,
                                         generateReferences=True,
                                         numberOfClasses=n,
                                         maskRadius=45)
-        protClassify.inputParticles.set(protImport.outputParticles)
+        protClassify.inputParticles.set(self.protImport.outputParticles)
         self.launchProtocol(protClassify)
         classes = getattr(protClassify, 'outputClasses', None)
         self.assertIsNotNone(classes, "There was a problem with the "
@@ -83,4 +71,24 @@ class TestSimplePrime2D(TestWorkflow):
         firstClass = classes.getFirstItem()
         ih = ImageHandler()
         self.assertTrue(ih.existsLocation(firstClass.getRepresentative()))
+
+        return protClassify
+
+    def test_prime3D_initialFromParticles(self):
+        protInitial = self.newProtocol(simple.ProtPrime3DInitial,
+                                       objLabel='from particles',
+                                       maskRadius=45)
+        protInitial.inputSet.set(self.protImport.outputParticles)
+        self.launchProtocol(protInitial)
+
+    def test_prime3D_initialFromClasses(self):
+        protClassify = self.test_prime2D()
+
+        protInitial = self.newProtocol(simple.ProtPrime3DInitial,
+                                       objLabel='from classes',
+                                       maskRadius=45)
+        protInitial.inputSet.set(protClassify.outputClasses)
+        self.launchProtocol(protInitial)
+
+
 
