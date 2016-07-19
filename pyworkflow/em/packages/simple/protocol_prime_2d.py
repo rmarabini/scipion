@@ -96,6 +96,7 @@ class ProtPrime2D(em.ProtClassify2D):
                            'CTF information and have not already been flipped.')
 
         form.addParam('doAlign', params.BooleanParam, default=False,
+                      expertLevel=params.LEVEL_ADVANCED,
                       label='Align input particles?',
                       help="")
 
@@ -257,7 +258,7 @@ class ProtPrime2D(em.ProtClassify2D):
         # If mask radius is -1, use half of the particle size
         xdim, _, _ = self.inputParticles.get().getDimensions()
 
-        return self.maskRadius.get() if self.maskRadius < 0 else xdim / 2
+        return xdim / 2 if self.maskRadius < 0 else self.maskRadius.get()
 
     def getNumberOfClasses(self):
         return self.numberOfClasses.get()
