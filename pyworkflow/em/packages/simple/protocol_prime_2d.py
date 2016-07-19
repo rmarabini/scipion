@@ -83,7 +83,7 @@ class ProtPrime2D(em.ProtClassify2D):
                       label='Particle mask radius (px)',
                       help='')
 
-        form.addParam('originShift', params.IntParam, default=0,
+        form.addParam('originShift', params.FloatParam, default=0,
                       label='Search origin shifts (px)',
                       help='')
 
