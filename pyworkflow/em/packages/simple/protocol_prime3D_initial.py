@@ -92,6 +92,8 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
             self.finalRoot = self.getRoot(sym)
             self._insertFunctionStep('prime3DStep', sym, vol, oritab)
 
+        if isinstance(self.inputSet.get(), em.writeSetOfClasses2D):
+            self._insertFunctionStep('mapClassesToParticlesStep')
 
         self._insertFunctionStep('createOutputStep')
 
@@ -99,13 +101,16 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
 
     def convertInputStep(self, inputId):
         inputSet = self.inputSet.get()
-        stkFn = self._getExtraPath('particles.mrcs')
+        stkFn = self._getExtraPath(self.getInputStack())
 
         if isinstance(inputSet, em.SetOfAverages):
             inputSet.writeStack(stkFn)
         elif isinstance(inputSet, em.SetOfClasses2D):
+            firstClass = inputSet.getFirstItem()
             writeSetOfClasses2D(inputSet, stkFn,
-                                stackFn=None, docFn=None, ctfFn=None)
+                                stackFn=self._getExtraPath('particles.mrcs'),
+                                docFn=self._getExtraPath('particles.txt'),
+                                ctfFn=self.getCtfFile())
         elif isinstance(inputSet, em.SetOfParticles):
             writeSetOfParticles(inputSet, stkFn, docFn=None, ctfFn=None)
         else:
@@ -129,9 +134,6 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
         self.runJob("simple_prime3D", args, cwd=root)
 
     def findSymAxisStep(self):
-        # $ simple_symsrch vol1=prime3D_round_16/recvol_state1.spi smpd=1.62 msk=60
-        # oritab=prime3D_round_16/prime3Ddoc_16.txt pgrp=d7 outfile=sym_d7.txt nthr=8
-        # lp=20 > SYMOUT
         root = self.getRoot('c1') # Get root from previous prime 3D
         docFile = self.getDocFile(root)
         volFile = self.getVolFile(root)
@@ -159,8 +161,36 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
         args += " pgrp=%s" % self.getSym()
         self.runJob("simple_eo_recvol", args, cwd=self._getExtraPath())
 
-    def _getCommonArgs(self, stk='particles.mrcs', prefix=''):
+    def mapClassesToParticlesStep(self):
+        # SIMPLE_MAP2PTCLS stk=<particles.ext> stk2=<selected_cavgs.ext>
+        # stk3=<orig_cavgs.ext> oritab=<PRIME 2D doc> [oritab2=<prime3D shc doc>]
+        # [comlindoc=<shc_clustering_nclsX.txt>] [doclist=<list of oritabs for the different states>]
+        # [deftab=<text file defocus values>] [outfile=<output parameter file{mapped_ptcls_params.txt}>]
+        # [nthr=<nr of OpenMP threads{1}>]
+        root = self._getExtraPath('map2ptcls')
+        pwutils.makePath(root)
+        lastDoc = self.getDocFile(self.finalRoot).replace(self._getExtraPath(),
+                                                          '..')
+        mappedDoc = 'mapped_ptcls_params.txt'
+        args = "stk=../particles.mrcs stk2=../averages.mrcs stk3=../averages.mrcs"
+        args += " oritab=../particles.txt oritab2=%s" % lastDoc
+        args += " outfile=%s" % mappedDoc
+        ctfFn = self.getCtfFile()
+        if ctfFn is not None:
+            args += " deftab=%s" % ctfFn
+        self.runJob("simple_map2ptcls", args, cwd=root)
+
+        # Now reconstruct mapped particles
+        args = self._getCommonArgs(stk='particles.mrcs', prefix='../')
+        args += " oritab=%s" % mappedDoc
+        args += " pgrp=%s" % self.getSym()
+        self.runJob("simple_eo_recvol", args, cwd=root)
+
+    def _getCommonArgs(self, stk=None, prefix=''):
         inputSet = self.inputSet.get()
+
+        if stk is None:
+            stk = self.getInputStack()
 
         args = " stk=%s%s" % (prefix, stk) if stk else ""
         args += " smpd=%f" % inputSet.getSamplingRate()
@@ -203,6 +233,16 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
 
     def getRoot(self, sym):
         return 'prime3D_%s' % sym
+
+    def getInputStack(self):
+        if isinstance(self.inputSet.get(), em.SetOfParticles):
+            return "particles.mrcs"
+        else:
+            return "averages.mrcs"
+
+    def getCtfFile(self):
+        firstClass = self.inputSet.get().getFirstItem()
+        return 'particles_ctf.txt' if firstClass.hasCTF() else None
 
     def getSym(self):
         return self.symmetry.get().lower()
