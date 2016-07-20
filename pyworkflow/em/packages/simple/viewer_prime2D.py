@@ -33,8 +33,8 @@ from pyworkflow.em.plotter import EmPlotter
 import pyworkflow.protocol.params as params
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 
-from protocol_prime_2d import ProtPrime2D
-from protocol_prime3D_initial import ProtPrime3DInitial
+from protocol_prime2d import ProtPrime2D
+from protocol_prime3d_initial import ProtPrime3DInitial
 
 ITER_LAST = 0
 ITER_SELECTION = 1

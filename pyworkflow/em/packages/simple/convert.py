@@ -48,7 +48,8 @@ CLASS = 'class'
 FLIP = 'flip'
 
 
-def writeSetOfParticles(imgSet, stackFn, docFn, ctfFn, alignType=ALIGN_2D):
+def writeSetOfParticles(imgSet, stackFn, docFn, ctfFn, alignType=ALIGN_2D,
+                        applyTransform=True):
     """ This function will write a SetOfParticles as a Spider stack and selfile.
     Params:
         imgSet: the SetOfParticles instance.
@@ -56,10 +57,10 @@ def writeSetOfParticles(imgSet, stackFn, docFn, ctfFn, alignType=ALIGN_2D):
         docFn: the filename to write the information about the particles.
         ctfFn: the filename to write the ctf information
     """
-    imgSet.writeStack(stackFn, applyTransform=True)
+    imgSet.writeStack(stackFn, applyTransform=applyTransform)
 
     writeCTF = imgSet.hasCTF() and ctfFn is not None
-    writeDoc = docFn is not None
+    writeDoc = imgSet.hasAlignment() and docFn is not None
 
     if writeCTF:
         ctfDoc = SimpleDocFile(ctfFn, 'w+')
@@ -87,7 +88,8 @@ def writeSetOfParticles(imgSet, stackFn, docFn, ctfFn, alignType=ALIGN_2D):
         doc.close()
 
 
-def writeSetOfClasses2D(clsSet, clsStack, stackFn, docFn, ctfFn):
+def writeSetOfClasses2D(clsSet, clsStack, stackFn, docFn, ctfFn,
+                        applyTransform=False):
     """ This function will write a SetOfClasses2D as a MRC stack and docfile.
     Params:
         clsSet: the SetOfClasses2D instance.
@@ -114,7 +116,8 @@ def writeSetOfClasses2D(clsSet, clsStack, stackFn, docFn, ctfFn):
                 i += 1
                 if writeParticles:
                     row[CLASS] = c + 1
-                    ih.convert(particle, (i, stackFn))
+                    t = particle.getTransform() if applyTransform else None
+                    ih.convert(particle, (i, stackFn), t)
                     alignmentToRow(particle.getTransform(), row, ALIGN_2D)
                     doc.writeRow(row)
                 if writeCTF:

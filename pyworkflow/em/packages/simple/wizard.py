@@ -25,18 +25,24 @@
 # **************************************************************************
 
 from pyworkflow.em.wizard import *
-from protocol_prime_2d import ProtPrime2D
-from protocol_prime3D_initial import ProtPrime3DInitial
+from protocol_prime2d import ProtPrime2D
+from protocol_prime3d_initial import ProtPrime3DInitial
+from protocol_prime3d_refine import ProtPrime3DRefine
 
 
 class SimpleParticleMaskRadiusWizard(ParticleMaskRadiusWizard):
     _targets = [(ProtPrime2D, ['maskRadius']),
-                (ProtPrime3DInitial, ['maskRadius'])]
+                (ProtPrime3DInitial, ['maskRadius']),
+                (ProtPrime3DRefine, ['maskRadius'])]
     
     def _getParameters(self, protocol):
         label, value = self._getInputProtocol(self._targets, protocol)
         protParams = {}
-        protParams['input']= protocol.inputParticles
+        if isinstance(protocol, ProtPrime3DInitial):
+            inputSet = protocol.inputSet
+        else:
+            inputSet = protocol.inputParticles
+        protParams['input']= inputSet
         protParams['label']= label
         protParams['value']= value
         return protParams
