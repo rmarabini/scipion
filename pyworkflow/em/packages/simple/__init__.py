@@ -41,3 +41,5 @@ from protocol_reconstruct import ProtSimpleReconstruct
 
 from wizard import SimpleParticleMaskRadiusWizard
 
+from viewer_prime2D import SimpleViewerPrime2D
+

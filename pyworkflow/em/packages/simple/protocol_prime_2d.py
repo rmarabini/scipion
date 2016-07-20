@@ -297,6 +297,25 @@ class ProtPrime2D(em.ProtClassify2D):
                              itemDataIterator=doc.iterValues())
         doc.close()
 
+    def getIterClasses(self, it, clean=False):
+        """ Return a classes .sqlite file for this iteration.
+        If the file doesn't exists, it will be created by
+        converting from this iteration data.star file.
+        """
+        data_classes = self._getExtraPath('classes_it%03d.sqlite' % it)
+
+        if clean:
+            pwutils.cleanPath(data_classes)
+
+        if not os.path.exists(data_classes):
+            clsSet = em.SetOfClasses2D(filename=data_classes)
+            clsSet.setImages(self.inputParticles.get())
+            self._fillClassesFromIter(clsSet, it)
+            clsSet.write()
+            clsSet.close()
+
+        return data_classes
+
     def _updateParticle(self, item, row):
         self._count += 1
         item.setClassId(int(float(row['class'])))
