@@ -63,7 +63,7 @@ class SimpleViewerPrime2D(ProtocolViewer):
     The visualization tools follow the recommendations of Relion 1.3 tutorial:
     http://www2.mrc-lmb.cam.ac.uk/groups/scheres/relion13_tutorial.pdf
     """
-    _targets = [ProtPrime2D, ProtPrime3DInitial]
+    _targets = [ProtPrime2D]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
     
     _label = 'viewer simple'
