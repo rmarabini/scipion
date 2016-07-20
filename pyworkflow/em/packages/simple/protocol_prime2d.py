@@ -283,7 +283,7 @@ class ProtPrime2D(em.ProtClassify2D):
 
     def getLastIteration(self):
         lastIter = 1
-        while os.path.exists(self.getDocFile(lastIter)):
+        while os.path.exists(self.getClassesStack(lastIter)):
             lastIter += 1
         return lastIter - 1
 
