@@ -31,7 +31,7 @@ import pyworkflow.utils as pwutils
 import pyworkflow.em as em
 
 import simple
-from convert import rowToAlignment, writeSetOfParticles, writeSetOfClasses2D
+import convert
 
 
 class ProtPrime3DInitial(em.ProtInitialVolume):
@@ -95,7 +95,7 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
         if isinstance(self.inputSet.get(), em.SetOfClasses2D):
             self._insertFunctionStep('mapClassesToParticlesStep')
 
-        self._insertFunctionStep('createOutputStep')
+        self._insertFunctionStep('createOutputStep', pwutils.prettyTimestamp())
 
     #--------------------------- STEPS functions -------------------------------
 
@@ -107,12 +107,12 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
             inputSet.writeStack(stkFn)
         elif isinstance(inputSet, em.SetOfClasses2D):
             firstClass = inputSet.getFirstItem()
-            writeSetOfClasses2D(inputSet, stkFn,
+            convert.writeSetOfClasses2D(inputSet, stkFn,
                                 stackFn=self._getExtraPath('particles.mrcs'),
                                 docFn=self._getExtraPath('particles.txt'),
                                 ctfFn=self.getCtfFile())
         elif isinstance(inputSet, em.SetOfParticles):
-            writeSetOfParticles(inputSet, stkFn, docFn=None, ctfFn=None)
+            convert.writeSetOfParticles(inputSet, stkFn, docFn=None, ctfFn=None)
         else:
             raise Exception('Unexpected input type: %s' % type(inputSet))
 
@@ -162,11 +162,6 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
         self.runJob("simple_eo_recvol", args, cwd=self._getExtraPath())
 
     def mapClassesToParticlesStep(self):
-        # SIMPLE_MAP2PTCLS stk=<particles.ext> stk2=<selected_cavgs.ext>
-        # stk3=<orig_cavgs.ext> oritab=<PRIME 2D doc> [oritab2=<prime3D shc doc>]
-        # [comlindoc=<shc_clustering_nclsX.txt>] [doclist=<list of oritabs for the different states>]
-        # [deftab=<text file defocus values>] [outfile=<output parameter file{mapped_ptcls_params.txt}>]
-        # [nthr=<nr of OpenMP threads{1}>]
         root = self._getExtraPath('map2ptcls')
         pwutils.makePath(root)
         lastDoc = self.getDocFile(self.finalRoot).replace(self._getExtraPath(),
@@ -199,8 +194,26 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
 
         return args
 
-    def createOutputStep(self):
-        vol = em.Volume(self.getVolFile(self.finalRoot))
+    def createOutputStep(self, v):
+        inputSet = self.inputSet.get()
+
+        if isinstance(inputSet, em.SetOfClasses2D):
+            root = self._getExtraPath('map2ptcls')
+            # We should take the volume from the output of map2ptcls
+            volFile = os.path.join(root, 'recvol_state1.mrc')
+            docFile = os.path.join(root, 'mapped_ptcls_params.txt')
+            # Create an output particles with new angular assignment
+            partSet = self._createSetOfParticles()
+            partSet.copyInfo(inputSet.getImages())
+            partSet.setAlignmentProj()
+            convert.particlesFromClasses(inputSet, partSet, docFile)
+            self._defineOutputs(outputParticles=partSet)
+            self._defineSourceRelation(self.inputSet, partSet)
+
+        else:
+            volFile = self.getVolFile(self.finalRoot)
+
+        vol = em.Volume(volFile)
         vol.setSamplingRate(self.inputSet.get().getSamplingRate())
 
         self._defineOutputs(outputVol=vol)
