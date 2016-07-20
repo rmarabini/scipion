@@ -106,11 +106,10 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
         if isinstance(inputSet, em.SetOfAverages):
             inputSet.writeStack(stkFn)
         elif isinstance(inputSet, em.SetOfClasses2D):
-            firstClass = inputSet.getFirstItem()
             convert.writeSetOfClasses2D(inputSet, stkFn,
                                 stackFn=self._getExtraPath('particles.mrcs'),
                                 docFn=self._getExtraPath('particles.txt'),
-                                ctfFn=self.getCtfFile())
+                                ctfFn=self._getExtraPath(self.getCtfFile()))
         elif isinstance(inputSet, em.SetOfParticles):
             convert.writeSetOfParticles(inputSet, stkFn, docFn=None, ctfFn=None)
         else:
@@ -172,8 +171,11 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
         args += " outfile=%s" % mappedDoc
         ctfFn = self.getCtfFile()
         if ctfFn is not None:
-            args += " deftab=%s" % ctfFn
+            args += " deftab=../%s" % ctfFn
         self.runJob("simple_map2ptcls", args, cwd=root)
+
+        if not os.path.exists(os.path.join(root, mappedDoc)):
+            raise Exception("File '%s' was not produced!" % mappedDoc)
 
         # Now reconstruct mapped particles
         args = self._getCommonArgs(stk='particles.mrcs', prefix='../')
