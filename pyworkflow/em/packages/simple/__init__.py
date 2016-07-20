@@ -36,6 +36,7 @@ _environ = getEnviron()
 from protocol_prime import ProtPrime
 from protocol_prime_2d import ProtPrime2D
 from protocol_prime3D_initial import ProtPrime3DInitial
+from protocol_reconstruct import ProtSimpleReconstruct
 
 from wizard import SimpleParticleMaskRadiusWizard
 
