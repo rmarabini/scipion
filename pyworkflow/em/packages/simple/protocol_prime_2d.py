@@ -248,7 +248,7 @@ class ProtPrime2D(em.ProtClassify2D):
         return summary
     
     def _citations(self):
-        return ['Elmlund2013']
+        return ['Reboul2016']
     
     def _methods(self):
         return []

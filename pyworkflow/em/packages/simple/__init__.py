@@ -28,6 +28,7 @@
 from bibtex import _bibtex # Load bibtex dict with references
 
 _logo = "simple_logo.png"
+_references = ['Elmlund2012']
 
 from simple import *
 

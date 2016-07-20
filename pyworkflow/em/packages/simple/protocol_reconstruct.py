@@ -134,9 +134,6 @@ class ProtSimpleReconstruct(em.ProtReconstruct3D):
         summary = []
         return summary
     
-    def _citations(self):
-        return ['Elmlund2013']
-    
     def _methods(self):
         return []
 

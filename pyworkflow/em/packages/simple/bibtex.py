@@ -83,6 +83,25 @@ _bibtexStr = """
   Url                      = {http://dx.doi.org/10.1016/j.str.2013.07.002}
 }
 
+@article{Reboul2016,
+title = "A Stochastic Hill Climbing Approach for Simultaneous 2D Alignment and Clustering of Cryogenic Electron Microscopy Images ",
+journal = "Structure ",
+volume = "24",
+number = "6",
+pages = "988 - 996",
+year = "2016",
+note = "",
+issn = "0969-2126",
+doi = "http://dx.doi.org/10.1016/j.str.2016.04.006",
+url = "http://www.sciencedirect.com/science/article/pii/S0969212616300429",
+author = "Cyril F. Reboul and Frederic Bonnet and Dominika Elmlund and Hans Elmlund",
+keywords = "cryo-EM",
+keywords = "single-particle",
+keywords = "electron microscopy",
+keywords = "clustering",
+keywords = "alignment",
+keywords = "stochastic "
+}
 """
 
 from pyworkflow.utils import parseBibTex
