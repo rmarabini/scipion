@@ -70,6 +70,10 @@ class ProtPrime3DRefine(em.ProtRefine3D):
                       label='Split data in halves?',
                       help='')
 
+        form.addParam('extraParams', params.StringParam,
+                      label='Extra parameters',
+                      help='')
+
         form.addParallelSection(threads=4, mpi=0)
 
     #--------------------------- INSERT steps functions ------------------------
@@ -100,6 +104,8 @@ class ProtPrime3DRefine(em.ProtRefine3D):
         args += ' pgrp=%s' % self.symmetry.get().lower()
         args += ' oritab=particles.txt'
         args += ' eo=%s' % ('yes' if self.splitData else 'no')
+        if not self.extraParams.empty():
+            args += ' %s' % self.extraParams
 
         self.runJob("simple_prime3D", args, cwd=self._getExtraPath())
 

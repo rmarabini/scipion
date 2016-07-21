@@ -106,10 +106,12 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
         if isinstance(inputSet, em.SetOfAverages):
             inputSet.writeStack(stkFn)
         elif isinstance(inputSet, em.SetOfClasses2D):
+            ctfFile = self.getCtfFile()
+            ctfFn = self._getExtraPath(ctfFile) if ctfFile else None
             convert.writeSetOfClasses2D(inputSet, stkFn,
                                 stackFn=self._getExtraPath('particles.mrcs'),
                                 docFn=self._getExtraPath('particles.txt'),
-                                ctfFn=self._getExtraPath(self.getCtfFile()))
+                                ctfFn=ctfFn)
         elif isinstance(inputSet, em.SetOfParticles):
             convert.writeSetOfParticles(inputSet, stkFn, docFn=None, ctfFn=None)
         else:
