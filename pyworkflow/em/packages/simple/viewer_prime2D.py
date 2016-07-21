@@ -34,27 +34,10 @@ import pyworkflow.protocol.params as params
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 
 from protocol_prime2d import ProtPrime2D
-from protocol_prime3d_initial import ProtPrime3DInitial
+
 
 ITER_LAST = 0
 ITER_SELECTION = 1
-
-ANGDIST_2DPLOT = 0
-ANGDIST_CHIMERA = 1
-
-VOLUME_SLICES = 0
-VOLUME_CHIMERA = 1
-
-CHIMERADATAVIEW = 0
-
-CLASSES_ALL = 0
-CLASSES_SEL = 1
-
-FSC_CORRECTED = 0
-FSC_UNMASKEDMAPS = 1
-FSC_MASKEDMAPS = 2
-FSC_RANDOMIZED = 3
-FSC_ALL = 4
 
 
 class SimpleViewerPrime2D(ProtocolViewer):
@@ -95,7 +78,7 @@ Examples:
                            'right-click on the class and select "Open images".')
 
         form.addParam('showChanges', params.LabelParam, default=True,
-                      label='Plot ',
+                      label='Plot iteration values',
                       help='')
                                               
     def _getVisualizeDict(self):
