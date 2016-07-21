@@ -34,7 +34,6 @@ from simple import *
 
 _environ = getEnviron()
 
-from protocol_prime import ProtPrime
 from protocol_prime2d import ProtPrime2D
 from protocol_prime3d_initial import ProtPrime3DInitial
 from protocol_prime3d_refine import ProtPrime3DRefine
@@ -44,3 +43,5 @@ from wizard import SimpleParticleMaskRadiusWizard
 
 from viewer_prime2D import SimpleViewerPrime2D
 
+# Just for backward compatibility
+ProtPrime = ProtPrime3DInitial
