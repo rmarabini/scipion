@@ -55,7 +55,7 @@ class TestSimplePrime(TestWorkflow):
 
 
     def test_prime2D(self):
-        n = 4
+        n = 6
         protClassify = self.newProtocol(simple.ProtPrime2D,
                                         generateReferences=True,
                                         numberOfClasses=n,
@@ -67,7 +67,7 @@ class TestSimplePrime(TestWorkflow):
                                       "simple - prime 2D outputClasses")
 
         # Do some basic validations
-        self.assertEqual(classes.getSize(), n)
+        self.assertTrue(classes.getSize() > 0)
         firstClass = classes.getFirstItem()
         ih = ImageHandler()
         self.assertTrue(ih.existsLocation(firstClass.getRepresentative()))
@@ -87,9 +87,12 @@ class TestSimplePrime(TestWorkflow):
         protInitial = self.newProtocol(simple.ProtPrime3DInitial,
                                        objLabel='from classes',
                                        maskRadius=45,
-                                       symmetry='d6')
+                                       symmetry='d6',
+                                       extraParams='maxits=3')
         protInitial.inputSet.set(protClassify.outputClasses)
         self.launchProtocol(protInitial)
+
+
 
 
 
