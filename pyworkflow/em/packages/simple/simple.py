@@ -1,6 +1,7 @@
 # **************************************************************************
 # *
 # * Authors:     Carlos Oscar Sorzano (coss@cnb.csic.es)
+# *              J.M. de la Rosa Trevin (jmdelarosa@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -20,7 +21,7 @@
 # * 02111-1307  USA
 # *
 # *  All comments concerning this program package may be sent to the
-# *  e-mail address 'jmdelarosa@cnb.csic.es'
+# *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
 
@@ -30,17 +31,20 @@ from collections import OrderedDict
 from pyworkflow.utils import Environ
 
 
-
 def getEnviron():
     """ Create the needed environment for SIMPLE programs. """
     environ = Environ(os.environ)
-    SIMPLEBIN = os.path.join(os.environ['SIMPLE_HOME'], 'bin')
-    SIMPLEAPPS = os.path.join(os.environ['SIMPLE_HOME'], 'apps')
+    SIMPLE_HOME = os.environ['SIMPLE_HOME']
+    SIMPLE_BIN = os.path.join(SIMPLE_HOME, 'bin')
+    SIMPLE_APPS = os.path.join(SIMPLE_HOME, 'apps')
+    SIMPLE_SCRIPTS = os.path.join(SIMPLE_HOME, 'scripts')
+
     environ.update({
-                    'SIMPLEBIN': SIMPLEBIN,
-                    'SIMPLEPATH': os.environ['SIMPLE_HOME'],
-                    'SIMPLESYS': os.environ['SIMPLE_HOME'],
-                    'PATH': os.pathsep.join([SIMPLEBIN, SIMPLEAPPS])
+                    'SIMPLEBIN': SIMPLE_BIN,
+                    'SIMPLEPATH': SIMPLE_HOME,
+                    'SIMPLESYS': SIMPLE_HOME,
+                    'PATH': os.pathsep.join([SIMPLE_BIN, SIMPLE_APPS,
+                                             SIMPLE_SCRIPTS])
                     }, 
                    position=Environ.BEGIN)
     return environ
