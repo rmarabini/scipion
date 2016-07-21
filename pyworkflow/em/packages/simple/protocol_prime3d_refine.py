@@ -187,11 +187,14 @@ class ProtPrime3DRefine(em.ProtRefine3D):
 
     def _fillParticlesFromIter(self, partSet, iteration=None):
         """ Create the SetOfClasses2D from a given iteration. """
+        inputParticles = self.inputParticles.get()
+
         doc = simple.SimpleDocFile(self.getDocFile(iteration))
 
-        partSet.copyInfo(self.inputParticles.get())
+        partSet.copyInfo(inputParticles)
         partSet.setAlignmentProj()
-        partSet.copyItems(updateItemCallback=self._updateParticle,
+        partSet.copyItems(inputParticles,
+                          updateItemCallback=self._updateParticle,
                           itemDataIterator=doc.iterValues())
 
         doc.close()
