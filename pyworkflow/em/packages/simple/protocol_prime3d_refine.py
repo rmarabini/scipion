@@ -46,13 +46,8 @@ class ProtPrime3DRefine(em.ProtRefine3D):
 
         form.addParam('inputParticles', params.PointerParam,
                       pointerClass='SetOfParticles',
-                      pointerCondition='hasAlignment',
+                      pointerCondition='hasAlignmentProj',
                       label="Input particles", important=True,
-                      help='')
-
-        form.addParam('inputVolume', params.PointerParam,
-                      pointerClass='Volume',
-                      label='Input volume', important=True,
                       help='')
 
         form.addParam('maskRadius', params.IntParam, default=-1,
@@ -81,6 +76,7 @@ class ProtPrime3DRefine(em.ProtRefine3D):
     def _insertAllSteps(self):
         self._insertFunctionStep('convertInputStep',
                                  self.inputParticles.getUniqueId())
+        self._insertFunctionStep('reconstructStep')
         self._insertFunctionStep('refineStep')
         self._insertFunctionStep('createOutputStep')
 
@@ -92,17 +88,19 @@ class ProtPrime3DRefine(em.ProtRefine3D):
         ctfFn = stackFn.replace('.mrcs', '_ctf.txt')
         writeSetOfParticles(self.inputParticles.get(), stackFn, docFn, ctfFn,
                             alignType=em.ALIGN_PROJ, applyTransform=False)
-        em.ImageHandler().convert(self.inputVolume.get(),
-                                  self._getExtraPath('volume.mrc'))
+
+    def reconstructStep(self):
+        # Now reconstruct with the defined symmetry
+        args = self._getCommonArgs()
+
+        self.runJob("simple_eo_recvol", args, cwd=self._getExtraPath())
 
     def refineStep(self):
         # $ nohup distr_simple.pl prg=prime3D stk=groel-stk.spi
         # vol1=sym_recvol_state1msk.spi smpd=1.62 msk=60
         # eo=yes oritab=mapped_ptcls_params.txt npart=8
         args = self._getCommonArgs()
-        args += ' vol1=volume.mrc'
-        args += ' pgrp=%s' % self.symmetry.get().lower()
-        args += ' oritab=particles.txt'
+        args += ' vol1=recvol_state1.mrc'
         args += ' eo=%s' % ('yes' if self.splitData else 'no')
         if not self.extraParams.empty():
             args += ' %s' % self.extraParams
@@ -120,8 +118,10 @@ class ProtPrime3DRefine(em.ProtRefine3D):
         # should be there
         args = " stk=particles.mrcs"
         args += " smpd=%f" % inputParticles.getSamplingRate()
+        args += ' oritab=particles.txt'
         args += " msk=%d" % self.getMaskRadius()
         args += " lp=%d" % self.lowPassFilter
+        args += ' pgrp=%s' % self.symmetry.get().lower()
         args += " nthr=%d" % self.numberOfThreads
 
         return args
