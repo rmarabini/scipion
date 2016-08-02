@@ -99,10 +99,10 @@ class ProtProcessMovies(ProtPreprocessMicrographs):
         return deps
 
     def _getFirstJoinStepName(self):
-        # This function will be used for streamming, to check which is
+        # This function will be used for streaming, to check which is
         # the first function that need to wait for all micrographs
-        # to have completed, this can be overriden in subclasses
-        # (ej in Xmipp 'sortPSDStep')
+        # to have completed, this can be overwritten in subclasses
+        # (eg in Xmipp 'sortPSDStep')
         return 'createOutputStep'
 
     def _getFirstJoinStep(self):
@@ -149,11 +149,6 @@ class ProtProcessMovies(ProtPreprocessMicrographs):
             if outputStep is not None:
                 outputStep.addPrerequisites(*fDeps)
             self.updateSteps()
-        else:
-            if (outputStep is not None and self.streamClosed
-                and outputStep.isWaiting()):
-                outputStep.setStatus(STATUS_NEW)
-                self.updateSteps()
 
     def _checkNewOutput(self):
         pass # To be implemented in sub-classes

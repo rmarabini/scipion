@@ -21,7 +21,7 @@
 # * 02111-1307  USA
 # *
 # *  All comments concerning this program package may be sent to the
-# *  e-mail address 'jmdelarosa@cnb.csic.es'
+# *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
 
@@ -94,28 +94,32 @@ class TestMotioncorrAlingMovies(BaseTest):
                                                           type(shifts)))
 
     def test_qbeta(self):
-        prot = self.newProtocol(ProtMotionCorr)
+        prot = self.newProtocol(ProtMotionCorr,
+                                objLabel='qbeta - motioncorr test1')
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
 
         self._checkMicrographs(prot)
         self._checkAlignment(prot.outputMovies[1],
-                             (1,7), [0, 0, 0, 0], ([0.7135,0.2344,0.026,0.0,0.4375,0.8073],
-                                                   [-0.375,-0.4792,-0.2344,0.0,-0.1875, 0.2448]))
+                             (1,7), [0, 0, 0, 0], 
+                             ([2.5893, 0.7946, 0.2589, 0.0536,0.0, 0.4643, 0.8705],
+                              [0.2545, -0.3304, -0.4375, -0.2277, 0.0, -0.0804, 0.1339]))
 
     def test_cct(self):
         prot = self.newProtocol(ProtMotionCorr,
-                                           doSaveMovie=True)
+                                objLabel='cct - motioncorr test',
+                                doSaveMovie=True)
         prot.inputMovies.set(self.protImport2.outputMovies)
         self.launchProtocol(prot)
 
         self._checkMicrographs(prot)
         self._checkAlignment(prot.outputMovies[1],
-                             (1,7), [0, 0, 0, 0], ([0.0,0.0,0.0,0.0,0.0,0.0],
+                             (1, 7), [0, 0, 0, 0], ([0.0,0.0,0.0,0.0,0.0,0.0],
                                                    [0.0,0.0,0.0,0.0,0.0,0.0]))
     
     def test_qbeta_SkipCrop(self):
         prot = self.newProtocol(ProtMotionCorr,
+                                objLabel='qbeta - motioncorr test2',
                                 alignFrame0=2, alignFrameN=2,
                                 cropOffsetX=10, cropOffsetY=10)
         prot.inputMovies.set(self.protImport1.outputMovies)
@@ -123,6 +127,6 @@ class TestMotioncorrAlingMovies(BaseTest):
 
         self._checkMicrographs(prot)
         self._checkAlignment(prot.outputMovies[1],
-                             (3,5), [10, 10, 0, 0], ([-0.125, 0.0, 0.4375],
-                                                     [-0.2708, 0.0, -0.3854]))
+                             (3,5), [10, 10, 0, 0], ([0.2604, -0.1042, 0.0],
+                                                     [-0.3958, -0.2604, 0.0]))
 
