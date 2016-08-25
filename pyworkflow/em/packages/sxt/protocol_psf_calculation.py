@@ -141,7 +141,7 @@ class ProtPsfCalculation(Protocol):
         
         from xpytools.mtf2psf import MTF2PSFClass
         mtf2psfObj = MTF2PSFClass()
-        psfdict = mtf2psfObj.mtf2psf(mtf, fx, dx, fov=400, fc=-1) 
+        psfdict = mtf2psfObj.mtf2psf(mtf, fx, 5.0, fov=400, fc=-1) 
         ####### fov and fc should be an input value  or a fixed value like this in the main code??
         psfArray = psfdict['psf']
         print "PSF dimension is:\n" , np.shape(psfArray)
@@ -154,17 +154,6 @@ class ProtPsfCalculation(Protocol):
             outputImg.setData(psfArray[:, :, j])
             i += 1
             outputImg.write((i,fnOutPsf))
-        
-   
-        #im = plt.imshow(psfArray[:,:,0], cmap="hot")
-        #plt.colorbar(im, orientation='horizontal')
-        #plt.show()
-        
-    #psfimg = psfarray[:,:,0]
-    #print(np.shape(psfimg))
-    #im = plt.imshow(psfimg, cmap="hot")
-    #plt.colorbar(im, orientation='horizontal')
-    #plt.show()
     
     
     
