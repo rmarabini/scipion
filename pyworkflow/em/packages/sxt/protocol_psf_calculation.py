@@ -130,7 +130,7 @@ class ProtPsfCalculation(Protocol):
         imgSingle = imgSS[imgNumber]
         from xpytools.getMTFfromSiemensStar import MTFfromSiemensStar
         MTFObj = MTFfromSiemensStar()
-        mtfOut = MTFObj.getMTFfromSiemensStar(imgSingle, dx, nRef, orders, ringPos)
+        mtfOut = MTFObj.getMTFfromSiemensStar(imgSS, dx, nRef, orders, ringPos)
         ######################## xdim = 1024; is it fixed or may cheange???? what happen if we crop the input tilt series???!!!!
         ### is it necessary to creat a Metadata for mtf dic in extra path?????
         fx = mtfOut['fx']
