@@ -28,6 +28,7 @@
 
 import pyworkflow.protocol.params as params
 from pyworkflow.em import Protocol
+#from pyworkflow.em.protocol import ProtProcessParticles
 from os.path import basename
 from pyworkflow.utils.path import removeExt
 from h5py import File
@@ -35,9 +36,10 @@ from pyworkflow.em import ImageHandler
 import xmipp
 from pyworkflow.utils import getFloatListFromValues
 import numpy as np
-import matplotlib.pyplot as plt
+
 
 class ProtPsfCalculation(Protocol):
+#class ProtPsfCalculation(ProtProcessParticles):
     """    
     This protocol is aimed to calculate PSF from input Siemens star pattern.        
     """
@@ -86,7 +88,8 @@ class ProtPsfCalculation(Protocol):
         ringPos = getFloatListFromValues(self.ringPosition.get())
                
         self._insertFunctionStep('validateSiemensStar', inputSS)   
-        self._insertFunctionStep('getPsfFromSiemensStar', inputSS, nRef, orders, ringPos, fnOutPsf)             
+        self._insertFunctionStep('getPsfFromSiemensStar', inputSS, nRef, orders, ringPos, fnOutPsf)
+        self._insertFunctionStep('createOutputStep', fnOutPsf)            
     #--------------------------- STEPS functions --------------------------------------------
     
     def validateSiemensStar(self, inputSS):
@@ -130,9 +133,7 @@ class ProtPsfCalculation(Protocol):
         imgSingle = imgSS[imgNumber]
         from xpytools.getMTFfromSiemensStar import MTFfromSiemensStar
         MTFObj = MTFfromSiemensStar()
-        mtfOut = MTFObj.getMTFfromSiemensStar(imgSS, dx, nRef, orders, ringPos)
-        ######################## xdim = 1024; is it fixed or may cheange???? what happen if we crop the input tilt series???!!!!
-        ### is it necessary to creat a Metadata for mtf dic in extra path?????
+        mtfOut = MTFObj.getMTFfromSiemensStar(imgSingle, dx, nRef, orders, ringPos)        
         fx = mtfOut['fx']
         #mtfB = mtfOut['mtfb']
         #mtfRef = mtfOut['mtfref']
@@ -142,7 +143,6 @@ class ProtPsfCalculation(Protocol):
         from xpytools.mtf2psf import MTF2PSFClass
         mtf2psfObj = MTF2PSFClass()
         psfdict = mtf2psfObj.mtf2psf(mtf, fx, 5.0, fov=400, fc=-1) 
-        ####### fov and fc should be an input value  or a fixed value like this in the main code??
         psfArray = psfdict['psf']
         print "PSF dimension is:\n" , np.shape(psfArray)
         ####check kardane out put
@@ -157,7 +157,14 @@ class ProtPsfCalculation(Protocol):
     
     
     
-    #def gatherResultsStep(self, ...):         
+    def createOutputStep(self, fnOutPsf): 
+        PsfSet = self._createSetOfImages() 
+        
+        
+        PsfSet.copyItems(fnOutPsf)
+        
+        self._defineOutputs(outputImages=PsfSet)
+              
     #--------------------------- INFO functions -------------------------------------------- 
     
 #    def _summary(self):
