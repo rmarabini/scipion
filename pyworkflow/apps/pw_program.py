@@ -29,7 +29,7 @@ Launch main project window
 """
 
 import sys
-import pyworkflow.utils as pwutils
+from pyworkflow.em import runProgram
 
 
 
@@ -37,6 +37,8 @@ if __name__ == '__main__':
 
     program = sys.argv[1]
     params = ' '.join('"%s"' % x for x in sys.argv[2:])
+
+    runProgram(program, params)
     
     env = None
     
@@ -57,5 +59,5 @@ if __name__ == '__main__':
         import pyworkflow.em.packages.simple as simple
         env = simple.getEnviron()
     
-    pwutils.runJob(None, program, params, env=env)
+    runProgram(None, program, params, env=env)
          

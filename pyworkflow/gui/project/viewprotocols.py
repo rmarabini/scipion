@@ -148,6 +148,7 @@ def populateTree(self, tree, treeItems, prefix, obj, subclassedDict, level=0):
 
 class RunsTreeProvider(pwgui.tree.ProjectRunsTreeProvider):
     """Provide runs info to populate tree"""
+
     def __init__(self, project, actionFunc):
         pwgui.tree.ProjectRunsTreeProvider.__init__(self, project)
         self.actionFunc = actionFunc
@@ -1016,18 +1017,13 @@ class ProtocolsView(tk.Frame):
             if node.run:
 
                 # Get the latest activity timestamp
-                ts = node.run.getObjCreation()
-
-                # This format comes from the database....tricky
-                ts = dt.datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                ts = node.run.getObjCreation().datetime(fs=False)
 
                 if node.run.initTime.hasValue():
-                    f = "%Y-%m-%d %H:%M:%S.%f"
-                    ts = dt.datetime.strptime(node.run.initTime.get(), f)
+                    ts = node.run.initTime.datetime()
 
                 if node.run.endTime.hasValue():
-                    f = "%Y-%m-%d %H:%M:%S.%f"
-                    ts = dt.datetime.strptime(node.run.endTime.get(), f)
+                    ts = node.run.endTime.datetime()
 
                 age = dt.datetime.now() - ts
 
