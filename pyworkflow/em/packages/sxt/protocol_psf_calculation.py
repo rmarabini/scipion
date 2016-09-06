@@ -133,7 +133,7 @@ class ProtPsfCalculation(Protocol):
         imgSingle = imgSS[imgNumber]
         from xpytools.getMTFfromSiemensStar import MTFfromSiemensStar
         MTFObj = MTFfromSiemensStar()
-        mtfOut = MTFObj.getMTFfromSiemensStar(imgSingle, dx, nRef, orders, ringPos)        
+        mtfOut = MTFObj.getMTFfromSiemensStar(imgSS, dx, nRef, orders, ringPos)        
         fx = mtfOut['fx']
         #mtfB = mtfOut['mtfb']
         #mtfRef = mtfOut['mtfref']
