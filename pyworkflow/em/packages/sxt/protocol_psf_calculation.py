@@ -32,10 +32,11 @@ from pyworkflow.em import Protocol
 from os.path import basename
 from pyworkflow.utils.path import removeExt
 from h5py import File
-from pyworkflow.em import ImageHandler
+#from pyworkflow.em import ImageHandler
 import xmipp
 from pyworkflow.utils import getFloatListFromValues
 import numpy as np
+import pyworkflow.em as em
 
 
 class ProtPsfCalculation(Protocol):
@@ -99,7 +100,7 @@ class ProtPsfCalculation(Protocol):
         fhHdf5 = File(inputSS, 'r')
         
         imgArray = fhHdf5 ["NXtomo/data/data"][()]                                 
-        ih = ImageHandler()
+        ih = em.ImageHandler()
         outputImg = ih.createImage()
         i = 0
         for j in range(np.shape(imgArray)[0]):
@@ -130,7 +131,7 @@ class ProtPsfCalculation(Protocol):
         print "Resolution of Siemens star image is:\n" , imgSsResolution [0]        
         dx = imgSsResolution [0]
         
-        imgSingle = imgSS[imgNumber]
+        #imgSingle = imgSS[imgNumber]
         from xpytools.getMTFfromSiemensStar import MTFfromSiemensStar
         MTFObj = MTFfromSiemensStar()
         mtfOut = MTFObj.getMTFfromSiemensStar(imgSS, dx, nRef, orders, ringPos)        
@@ -145,25 +146,24 @@ class ProtPsfCalculation(Protocol):
         psfdict = mtf2psfObj.mtf2psf(mtf, fx, 5.0, fov=400, fc=-1) 
         psfArray = psfdict['psf']
         print "PSF dimension is:\n" , np.shape(psfArray)
-        ####check kardane out put
         
-        ih = ImageHandler()
+        ih = em.ImageHandler()
         outputImg = ih.createImage()
+        #outputImg = xmipp.Image()
+
         i = 0
-        for j in range(np.shape(psfArray)[2]):
-            outputImg.setData(psfArray[:, :, j])
+        for j in range(np.shape(psfArray)[0]):
+            outputImg.setData(psfArray[j, :, :])
             i += 1
             outputImg.write((i,fnOutPsf))
     
     
-    
     def createOutputStep(self, fnOutPsf): 
-        PsfSet = self._createSetOfImages() 
         
-        
-        PsfSet.copyItems(fnOutPsf)
-        
-        self._defineOutputs(outputImages=PsfSet)
+        outPsf = em.Volume()
+        outPsf.setLocation(fnOutPsf)
+        outPsf.setSamplingRate(50.0)
+        self._defineOutputs(outputPSF=outPsf)
               
     #--------------------------- INFO functions -------------------------------------------- 
     
