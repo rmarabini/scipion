@@ -28,11 +28,9 @@
 
 import pyworkflow.protocol.params as params
 from pyworkflow.em import Protocol
-#from pyworkflow.em.protocol import ProtProcessParticles
 from os.path import basename
 from pyworkflow.utils.path import removeExt
 from h5py import File
-#from pyworkflow.em import ImageHandler
 import xmipp
 from pyworkflow.utils import getFloatListFromValues
 import numpy as np
@@ -40,7 +38,7 @@ import pyworkflow.em as em
 
 
 class ProtPsfCalculation(Protocol):
-#class ProtPsfCalculation(ProtProcessParticles):
+
     """    
     This protocol is aimed to calculate PSF from input Siemens star pattern.        
     """
@@ -162,29 +160,22 @@ class ProtPsfCalculation(Protocol):
         
         outPsf = em.Volume()
         outPsf.setLocation(fnOutPsf)
-        outPsf.setSamplingRate(50.0)
+        #outPsf.setSamplingRate(50.0)
         self._defineOutputs(outputPSF=outPsf)
               
     #--------------------------- INFO functions -------------------------------------------- 
     
 #    def _summary(self):
-#        """ Should be overriden in subclasses to 
-#        return summary message for NORMAL EXECUTION. 
-#        """
-#        bayan shavad ke agar hanooz khorooji amade nist, baste be voroodi va size o gheure momken ast tool bekeshe      
-#        msg = []
-#        msg.append()        
-#        msg.append()
-#        return msg
+#        summary = []
+#        summary.append[]        
+#        summary.append[]
+#        return summary
 #    
 #    def _methods(self):
 #        messages = []
 #        messages.append('Joton')
 #        return messages
-#    
-#    def _citations(self):
-#        return ['Joton']
-#    
+
     def _validate(self):
         errors = []
         hdf5 = self.inputSiemensStar.get().endswith('hdf5')
