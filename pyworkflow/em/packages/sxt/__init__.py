@@ -34,6 +34,7 @@ from data import *
 
 from protocol_import import ProtImportTiltSeries
 from protocol_psf_calculation import ProtPsfCalculation
+from protocol_deconvolution import ProtDeconvolution
 
 from viewer_import import ProtImportTiltSeriesViewer
 
