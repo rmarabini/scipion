@@ -28,13 +28,16 @@
 
 import pyworkflow.protocol.params as params
 from pyworkflow.em import Protocol
+from pyworkflow.em.packages.xmipp3.convert import writeSetOfImages, imageToRow
+#from em.packages.xmipp3.convert import imageToRow
+
 #from os.path import basename
 #from pyworkflow.utils.path import removeExt
 #from h5py import File
 #import xmipp
 #from pyworkflow.utils import getFloatListFromValues
-#import numpy as np
-#import pyworkflow.em as em
+import numpy as np
+import pyworkflow.em as em
 
 
 class ProtDeconvolution(Protocol):
@@ -50,14 +53,14 @@ class ProtDeconvolution(Protocol):
         form.addSection(label='Input')
         form.addParam('inputTiltSeries', params.PointerParam, 
                       pointerClass='TiltSeries', 
-                      label="------",  
-                      help="----")
-        form.addParam('psf', params.PointerParam, 
-                      pointerClass='?????',
-                      label="---",
-                      help="----")
+                      label="Input tilt series",  
+                      help="Select input tilt series from the project")
+        form.addParam('inputPsf', params.PointerParam, 
+                      pointerClass='Volume',
+                      label="Input 3D PSF",
+                      help="Select input PSF based on the imaging date")
         form.addParam('kw', params.FloatParam, 
-                      label='---',
+                      label='Inverse SNR',
                       help="----")
         
         form.addParallelSection(threads=1, mpi=2)
@@ -66,14 +69,49 @@ class ProtDeconvolution(Protocol):
     def _insertAllSteps(self):         
         
                
-        #self._insertFunctionStep('validateSiemensStar', inputSS)   
+        self._insertFunctionStep('deconvolutionStep')   
         #self._insertFunctionStep('getPsfFromSiemensStar', inputSS, nRef, orders, ringPos, fnOutPsf)
         #self._insertFunctionStep('createOutputStep', fnOutPsf)            
     #--------------------------- STEPS functions --------------------------------------------
     
-    #def validateSiemensStar(self, inputSS):
+    def deconvolutionStep(self):
          
-    
+        
+        inputTiltSeries = self.inputTiltSeries.get()
+        inputPSF = self.inputPsf.get()
+        
+        ih = em.ImageHandler()
+        inputTiltSeriesArray = ih.read(inputTiltSeries).getData()
+        inputPsfArray = ih.read(inputPSF).getData()
+        
+        
+        print "inputTiltSeriesArray dimension = ", np.shape(inputTiltSeriesArray)
+        print "inputPsfArray dimension = ", np.shape(inputPsfArray)
+        
+        #numrows = infoshape[0][1]
+        #numcols = infoshape[0][2]
+        #offset = [num_img, 0, 0]
+        #img_pixels = [1, numrows, numcols]
+        #img_slab = input_nexusfile.getslab(offset, img_pixels)
+        #img = np.zeros((numrows, numcols))
+        #img[:,:] = img_slab[0,:,:]
+
+        tiltSeriesPixelSize = self.inputTiltSeries.get().getSamplingRate() / 10
+        psfPixelSize = self.inputPsf.get().getSamplingRate() / 10
+        print "PSF pixelSize(nm) = ", psfPixelSize
+        print "TiltSeries pixelSize(nm) = ", tiltSeriesPixelSize
+        
+        
+        kw = self.kw.get()
+        
+        from xpytools.mtf_deconv_wiener import MTFDeconvWiener
+        deconvolutionObj = MTFDeconvWiener()
+        deconvTiltSeriesArray = deconvolutionObj.mtf_deconv_wiener(inputTiltSeriesArray, tiltSeriesPixelSize, inputPsfArray, psfPixelSize, kw, pad=20, fc=-1)
+        
+        
+        print "deconvTiltSeriesArray dimension = ", np.shape(deconvTiltSeriesArray)
+        
+        
     #def getPsfFromSiemensStar(self, inputSS, nRef, orders, ringPos, fnOutPsf):        
         
     

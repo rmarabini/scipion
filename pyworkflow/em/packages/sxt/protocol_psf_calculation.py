@@ -35,6 +35,7 @@ import xmipp
 from pyworkflow.utils import getFloatListFromValues
 import numpy as np
 import pyworkflow.em as em
+import pickle
 
 
 class ProtPsfCalculation(Protocol):
@@ -129,26 +130,26 @@ class ProtPsfCalculation(Protocol):
         print "Resolution of Siemens star image is:\n" , imgSsResolution [0]        
         dx = imgSsResolution [0]
         
-        #imgSingle = imgSS[imgNumber]
+        imgSingle = imgSS[imgNumber]
         from xpytools.getMTFfromSiemensStar import MTFfromSiemensStar
         MTFObj = MTFfromSiemensStar()
-        mtfOut = MTFObj.getMTFfromSiemensStar(imgSS, dx, nRef, orders, ringPos)        
+        mtfOut = MTFObj.getMTFfromSiemensStar(imgSingle, dx, nRef, orders, ringPos)  #################### nahayatan bayad   imgSS   bashad    
+        pickle.dump(mtfOut, open(self._defineMtfDicName(), "wb"))
         fx = mtfOut['fx']
-        #mtfB = mtfOut['mtfb']
-        #mtfRef = mtfOut['mtfref']
         mtf = mtfOut['mtf']
         print "MTF dimension is:\n" , np.shape(mtf)
         
         from xpytools.mtf2psf import MTF2PSFClass
         mtf2psfObj = MTF2PSFClass()
         psfdict = mtf2psfObj.mtf2psf(mtf, fx, 5.0, fov=400, fc=-1) 
+        pickle.dump(psfdict, open(self._definePsfDicName(), "wb"))        
         psfArray = psfdict['psf']
+        psfPixelSize = psfdict['dx']
         print "PSF dimension is:\n" , np.shape(psfArray)
+        print "PSF pixelSize(nm) is:\n" , psfPixelSize
         
         ih = em.ImageHandler()
-        outputImg = ih.createImage()
-        #outputImg = xmipp.Image()
-
+        outputImg = ih.createImage()        
         i = 0
         for j in range(np.shape(psfArray)[0]):
             outputImg.setData(psfArray[j, :, :])
@@ -157,10 +158,11 @@ class ProtPsfCalculation(Protocol):
     
     
     def createOutputStep(self, fnOutPsf): 
-        
+        psfdict = pickle.load(open(self._definePsfDicName(), "rb"))
+        psfPixelSize = psfdict['dx']
         outPsf = em.Volume()
         outPsf.setLocation(fnOutPsf)
-        #outPsf.setSamplingRate(50.0)
+        outPsf.setSamplingRate(psfPixelSize * 10)
         self._defineOutputs(outputPSF=outPsf)
               
     #--------------------------- INFO functions -------------------------------------------- 
@@ -189,3 +191,7 @@ class ProtPsfCalculation(Protocol):
     
     def _defineOutputName(self):
         return self._getExtraPath('psf.mrc')
+    def _defineMtfDicName(self):
+        return self._getExtraPath('mtfDic.p')
+    def _definePsfDicName(self):
+        return self._getExtraPath('psfDic.p')
