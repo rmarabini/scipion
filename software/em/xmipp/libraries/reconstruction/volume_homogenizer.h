@@ -32,18 +32,28 @@
 
 
 
-/**@defgroup Volume Homogeneitator
+/**@defgroup Volume Homogenizer
    @ingroup ReconsLibrary */
 //@{
-class ProgVolumeHomogeneitator: public XmippProgram
+class ProgVolumeHomogenizer: public XmippProgram
 {
 public:
     FileName fnVol, fnRef, fnSetOfImgIn, fnSetOfImgOut;
+
     FileName fnTestOut1, fnTestOut2, fnTestOut3;
+
     int winSize;
+
     double cutFreq;
 
+    MetaData mdPartialParticles;
+
+    size_t rank, Nprocessors;
+
 public:
+
+    ProgVolumeHomogenizer();
+
     void readParams();
 
     void defineParams();
@@ -59,7 +69,15 @@ public:
 
     //Method to get two same volume but from different class with different conformation and correcting all images of one of the volume with respect
     //to the another one as a reference, using optical flow algorithm. This is to later merging the corrected images
-    //to the images of the reference map to reconstruct a volume with better resolution
+    //to the images of the reference map to reconstruct a volume with improved resolution
     void run();
+
+private:
+
+    /// Gather alignment
+    virtual void gatherResults() {}
+
+    /// Synchronize with other processors
+    virtual void synchronize() {}
 };
 //@}

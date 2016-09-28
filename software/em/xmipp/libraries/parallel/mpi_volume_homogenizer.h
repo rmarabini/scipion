@@ -1,6 +1,6 @@
 /***************************************************************************
+ * Authors:     Mohsen Kazemi (mkazemi@cnb.csic.es)
  *
- * Authors: Mohsen Kazemi (mkazemi@cnb.csic.es)
  *
  * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
  *
@@ -23,11 +23,33 @@
  *  e-mail address 'xmipp@cnb.csic.es'
  ***************************************************************************/
 
-#include <reconstruction/volume_homogeneitator.h>
+#include <reconstruction/volume_homogenizer.h>
+#include "parallel/xmipp_mpi.h"
 
-int main(int argc, char **argv)
+/**@defgroup MpiProgVolumeHomogenizer (MPI)
+   @ingroup ParallelLibrary */
+//@{
+
+/** Validation parameters. */
+class MpiProgVolumeHomogenizer: public ProgVolumeHomogenizer
 {
-    ProgVolumeHomogeneitator prm;
-    prm.read(argc,argv);
-    return prm.tryRun();
-}
+public:
+	MpiNode *node;
+public:
+	// Empty constructor
+	MpiProgVolumeHomogenizer();
+
+	// Destructor
+	~MpiProgVolumeHomogenizer();
+
+	// Redefine how to read the command line
+	void read(int argc, char** argv);
+
+	// Redefine how to synchronize
+	void synchronize();
+
+	// Redefine how to gather the alignment
+    void gatherResults();
+};
+//@}
+
