@@ -42,4 +42,11 @@ def getEnviron(xmippFirst=True):
 def runXmippProgram(program, args=""):
     """ Internal shortcut function to launch a Xmipp program. """
     runJob(None, program, args, env=getEnviron())
-
+    
+def getXmippPath(*paths):
+    '''Return the path the the Xmipp installation folder
+    if a subfolder is provided, will be concatenated to the path'''
+    if os.environ.has_key('XMIPP_HOME'):
+        return os.path.join(os.environ['XMIPP_HOME'], *paths)  
+    else:
+        raise Exception('XMIPP_HOME environment variable not set')
