@@ -1,8 +1,7 @@
 # **************************************************************************
 # *
-# * Authors:     Mohsen Kazemi  (mkazemi@cnb.csic.es)
-# *              
-# *
+# * Authors:     Mohsen Kazemi (mkazemi@cnb.csic.es)
+# *            
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
 # * This program is free software; you can redistribute it and/or modify
@@ -25,20 +24,22 @@
 # *
 # **************************************************************************
 
-from bibtex import _bibtex # Load bibtex dict with references
+import os
+from os.path import join
+from pyworkflow.utils import Environ, runJob
 
-_logo = "xmipp_logo.png"
-_references = ['J.Oton2015', 'J.Oton2016']
 
-from data import *
-from sxt import *
+def getEnviron(xmippFirst=True):
+    """ Create the needed environment for Xmipp programs. """
+    environ = Environ(os.environ)
+    pos = Environ.BEGIN if xmippFirst else Environ.END
+    environ.update({
+            'PATH': join(os.environ['XMIPP_HOME'], 'bin'),
+            'LD_LIBRARY_PATH': join(os.environ['XMIPP_HOME'], 'lib')
+            }, position=pos)
+    return environ
 
-from protocol_import import ProtImportTiltSeries
-from protocol_psf_calculation import ProtPsfCalculation
-from protocol_deconvolution import ProtDeconvolution
-
-from viewer_import import ProtImportTiltSeriesViewer
-
-_environ = getEnviron()
-
+def runXmippProgram(program, args=""):
+    """ Internal shortcut function to launch a Xmipp program. """
+    runJob(None, program, args, env=getEnviron())
 
