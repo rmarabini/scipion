@@ -133,7 +133,7 @@ class ProtPsfCalculation(Protocol):
         imgSingle = imgSS[imgNumber]
         from xpytools.getMTFfromSiemensStar import MTFfromSiemensStar
         MTFObj = MTFfromSiemensStar()
-        mtfOut = MTFObj.getMTFfromSiemensStar(imgSingle, dx, nRef, orders, ringPos)  #################### nahayatan bayad   imgSS   bashad    
+        mtfOut = MTFObj.getMTFfromSiemensStar(imgSS, dx, nRef, orders, ringPos)  
         pickle.dump(mtfOut, open(self._defineMtfDicName(), "wb"))
         fx = mtfOut['fx']
         mtf = mtfOut['mtf']
