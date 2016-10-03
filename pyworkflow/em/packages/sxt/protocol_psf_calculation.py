@@ -158,10 +158,9 @@ class ProtPsfCalculation(Protocol):
         for j in range(np.shape(psfArray)[0]):
             outputImg.setData(psfArray[j, :, :])
             i += 1
-            outputImg.write((i,fnOutPsf))
-    
+            outputImg.write((i,fnOutPsf))    
         
-    def createOutputStep(self, fnOutPsf): 
+    def createOutputStep(self, fnOutPsf): #DoF inja hesab shavad .... 
         psfdict = pickle.load(open(self._definePsfDicName(), "rb"))
         psfPixelSizeX = psfdict['dx']
         psfPixelSizeZ = self.pixelSizeZ.get()
