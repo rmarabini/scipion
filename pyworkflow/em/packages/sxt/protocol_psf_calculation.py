@@ -75,7 +75,11 @@ class ProtPsfCalculation(Protocol):
                       help="Center radius in nm of the void rings of "
                            "Siemens star pattern to be removed from the "
                            "calculation. Default values are set to match "
-                           "Xradia manufactured SS pattern") 
+                           "Xradia manufactured SS pattern")
+        form.addParam('pixelSizeX', params.FloatParam, default=5.0,
+                      label="PSF pixel size along Z axis (nm)")
+        form.addParam('pixelSizeZ', params.FloatParam, default=150,
+                      label="PSF pixel size along Z axis (nm)") 
                       
         form.addParallelSection(threads=1, mpi=2)
     #--------------------------- INSERT steps functions --------------------------------------------
@@ -141,13 +145,13 @@ class ProtPsfCalculation(Protocol):
         
         from xpytools.mtf2psf import MTF2PSFClass
         mtf2psfObj = MTF2PSFClass()
-        psfdict = mtf2psfObj.mtf2psf(mtf, fx, 5.0, fov=400, fc=-1) 
+        psfdict = mtf2psfObj.mtf2psf(mtf, fx, self.pixelSizeX.get(), fov=400, fc=-1) 
         pickle.dump(psfdict, open(self._definePsfDicName(), "wb"))        
         psfArray = psfdict['psf']
         psfPixelSize = psfdict['dx']
         print "PSF dimension is:\n" , np.shape(psfArray)
         print "PSF pixelSize(nm) is:\n" , psfPixelSize
-        
+        #########################################DoF mohasebe va dar jaie zakhire shavad.....shayad dar yek text va badan pak shavad
         ih = em.ImageHandler()
         outputImg = ih.createImage()        
         i = 0
@@ -156,13 +160,16 @@ class ProtPsfCalculation(Protocol):
             i += 1
             outputImg.write((i,fnOutPsf))
     
-    
+        
     def createOutputStep(self, fnOutPsf): 
         psfdict = pickle.load(open(self._definePsfDicName(), "rb"))
-        psfPixelSize = psfdict['dx']
+        psfPixelSizeX = psfdict['dx']
+        psfPixelSizeZ = self.pixelSizeZ.get()
         outPsf = em.Volume()
         outPsf.setLocation(fnOutPsf)
-        outPsf.setSamplingRate(psfPixelSize * 10)
+        outPsf.setSamplingRate(psfPixelSizeX * 10)
+        #outPsf.setZpixelSize(psfPixelSizeZ)
+        #outPsf.setDoF(psfDof)       
         self._defineOutputs(outputPSF=outPsf)
               
     #--------------------------- INFO functions -------------------------------------------- 

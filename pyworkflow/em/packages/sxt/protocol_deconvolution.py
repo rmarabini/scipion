@@ -97,16 +97,48 @@ class ProtDeconvolution(Protocol):
         #img[:,:] = img_slab[0,:,:]
 
         tiltSeriesPixelSize = self.inputTiltSeries.get().getSamplingRate() / 10
-        psfPixelSize = self.inputPsf.get().getSamplingRate() / 10
-        print "PSF pixelSize(nm) = ", psfPixelSize
+        psfPixelSizeX = self.inputPsf.get().getSamplingRate() / 10
+        #psfPixelSizeZ = self.inputPsf.get().getZpixelSize()
+        psfPixelSizeZ = 150
+        
+        print "PSF pixelSizeX(nm) = ", psfPixelSizeX
+        print "PSF pixelSizeZ(nm) = ", psfPixelSizeZ
         print "TiltSeries pixelSize(nm) = ", tiltSeriesPixelSize
+        
+        xCenter = np.floor(np.shape(inputPsfArray)[1]/2)
+        centerValues = inputPsfArray[:, xCenter, xCenter]
+        thr = 0.3
+        thrv = max(centerValues) * thr
+        
+        
+        mp = np.where(centerValues > thrv);
+        
+        zm = mp[0][np.floor((mp[0][0] - mp[0][-1])/2)]
+        
+        
+        
+        zN = np.floor(np.shape(inputPsfArray)[0]/psfPixelSizeZ/2);
+        
+        zPos = []
+        for i in range(2*int(zN)+1):
+            zPos.append(int(zm-zN+i))
+        
+        print "PSF image indices to calculate their mean are: ", zPos
+        
+        
+        
+        psfArrayToDeconv = np.mean(inputPsfArray[zPos, :, :], axis=0)
+        
+        
+
+        
         
         
         kw = self.kw.get()
         
         from xpytools.mtf_deconv_wiener import MTFDeconvWiener
         deconvolutionObj = MTFDeconvWiener()
-        deconvTiltSeriesArray = deconvolutionObj.mtf_deconv_wiener(inputTiltSeriesArray, tiltSeriesPixelSize, inputPsfArray, psfPixelSize, kw, pad=20, fc=-1)
+        deconvTiltSeriesArray = deconvolutionObj.mtf_deconv_wiener(inputTiltSeriesArray, tiltSeriesPixelSize, psfArrayToDeconv, psfPixelSizeX, kw, pad=20, fc=-1)
         
         
         print "deconvTiltSeriesArray dimension = ", np.shape(deconvTiltSeriesArray)
