@@ -91,7 +91,7 @@ class ProtDeconvolution(Protocol):
         #finding indices based on centerValues curne and thrv      
         #mp: indices array above threshold, zm: central index
         #zN: indices range that will use to select psf images to get their average
-        mp = np.where(centerValues > thrv);
+        mp = np.where(centerValues > thrv)
         zm = mp[0][np.floor((mp[0][0] - mp[0][-1])/2)]
         zN = np.floor(np.shape(inputPsfArray)[0]/psfPixelSizeZ/2);
         zPos = []
@@ -129,31 +129,51 @@ class ProtDeconvolution(Protocol):
         tiltSeries.setSamplingRate(inputTiltSeries.getSamplingRate())
         angles = inputTiltSeries.getAngles()        
         tiltSeries.setAngles(angles)        
-        tiltSeries.setSize(inputTiltSeries.getSize())            
+        tiltSeries.setSize(inputTiltSeries.getSize())     
         self._defineOutputs(outputTiltSeries=tiltSeries)        
     #--------------------------- INFO functions -------------------------------------------- 
     
-#    def _summary(self):
-#        summary = []
-#        summary.append[]        
-#        summary.append[]
-#        return summary
-#    
-#    def _methods(self):
-#        messages = []
-#        messages.append('Joton')
-#        return messages
-
-#    def _validate(self):
-#        errors = []
-#        hdf5 = self.inputSiemensStar.get().endswith('hdf5')
-#        if self.inputSiemensStar.get():
-#            if not hdf5:
-#                errors.append ("Expected hdf5 files for importing!!!") 
-#        else:
-#            errors.append("The path can not be empty!!!")      
-#        return errors              
+    def _summary(self):
+        summary = []
+        outputSet = self._getOutputSetTiltSeries()
+        if outputSet is None:
+            summary.append("Output TiltSeries is not ready yet. Deconvolution "
+                           "process is in progress.") 
+        if  outputSet is not None:  
+            summary.append("*%d* "% outputSet.getSize() +
+                           "images related to the input TiltSeries "
+                           "deconvolved with input 3D PSF.")             
+            summary.append("Sampling rate : *%0.2f* A/px" % (
+                            outputSet.getSamplingRate()))
+            summary.append("*Imaging info*:\n" +
+                           "Lens label: %s \n" % (
+                            outputSet.getXrayAcquisition().getLensLabel()) +
+                           "Energy (ev): %f \n" % (
+                            outputSet.getXrayAcquisition().getEnergy()) +
+                           "Date of imaging (ddmmyyy): %s" % (
+                            outputSet.getXrayAcquisition().getDate()))             
+        return summary
+    
+    def _methods(self):
+        methods = []
+        outputSet = self._getOutputSetTiltSeries()
+        if outputSet is not None:
+            methods.append("*%d* %s were deconvolved with the input 3D PSF. "
+                           " Output set is %s with a sampling rate of *%0.2f* A/px, "
+                           "Lens label: %s, Energy (ev): %f, and "
+                           "Date of imaging (ddmmyyy): %s)."                           
+                           % (outputSet.getSize(), 
+                              'images related to the input TiltSeries',
+                              self.getObjectTag('outputTiltSeries'),
+                              outputSet.getSamplingRate(),
+                              outputSet.getXrayAcquisition().getLensLabel(),
+                              outputSet.getXrayAcquisition().getEnergy(),
+                              outputSet.getXrayAcquisition().getDate()))          
+        return methods 
     #--------------------------- UTILS functions --------------------------------------------
     
     def _defineOutputName(self):
         return self._getExtraPath('deconvolved-tiltSeries.stk')
+    
+    def _getOutputSetTiltSeries(self):
+        return getattr(self, 'outputTiltSeries', None)
