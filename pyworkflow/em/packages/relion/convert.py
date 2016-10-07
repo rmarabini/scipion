@@ -516,6 +516,7 @@ def setOfImagesToMd(imgSet, imgMd, imgToFunc, **kwargs):
     for img in imgSet:
         objId = imgMd.addObject()
         imgRow = md.Row()
+        print "IMG: ", img.printAll()
         imgToFunc(img, imgRow, **kwargs)
         imgRow.writeToMd(imgMd, objId)
 
