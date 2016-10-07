@@ -78,7 +78,7 @@ class ProtPsfCalculation(Protocol):
                            "calculation. Default values are set to match "
                            "Xradia manufactured SS pattern")
         form.addParam('pixelSizeX', params.FloatParam, default=5.0,
-                      label="PSF pixel size along Z axis (nm)")
+                      label="PSF pixel size along X axis (nm)")
         form.addParam('pixelSizeZ', params.FloatParam, default=150,
                       label="PSF pixel size along Z axis (nm)") 
                       
@@ -138,7 +138,7 @@ class ProtPsfCalculation(Protocol):
         imgSingle = imgSS[imgNumber]
         from xpytools.getMTFfromSiemensStar import MTFfromSiemensStar
         MTFObj = MTFfromSiemensStar()
-        mtfOut = MTFObj.getMTFfromSiemensStar(imgSS, dx, nRef, orders, ringPos)  
+        mtfOut = MTFObj.getMTFfromSiemensStar(imgSS[77:81], dx, nRef, orders, ringPos)  
         pickle.dump(mtfOut, open(self._defineMtfDicName(), "wb"))
         fx = mtfOut['fx']
         mtf = mtfOut['mtf']
@@ -174,6 +174,7 @@ class ProtPsfCalculation(Protocol):
         #claculating best psf image to get their mean and use in deconvolution process
         xCenter = np.floor(np.shape(psfArray)[1]/2)
         centerValues = psfArray[:, xCenter, xCenter]
+        print "centerValues", centerValues
         thr = 0.3
         thrv = max(centerValues) * thr
         #finding indices based on centerValues curne and thrv      
@@ -191,26 +192,37 @@ class ProtPsfCalculation(Protocol):
         #zm: central index
         zm = mp[0][np.floor((mp[0][0] - mp[0][-1])/2)]
         k0 = argth / zm
-        x0 = [0, maxValue, k0, (np.shape(psfArray)[0][zc]-np.shape(psfArray)[0][maxIndex])]
-        print "np.shape(psfArray)[0][zc]",np.shape(psfArray)[0][zc] , "np.shape(psfArray)[0][maxIndex]", np.shape(psfArray)[0][maxIndex], "x0", x0
-        Iapsf = lambda (x,Dz):(np.power(np.multiply(x(1)+x(2),np.sinc(np.matrix(x(3))*np.matrix((Dz-x(4)))))),2)
-        print "np.shape(psfArray)[0][mp]", np.shape(psfArray)[0][mp],"centerValues[mp]", centerValues[mp]
-        fmin = lambda x: np.mean(abs(Iapsf(x,np.shape(psfArray)[0][mp])-centerValues[mp]), axis=0)
-        xf = sp.optimize.fmin(fmin,x0,maxiter=3000, maxfun=3000);
-        print "np.shape(psfArray)[0][:]", np.shape(psfArray)[0][:]
-        tapsf = Iapsf(xf,np.shape(psfArray)[0][:]);
-        
-        
-        maxValue = max(centerValues)
-        print "maxValue=", maxValue
-        maxIndex = [i for i, j in enumerate(centerValues) if j == maxValue]
-        print "maxIndex", maxIndex
-        
-        [maxV, maxP] = max(tapsf);
+        print "zm",zm , "k0",k0 
+        print "np.shape(psfArray)[0]", np.shape(psfArray)[0] 
 
-        dmin = interp1(tapsf(1:maxP), zpos(1:maxP), maxV*0.8, 'cubic');
-        dmax = interp1(tapsf(maxP:end), zpos(maxP:end), maxV*0.8, 'cubic');
+        
+        #x0 = [0, maxValue, k0, (psfArray[0][zc]-psfArray[0][maxIndex])]
+        x0 = [0, maxValue, k0[0], (zc-maxIndex)]
+        print "x0", x0
+        
+        
+        Iapsf = lambda (x,Dz):(np.power(np.multiply(x(1)+x(2),np.sinc(np.matrix(x(3))*np.matrix((Dz-x(4)))))),2)
+        print "centerValues[mp]", centerValues[mp]
+        
+        fmin = lambda x: np.mean(abs(Iapsf(x,mp)-centerValues[mp]), axis=0)
+        
+        xf = sp.optimize.fmin(fmin,x0,maxiter=3000, maxfun=3000)
+        print "np.range(np.shape(psfArray)[0])", np.range(np.shape(psfArray)[0])
+        
+        tapsf = Iapsf(xf,np.range(np.shape(psfArray)[0]))
+        
+        maxValueTapsf = max(tapsf)
+        print "maxValueTapsf=", maxValueTapsf
+       
+        maxIndexTapsf = [i for i, j in enumerate(tapsf) if j == maxValueTapsf]
+        print "maxIndexTapsf", maxIndexTapsf
+        
+        dmin = sp.interpolate.interp1d(tapsf[0:maxIndexTapsf], np.shape(psfArray)[0][0:maxIndexTapsf], maxValueTapsf*0.8, kind='cubic');
+        dmax = sp.interpolate.interp1d(tapsf[maxIndexTapsf:-1], np.shape(psfArray)[0][maxIndexTapsf:-1], maxValueTapsf*0.8, kind='cubic');
+        print "dmin", dmin, "dmax", dmax
+        
         dof = dmax-dmin;
+        print "dof", dof
 
         
         
