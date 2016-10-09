@@ -246,5 +246,6 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
                 self.coordDict[key] = subtomoFn
             print "DICT: ", self.coordDict
         coordKey = putils.removeBaseExt(coord.getTomoName()) + str(coord.getX()) + str(coord.getY()) + str(coord.getZ())
+        print "coordKey", coordKey, self.coordDict.get(coordKey, None)
         return self.coordDict.get(coordKey, None)
         
