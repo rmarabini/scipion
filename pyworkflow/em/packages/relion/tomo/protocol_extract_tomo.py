@@ -142,6 +142,7 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
             self.coordDict = {}
             
             for coord in self.coordSet:
+                print "self._getSubtomoFn(coord): ", self._getSubtomoFn(coord), coord.printAll()
                 if self._getSubtomoFn(coord) is not None:
                     subtomoFn = self._getPath(self._getSubtomoFn(coord))
                     subtomo = Subtomogram()
