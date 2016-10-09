@@ -92,6 +92,7 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
         self.starTomoFn = self._getPath('all_tomograms.star')
         self._insertFunctionStep("convertInputStep", self.coordSet.getObjId())
         self._insertFunctionStep('extractStep')
+        self._insertFunctionStep('emptyStep')
         self._insertFunctionStep('createOutputStep')
     
     #--------------------------- STEPS functions --------------------------------------------
@@ -102,6 +103,9 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
         recSet = self.coordSet.getTomoRecs()
         writeSetOfTomograms(recSet, self.starTomoFn, self._getExtraPath())
         self._writeSetOfTomoCoords()
+    
+    def emptyStep(self):
+        pass
     
     def extractStep(self):
         args = " --o subtomo --mic_star %(star)s --coord_suffix .coord --extract --extract_size %(boxSize)d "
@@ -142,9 +146,9 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
             self.coordDict = {}
             
             for coord in self.coordSet:
-                print "self._getSubtomoFn(coord): ", self._getSubtomoFn(coord), coord.printAll()
-                if self._getSubtomoFn(coord) is not None:
-                    subtomoFn = self._getPath(self._getSubtomoFn(coord))
+                subtomoBaseFn =  self._getSubtomoFn(coord)
+                if subtomoBaseFn is not None:
+                    subtomoFn = self._getPath(subtomoBaseFn)
                     subtomo = Subtomogram()
                     subtomo.setFileName(subtomoFn)
                     subtomo.copyInfo(coord.getTomoRec())
@@ -154,6 +158,7 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
                     if self.ctfRelations:
                         subtomo.setCTF(self.ctfRelations.get()[coord.getObjId()])
                     subtomoSet.append(subtomo)
+        break
         self._defineOutputs(outputSubtomograms=subtomoSet)
         self._defineSourceRelation(self.coordSet, subtomoSet)
     
@@ -227,8 +232,9 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
             print "Micrograph %s (%d)" % (lastTomoId, c)
     
     def _getSubtomoFn(self, coord):
-        import pyworkflow.em.metadata as md
         if self.coordDict == {}:
+            print "Dic vacio: "
+            import pyworkflow.em.metadata as md
             subTomoMd = md.MetaData(self._getPath("subtomo.star"))
             for objId in subTomoMd:
                 tomoBsName = putils.removeBaseExt(subTomoMd.getValue(md.RLN_MICROGRAPH_NAME, objId))
@@ -238,6 +244,7 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
                 subtomoFn = subTomoMd.getValue(md.RLN_IMAGE_NAME, objId)
                 key = tomoBsName + x + y + z
                 self.coordDict[key] = subtomoFn
+            print "DICT: ", self.coordDict
         coordKey = putils.removeBaseExt(coord.getTomoName()) + str(coord.getX()) + str(coord.getY()) + str(coord.getZ())
         return self.coordDict.get(coordKey, None)
         
