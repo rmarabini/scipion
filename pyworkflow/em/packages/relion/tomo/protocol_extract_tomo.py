@@ -24,7 +24,7 @@
 # *
 # **************************************************************************
 
-import os
+import os, sys
 #  
 import pyworkflow.utils.path as putils
 
@@ -158,7 +158,7 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
                     if self.ctfRelations:
                         subtomo.setCTF(self.ctfRelations.get()[coord.getObjId()])
                     subtomoSet.append(subtomo)
-        break
+        sys.exit()
         self._defineOutputs(outputSubtomograms=subtomoSet)
         self._defineSourceRelation(self.coordSet, subtomoSet)
     
