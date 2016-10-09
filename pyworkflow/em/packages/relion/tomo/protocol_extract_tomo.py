@@ -92,7 +92,6 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
         self.starTomoFn = self._getPath('all_tomograms.star')
         self._insertFunctionStep("convertInputStep", self.coordSet.getObjId())
         self._insertFunctionStep('extractStep')
-        self._insertFunctionStep('emptyStep')
         self._insertFunctionStep('createOutputStep')
     
     #--------------------------- STEPS functions --------------------------------------------
@@ -103,10 +102,7 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
         recSet = self.coordSet.getTomoRecs()
         writeSetOfTomograms(recSet, self.starTomoFn, self._getExtraPath())
         self._writeSetOfTomoCoords()
-    
-    def emptyStep(self):
-        pass
-    
+        
     def extractStep(self):
         args = " --o subtomo --mic_star %(star)s --coord_suffix .coord --extract --extract_size %(boxSize)d "
         paramsDict = {"star" : os.path.basename(self.starTomoFn),
