@@ -158,7 +158,6 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
                     if self.ctfRelations:
                         subtomo.setCTF(self.ctfRelations.get()[coord.getObjId()])
                     subtomoSet.append(subtomo)
-        sys.exit()
         self._defineOutputs(outputSubtomograms=subtomoSet)
         self._defineSourceRelation(self.coordSet, subtomoSet)
     
@@ -233,7 +232,6 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
     
     def _getSubtomoFn(self, coord):
         if self.coordDict == {}:
-            print "Dic vacio: "
             import pyworkflow.em.metadata as md
             subTomoMd = md.MetaData(self._getPath("subtomo.star"))
             for objId in subTomoMd:
@@ -244,8 +242,7 @@ class ProtRelionExtractSubtomograms(ProtExtractSubtomograms):
                 subtomoFn = subTomoMd.getValue(md.RLN_IMAGE_NAME, objId)
                 key = tomoBsName + x + y + z
                 self.coordDict[key] = subtomoFn
-            print "DICT: ", self.coordDict
-        coordKey = putils.removeBaseExt(coord.getTomoName()) + str(coord.getX()) + str(coord.getY()) + str(coord.getZ())
-        print "coordKey", coordKey, self.coordDict.get(coordKey, None)
+        tomoBase =  putils.removeBaseExt(coord.getTomoRec().getFileName())
+        coordKey = tomoBase + str(coord.getX()) + str(coord.getY()) + str(coord.getZ())
         return self.coordDict.get(coordKey, None)
         
