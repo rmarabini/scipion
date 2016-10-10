@@ -180,7 +180,7 @@ class ProtPsfCalculation(Protocol):
         #finding indices based on centerValues curne and thrv      
         #mp: indices array above threshold, 
         mp = np.where(centerValues > thrv)
-        print "mp=", mp
+        print "mp=", mp, "mp[0]=", mp[0]
         zc = np.ceil(np.shape(psfArray)[0]/2)
         print "zc=", zc
         maxValue = max(centerValues)
@@ -201,12 +201,12 @@ class ProtPsfCalculation(Protocol):
         print "x0", x0
         
         
-        Iapsf = lambda (x,Dz) : np.power(np.multiply(x(1)+x(2),np.sinc(np.matrix(x(3))*np.matrix(Dz-x(4)))),2)
+        #Iapsf = lambda (x,Dz) : np.power(np.multiply(x(1)+x(2),np.sinc(np.matrix(x(3))*np.matrix(Dz-x(4)))),2)
         print "centerValues[mp]", centerValues[mp]
         
-        fminFunc = lambda x : np.mean(abs(Iapsf(x,mp)-centerValues[mp]), axis=0)
+        #fminFunc = lambda x : (np.mean(abs(Iapsf(x,mp)-centerValues[mp]), axis=0))
         
-        #fminFunc = np.mean(abs(Iapsf(x,mp)-centerValues[mp]), axis=0)
+        fminFunc = lambda x : (np.mean(abs(self._testFunction(x, mp[0])-centerValues[mp]), axis=0))
         xf = sp.optimize.fmin(fminFunc,x0,maxiter=3000, maxfun=3000)
         print "np.range(np.shape(psfArray)[0])", np.range(np.shape(psfArray)[0])
         
@@ -268,3 +268,6 @@ class ProtPsfCalculation(Protocol):
         return self._getExtraPath('mtfDic.p')
     def _definePsfDicName(self):
         return self._getExtraPath('psfDic.p')
+    def _testFunction(self,x,Dz):
+        Iapsf = np.power(np.multiply(x(1)+x(2),np.sinc(np.matrix(x(3))*np.matrix(Dz-x(4)))),2)
+        return Iapsf
