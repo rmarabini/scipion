@@ -197,35 +197,52 @@ class ProtPsfCalculation(Protocol):
 
         
         #x0 = [0, maxValue, k0, (psfArray[0][zc]-psfArray[0][maxIndex])]
-        x0 = [0, maxValue, k0[0], (zc-maxIndex)]
+        x0 = np.asarray([0, maxValue, k0[0], (zc-maxIndex)[0]])
         print "x0", x0
         
         
         #Iapsf = lambda (x,Dz) : np.power(np.multiply(x(1)+x(2),np.sinc(np.matrix(x(3))*np.matrix(Dz-x(4)))),2)
         print "centerValues[mp]", centerValues[mp]
-        
+        print "x[0][1]", x0[0], x0[1], x0[2] ,x0[3] 
         #fminFunc = lambda x : (np.mean(abs(Iapsf(x,mp)-centerValues[mp]), axis=0))
         
-        fminFunc = lambda x : (np.mean(abs(self._testFunction(x, mp[0])-centerValues[mp]), axis=0))
+        fminFunc = lambda x : np.mean(abs(self._testFunction(x, mp[0])-centerValues[mp]))
+        #xf = sp.optimize.fmin_l_bfgs_b(fminFunc,x0,maxiter=3000, maxfun=3000)
         xf = sp.optimize.fmin(fminFunc,x0,maxiter=3000, maxfun=3000)
-        print "np.range(np.shape(psfArray)[0])", np.range(np.shape(psfArray)[0])
+        print "np.range(np.shape(psfArray)[0])", np.arange(np.shape(psfArray)[0])
         
-        tapsf = Iapsf(xf,np.range(np.shape(psfArray)[0]))
+        tapsf = self._testFunction(xf,np.arange(np.shape(psfArray)[0]))
+        print "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@2"
+        print "tapsf", tapsf, "np.array(tapsf)[0]", np.array(tapsf)[0], np.shape(tapsf)
         
-        maxValueTapsf = max(tapsf)
+        maxValueTapsf = max(np.array(tapsf)[0])
         print "maxValueTapsf=", maxValueTapsf
        
-        maxIndexTapsf = [i for i, j in enumerate(tapsf) if j == maxValueTapsf]
+        maxIndexTapsf = [i for i, j in enumerate(np.array(tapsf)[0]) if j == maxValueTapsf]
         print "maxIndexTapsf", maxIndexTapsf
         
         #dmin = sp.interpolate.interp1d(tapsf[0:maxIndexTapsf], np.shape(psfArray)[0][0:maxIndexTapsf], maxValueTapsf*0.8, kind='cubic')
         #dmax = sp.interpolate.interp1d(tapsf[maxIndexTapsf:-1], np.shape(psfArray)[0][maxIndexTapsf:-1], maxValueTapsf*0.8, kind='cubic')
-        print "np.range(np.shape(psfArray)[0])", np.range(np.shape(psfArray)[0])
-        dmin = sp.interpolate.interp1d(tapsf[0:maxIndexTapsf], np.range(np.shape(psfArray)[0])[0:maxIndexTapsf], maxValueTapsf*0.8, kind='cubic')
-        dmax = sp.interpolate.interp1d(tapsf[maxIndexTapsf:-1], np.range(np.shape(psfArray)[0])[maxIndexTapsf:-1], maxValueTapsf*0.8, kind='cubic')
-        print "dmin", dmin, "dmax", dmax
         
-        dof = dmax-dmin;
+        print "np.range(np.shape(psfArray)[0])", np.arange(np.shape(psfArray)[0])
+        print "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@2"
+        print "maxIndexTapsf[0]", maxIndexTapsf[0]
+        print "np.arange(np.shape(psfArray)[0])[0:maxIndexTapsf]", np.arange(np.shape(psfArray)[0])[0:(maxIndexTapsf[0]+1)] 
+        print "np.array(tapsf)[0][0:(maxIndexTapsf[0]+1)]", np.array(tapsf)[0][0:(maxIndexTapsf[0]+1)]
+        print "np.array(tapsf)[0][0:(maxIndexTapsf[0])]", np.array(tapsf)[0][0:maxIndexTapsf[0]]
+        
+        # in shart, bad az teste nahaie bardashte shavad
+        if maxIndexTapsf[0] > 5:
+            dmin = sp.interpolate.interp1d(np.array(tapsf)[0][0:maxIndexTapsf[0]], np.arange(np.shape(psfArray)[0])[0:maxIndexTapsf[0]], kind='cubic')
+        else:
+            dmin = sp.interpolate.interp1d(np.array(tapsf)[0][0:(maxIndexTapsf[0]+5)], np.arange(np.shape(psfArray)[0])[0:(maxIndexTapsf[0]+5)], kind='cubic')
+        print "dmin", dmin(maxValueTapsf*0.8)
+        # bad az : -1 mikhahad?!
+        print "np.array(tapsf)[0][(maxIndexTapsf[0]):]", np.array(tapsf)[0][(maxIndexTapsf[0]):]
+        dmax = sp.interpolate.interp1d(np.array(tapsf)[0][(maxIndexTapsf[0]):], np.arange(np.shape(psfArray)[0])[(maxIndexTapsf[0]):], kind='cubic')
+        print "dmax", dmax(maxValueTapsf*0.8)
+        
+        dof = dmax(maxValueTapsf*0.8)-dmin(maxValueTapsf*0.8);
         print "dof", dof
 
         
@@ -269,5 +286,5 @@ class ProtPsfCalculation(Protocol):
     def _definePsfDicName(self):
         return self._getExtraPath('psfDic.p')
     def _testFunction(self,x,Dz):
-        Iapsf = np.power(np.multiply(x(1)+x(2),np.sinc(np.matrix(x(3))*np.matrix(Dz-x(4)))),2)
+        Iapsf = np.power(np.multiply(x[0]+x[1],np.sinc(np.matrix(x[2])*np.matrix(Dz-x[3]))),2)
         return Iapsf
