@@ -38,6 +38,7 @@ from protocol_psf_calculation import ProtPsfCalculation
 from protocol_deconvolution import ProtDeconvolution
 
 from viewer_import import ProtImportTiltSeriesViewer
+from viewer_psf_calculation import ProtPsfCalculationViewer
 
 _environ = getEnviron()
 

@@ -93,7 +93,8 @@ class ProtPsfCalculation(Protocol):
         ringPos = getFloatListFromValues(self.ringPosition.get())
                
         self._insertFunctionStep('validateSiemensStar', inputSS)   
-        self._insertFunctionStep('getPsfFromSiemensStar', inputSS, nRef, orders, ringPos, fnOutPsf)
+        self._insertFunctionStep('getPsfFromSiemensStar', inputSS, nRef, 
+                                 orders, ringPos, fnOutPsf)
         self._insertFunctionStep('createOutputStep', fnOutPsf)            
     #--------------------------- STEPS functions --------------------------------------------
     
@@ -119,7 +120,8 @@ class ProtPsfCalculation(Protocol):
             mdOut.setValue(xmipp.MDL_IMAGE, "%d@%s" % (k+1,fnStack), objId)
             mdOut.setValue(xmipp.MDL_ANGLE_TILT, anglesArray[k], objId)
             if k != 0 and anglesArray[k] != anglesArray[k-1]:
-                raise Exception ("Selected input file is not a Siemens Star pattern!!!")                 
+                raise Exception ("Selected input file is not a "
+                                 "Siemens Star pattern!!!")                 
         mdOut.write(fnOutMd)  
     
     def getPsfFromSiemensStar(self, inputSS, nRef, orders, ringPos, fnOutPsf):        
@@ -131,14 +133,16 @@ class ProtPsfCalculation(Protocol):
         imgNumber = np.floor(imgNumberTotal / 2)
         from xpytools.getResolutionfromSiemensStar import MTFgetResolution
         resolutionObj = MTFgetResolution()
-        imgSsResolution = resolutionObj.getResolutionfromSiemensStar(imgSS[imgNumber], ringPos)
+        imgSsResolution = resolutionObj.getResolutionfromSiemensStar(
+                                                                     imgSS[imgNumber],
+                                                                     ringPos)
         print "Resolution of Siemens star image is:\n" , imgSsResolution [0]        
         dx = imgSsResolution [0]
         
         imgSingle = imgSS[imgNumber]
         from xpytools.getMTFfromSiemensStar import MTFfromSiemensStar
         MTFObj = MTFfromSiemensStar()
-        mtfOut = MTFObj.getMTFfromSiemensStar(imgSS[77:81], dx, nRef, orders, ringPos)  
+        mtfOut = MTFObj.getMTFfromSiemensStar(imgSS, dx, nRef, orders, ringPos)  
         pickle.dump(mtfOut, open(self._defineMtfDicName(), "wb"))
         fx = mtfOut['fx']
         mtf = mtfOut['mtf']
@@ -161,99 +165,53 @@ class ProtPsfCalculation(Protocol):
             i += 1
             outputImg.write((i,fnOutPsf))    
         
-    def createOutputStep(self, fnOutPsf): #DoF inja hesab shavad .... 
-        psfdict = pickle.load(open(self._definePsfDicName(), "rb"))
-        psfPixelSizeX = psfdict['dx']
+    def createOutputStep(self, fnOutPsf): 
+        psfDict = pickle.load(open(self._definePsfDicName(), "rb"))
+        psfPixelSizeX = psfDict['dx']
         psfPixelSizeZ = self.pixelSizeZ.get()
         
-        
-        
-        
         #calculating DoF        
-        psfArray = psfdict['psf']
-        #claculating best psf image to get their mean and use in deconvolution process
+        psfArray = psfDict['psf']
+        #claculating best psf image 
         xCenter = np.floor(np.shape(psfArray)[1]/2)
         centerValues = psfArray[:, xCenter, xCenter]
-        print "centerValues", centerValues
         thr = 0.3
         thrv = max(centerValues) * thr
-        #finding indices based on centerValues curne and thrv      
-        #mp: indices array above threshold, 
-        mp = np.where(centerValues > thrv)
-        print "mp=", mp, "mp[0]=", mp[0]
-        zc = np.ceil(np.shape(psfArray)[0]/2)
-        print "zc=", zc
+        mp = np.where(centerValues > thrv)#indices array above threshold
         maxValue = max(centerValues)
-        print "maxValue=", maxValue
-        maxIndex = [i for i, j in enumerate(centerValues) if j == maxValue]
-        print "maxIndex", maxIndex
-        argth = sp.optimize.fmin(lambda x:abs(np.power(np.sinc(x), 2)-thr),0)
-        print "argth=", argth
-        #zm: central index
-        zm = mp[0][np.floor((mp[0][0] - mp[0][-1])/2)]
-        k0 = argth / zm
-        print "zm",zm , "k0",k0 
-        print "np.shape(psfArray)[0]", np.shape(psfArray)[0] 
-
-        
-        #x0 = [0, maxValue, k0, (psfArray[0][zc]-psfArray[0][maxIndex])]
-        x0 = np.asarray([0, maxValue, k0[0], (zc-maxIndex)[0]])
-        print "x0", x0
-        
-        
-        #Iapsf = lambda (x,Dz) : np.power(np.multiply(x(1)+x(2),np.sinc(np.matrix(x(3))*np.matrix(Dz-x(4)))),2)
-        print "centerValues[mp]", centerValues[mp]
-        print "x[0][1]", x0[0], x0[1], x0[2] ,x0[3] 
-        #fminFunc = lambda x : (np.mean(abs(Iapsf(x,mp)-centerValues[mp]), axis=0))
-        
-        fminFunc = lambda x : np.mean(abs(self._testFunction(x, mp[0])-centerValues[mp]))
-        #xf = sp.optimize.fmin_l_bfgs_b(fminFunc,x0,maxiter=3000, maxfun=3000)
-        xf = sp.optimize.fmin(fminFunc,x0,maxiter=3000, maxfun=3000)
-        print "np.range(np.shape(psfArray)[0])", np.arange(np.shape(psfArray)[0])
-        
-        tapsf = self._testFunction(xf,np.arange(np.shape(psfArray)[0]))
-        print "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@2"
-        print "tapsf", tapsf, "np.array(tapsf)[0]", np.array(tapsf)[0], np.shape(tapsf)
-        
-        maxValueTapsf = max(np.array(tapsf)[0])
-        print "maxValueTapsf=", maxValueTapsf
+        maxIndex = [i for i, j in enumerate(centerValues) if j == maxValue]        
        
-        maxIndexTapsf = [i for i, j in enumerate(np.array(tapsf)[0]) if j == maxValueTapsf]
-        print "maxIndexTapsf", maxIndexTapsf
+        zPosPositive = np.arange(np.shape(psfArray)[0])
+        zc = np.ceil(np.shape(psfArray)[0]/2)#central slice
+        zPosCenter = np.array([i - zc for i in zPosPositive])
         
-        #dmin = sp.interpolate.interp1d(tapsf[0:maxIndexTapsf], np.shape(psfArray)[0][0:maxIndexTapsf], maxValueTapsf*0.8, kind='cubic')
-        #dmax = sp.interpolate.interp1d(tapsf[maxIndexTapsf:-1], np.shape(psfArray)[0][maxIndexTapsf:-1], maxValueTapsf*0.8, kind='cubic')
+        argth = sp.optimize.fmin(lambda x:abs(np.power(np.sinc(x), 2)-thr),0)
+        #zm:index with maximum value
+        zm = abs(zPosCenter[mp[0][0]] - zPosCenter[mp[0][-1]])/2       
+        k0 = argth / zm
+        x0 = np.asarray([0, maxValue, k0[0], abs((zc-maxIndex)[0])])#initial values
         
-        print "np.range(np.shape(psfArray)[0])", np.arange(np.shape(psfArray)[0])
-        print "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@2"
-        print "maxIndexTapsf[0]", maxIndexTapsf[0]
-        print "np.arange(np.shape(psfArray)[0])[0:maxIndexTapsf]", np.arange(np.shape(psfArray)[0])[0:(maxIndexTapsf[0]+1)] 
-        print "np.array(tapsf)[0][0:(maxIndexTapsf[0]+1)]", np.array(tapsf)[0][0:(maxIndexTapsf[0]+1)]
-        print "np.array(tapsf)[0][0:(maxIndexTapsf[0])]", np.array(tapsf)[0][0:maxIndexTapsf[0]]
+        fminFunc = lambda x : np.mean(abs(self._IapsfFunction(x, zPosCenter[mp])-centerValues[mp]))
+        xf = sp.optimize.fmin(fminFunc , x0 ,maxiter = 3000, maxfun = 3000)
+                
+        tapsf = self._IapsfFunction(xf,zPosCenter)
+        maxValueTapsf = max(tapsf)
+        maxIndexTapsf = [i for i, j in enumerate(tapsf) if j == maxValueTapsf]        
         
-        # in shart, bad az teste nahaie bardashte shavad
-        if maxIndexTapsf[0] > 5:
-            dmin = sp.interpolate.interp1d(np.array(tapsf)[0][0:maxIndexTapsf[0]], np.arange(np.shape(psfArray)[0])[0:maxIndexTapsf[0]], kind='cubic')
-        else:
-            dmin = sp.interpolate.interp1d(np.array(tapsf)[0][0:(maxIndexTapsf[0]+5)], np.arange(np.shape(psfArray)[0])[0:(maxIndexTapsf[0]+5)], kind='cubic')
-        print "dmin", dmin(maxValueTapsf*0.8)
-        # bad az : -1 mikhahad?!
-        print "np.array(tapsf)[0][(maxIndexTapsf[0]):]", np.array(tapsf)[0][(maxIndexTapsf[0]):]
-        dmax = sp.interpolate.interp1d(np.array(tapsf)[0][(maxIndexTapsf[0]):], np.arange(np.shape(psfArray)[0])[(maxIndexTapsf[0]):], kind='cubic')
-        print "dmax", dmax(maxValueTapsf*0.8)
-        
-        dof = dmax(maxValueTapsf*0.8)-dmin(maxValueTapsf*0.8);
-        print "dof", dof
-
-        
-        
+        dmin = sp.interpolate.interp1d(tapsf[0:(maxIndexTapsf[0]+1)], 
+                                       zPosCenter[0:(maxIndexTapsf[0]+1)], 
+                                       kind='cubic')
+        dmax = sp.interpolate.interp1d(tapsf[maxIndexTapsf[0]:], 
+                                       zPosCenter[maxIndexTapsf[0]:], 
+                                       kind='cubic') 
+        psfDof = abs(dmax(maxValueTapsf*0.8))-abs(dmin(maxValueTapsf*0.8))
         
         outPsf = em.Volume()
         outPsf.setLocation(fnOutPsf)
         outPsf.setSamplingRate(psfPixelSizeX * 10)
         #outPsf.setZpixelSize(psfPixelSizeZ)
         #outPsf.setDoF(psfDof)       
-        self._defineOutputs(outputPSF=outPsf)
+        self._defineOutputs(output3DPSF=outPsf)
               
     #--------------------------- INFO functions -------------------------------------------- 
     
@@ -281,10 +239,14 @@ class ProtPsfCalculation(Protocol):
     
     def _defineOutputName(self):
         return self._getExtraPath('psf.mrc')
+    
     def _defineMtfDicName(self):
         return self._getExtraPath('mtfDic.p')
+    
     def _definePsfDicName(self):
         return self._getExtraPath('psfDic.p')
-    def _testFunction(self,x,Dz):
-        Iapsf = np.power(np.multiply(x[0]+x[1],np.sinc(np.matrix(x[2])*np.matrix(Dz-x[3]))),2)
+    
+    def _IapsfFunction(self,x,Dz):       
+        Iapsf = x[0]+(x[1]*(np.sinc(x[2]*(Dz-x[3]))**2))
         return Iapsf
+    
