@@ -169,3 +169,21 @@ class SetOfTiltSeries(em.SetOfImages):
         for tiltSeries in em.Set.iterItems(self, orderBy=orderBy, direction=direction):
             yield tiltSeries
 
+class PSF3D(em.Volume):
+    
+    def __init__(self, **kwargs):        
+        em.Volume.__init__(self, **kwargs)
+        self._ZpixelSize = pwobj.Float(0.0)
+        self._DoF = pwobj.Float(0.0)
+        
+    def getZpixelSize(self):
+        return self._ZpixelSize.get()
+    
+    def setZpixelSize(self, ZpixelSize):
+        self._ZpixelSize.set(ZpixelSize)
+        
+    def getDoF(self):
+        return self._DoF.get()
+    
+    def setDoF(self, DoF):
+        self._DoF.set(DoF)

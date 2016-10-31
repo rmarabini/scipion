@@ -37,6 +37,7 @@ import numpy as np
 import pyworkflow.em as em
 import pickle
 import scipy as sp
+from pyworkflow.em.packages.sxt.data import PSF3D
 
 
 class ProtPsfCalculation(Protocol):
@@ -206,26 +207,20 @@ class ProtPsfCalculation(Protocol):
                                        kind='cubic') 
         psfDof = abs(dmax(maxValueTapsf*0.8))-abs(dmin(maxValueTapsf*0.8))
         
-        outPsf = em.Volume()
+        outPsf = PSF3D()
         outPsf.setLocation(fnOutPsf)
         outPsf.setSamplingRate(psfPixelSizeX * 10)
-        #outPsf.setZpixelSize(psfPixelSizeZ)
-        #outPsf.setDoF(psfDof)       
+        outPsf.setZpixelSize(psfPixelSizeZ)
+        outPsf.setDoF(psfDof)       
         self._defineOutputs(output3DPSF=outPsf)
               
     #--------------------------- INFO functions -------------------------------------------- 
-    
-#    def _summary(self):
-#        summary = []
-#        summary.append[]        
-#        summary.append[]
-#        return summary
-#    
-#    def _methods(self):
-#        messages = []
-#        messages.append('Joton')
-#        return messages
-
+    def _summary(self):
+        summary = []
+        outputSet = self._getOutputSet3DPsf()
+        if outputSet is None:
+            summary.append("Output 3DPSF is not ready yet.") 
+        return summary
     def _validate(self):
         errors = []
         hdf5 = self.inputSiemensStar.get().endswith('hdf5')
@@ -250,3 +245,5 @@ class ProtPsfCalculation(Protocol):
         Iapsf = x[0]+(x[1]*(np.sinc(x[2]*(Dz-x[3]))**2))
         return Iapsf
     
+    def _getOutputSet3DPsf(self):
+        return getattr(self, 'output3DPSF', None)
