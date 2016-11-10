@@ -51,7 +51,12 @@ class ProtImportTiltSeries(ProtImportImages):
     def _defineParams(self, form):        
         form.addSection(label='Import')
 
+        form.addParam('importSetOfTiltSeries', params.BooleanParam, default=False,
+                      label='Import set of tilt series?',
+                      help="This is used to add more parameters "
+                           "related to the set of tilt series")
         form.addParam('importFocalSeries', params.BooleanParam, default=False,
+                      condition="importSetOfTiltSeries",
                       label='Import focal tilt series?',
                       help="This is used to add more parameters "
                            "related to the focal tilt series")
@@ -63,7 +68,7 @@ class ProtImportTiltSeries(ProtImportImages):
                            "includes hdf5 files, then define the file patterns "
                            "in the related input parameters field")        
         form.addParam('filesPattern', params.StringParam, 
-                      condition="importFocalSeries",
+                      condition="importSetOfTiltSeries",
                       label='Pattern', 
                       help="Pattern of the files to be imported.\n\n"
                            "The pattern can contain standard wildcards such as\n"
@@ -89,11 +94,11 @@ class ProtImportTiltSeries(ProtImportImages):
         group.addParam('lensLabel', params.StringParam, default = 'lens1',
                    label = "Lens label", 
                    help = "Type of the lens has been used for imaging")
-        group.addParam('energy', params.FloatParam, default = 00.00,
-                   label = "Energy (ev)")        
-        group.addParam('date', params.StringParam, default = '15072016',
+        group.addParam('energy', params.FloatParam, default = 520.0,
+                   label = "Energy (eV)")        
+        group.addParam('date', params.StringParam, default = '20160715',
                       label = "Date",
-                      help = "Date of imaging in ddmmyyyy format")
+                      help = "Date of imaging in yyyymmdd format")
         group.addParam('samplingRate', params.FloatParam,
                       label = "Sampling rate (nm/px)")         
                       
@@ -101,8 +106,8 @@ class ProtImportTiltSeries(ProtImportImages):
         
     #--------------------------- INSERT steps functions --------------------------------------------    
     def _insertAllSteps(self):        
-        fnOutMd = self._defineOutputMdName()
-        if not self.importFocalSeries.get():              
+        fnOutMd = self._defineOutputMdName()    
+        if not self.importSetOfTiltSeries.get():    
             fnIn = self.filesPath.get()
             copyOrLink = self.getCopyOrLink()
             dst = self._getExtraPath(basename(fnIn))        
@@ -169,52 +174,59 @@ class ProtImportTiltSeries(ProtImportImages):
             self._fillXrayAcquisition(acquisition)
             tiltSeries.setXrayAcquisition(acquisition)
                         
-            fileBaseName = basename(fileName)
-            for focalId in range(100):
-                if '_tomo_%02d' % focalId in fileBaseName:
-                    tiltIndex += 1
-                    if tiltIndex == 4:
-                        tiltIndex = 1
-                    break
-            if '_0.hdf5' in fileBaseName:
-                defocusValue = 0.0
-                refTilt = tiltIndex
-            elif '_m2.hdf5' in fileBaseName:
-                defocusValue = -2.0
-                if tiltIndex == 1:
-                    refTilt = 2                    
+            if self.importFocalSeries.get():
+                fileBaseName = basename(fileName)
+                for focalId in range(100):
+                    if '_tomo_%02d' % focalId in fileBaseName:
+                        tiltIndex += 1
+                        if tiltIndex == 4:
+                            tiltIndex = 1
+                        break
+                if '_0.hdf5' in fileBaseName:
+                    defocusValue = 0.0
+                    refTilt = tiltIndex
+                elif '_m2.hdf5' in fileBaseName:
+                    defocusValue = -2.0
+                    if tiltIndex == 1:
+                        refTilt = 2                    
+                else:
+                    defocusValue = +2.0
+                    if tiltIndex == 1:
+                        refTilt = 2
+            
+                focalInfo = tiltSeries.getFocalSeries()            
+                focalInfo.settiltSeriesGroup(focalId)
+                focalInfo.setIndex(tiltIndex)
+                focalInfo.setDefocus(defocusValue)
+                focalInfo.setReference(refTilt)
+                tiltSeries.setFocalSeries(focalInfo)
+            
+                objId = mdOut.addObject()
+                mdOut.setValue(xmipp.MDL_TOMOGRAMMD, fnOutMdTilt, objId)
+                mdOut.setValue(xmipp.MDL_XRAY_FOCAL_IDX, focalId, objId)
+                mdOut.setValue(xmipp.MDL_XRAY_TILT_IDX, tiltIndex, objId)
+                mdOut.setValue(xmipp.MDL_XRAY_DEFOCUS, defocusValue, objId)
+                mdOut.setValue(xmipp.MDL_XRAY_REF_IDX, refTilt, objId)
             else:
-                defocusValue = +2.0
-                if tiltIndex == 1:
-                    refTilt = 2
-            
-            focalInfo = tiltSeries.getFocalSeries()            
-            focalInfo.settiltSeriesGroup(focalId)
-            focalInfo.setIndex(tiltIndex)
-            focalInfo.setDefocus(defocusValue)
-            focalInfo.setReference(refTilt)
-            tiltSeries.setFocalSeries(focalInfo)
-            
-            objId = mdOut.addObject()
-            mdOut.setValue(xmipp.MDL_TOMOGRAMMD, fnOutMdTilt, objId)
-            mdOut.setValue(xmipp.MDL_XRAY_FOCAL_IDX, focalId, objId)
-            mdOut.setValue(xmipp.MDL_XRAY_TILT_IDX, tiltIndex, objId)
-            mdOut.setValue(xmipp.MDL_XRAY_DEFOCUS, defocusValue, objId)
-            mdOut.setValue(xmipp.MDL_XRAY_REF_IDX, refTilt, objId)
+                objId = mdOut.addObject()
+                mdOut.setValue(xmipp.MDL_TOMOGRAMMD, fnOutMdTilt, objId)
             
             focalSeries.append(tiltSeries)
             sys.stdout.write("\rImported %d/%d\n\n" % (i+1, self.numberOfFiles))
             sys.stdout.flush()
         
         mdOut.write(fnOutMd)
-        self._defineOutputs(outputFocalSeries=focalSeries)      
+        if not self.importFocalSeries.get():
+            self._defineOutputs(outputSetOfTiltSeries=focalSeries)
+        else:
+            self._defineOutputs(outputFocalSeries=focalSeries)      
     
     #--------------------------- INFO functions --------------------------------        
     def _validate(self):
         errors = []
-        hdf5 = self.filesPath.get().endswith('hdf5')
         pattern = self.filesPattern.get()
         if self.filesPath.get():
+            hdf5 = self.filesPath.get().endswith('hdf5')
             if not hdf5 and not pattern:
                 errors.append ("Expected hdf5 files for importing or "
                                "indicate the files pattern!!!") 
@@ -230,9 +242,10 @@ class ProtImportTiltSeries(ProtImportImages):
         
     def _summary(self):
         summary = []
-        outputSet1 = self._getOutputSetTiltSeries()
+        outputSet1 = self._getOutputTiltSeries()
         outputSet2 = self._getOutputFocalSeries()
-        if not self.importFocalSeries.get() and outputSet1 is None:
+        outputSet3 = self._getOutputSetOfTiltSeries()
+        if not self.importSetOfTiltSeries.get() and outputSet1 is None:
             summary.append("Output TiltSeries is not ready yet.") 
             if self.copyFiles:
                 summary.append("*Warning*: You select to copy files "
@@ -247,57 +260,88 @@ class ProtImportTiltSeries(ProtImportImages):
                                "into your project.\n"
                                "This will make another copy of your "
                                "data and may take \n"
-                               "more time to import.")     
+                               "more time to import.") 
+        elif not self.importFocalSeries.get() and self.importSetOfTiltSeries.get() and outputSet3 is None:
+            summary.append("Output SetOfTiltSeries is not ready yet.") 
+            if self.copyFiles:
+                summary.append("*Warning*: You select to copy files "
+                               "into your project.\n"
+                               "This will make another copy of your "
+                               "data and may take \n"
+                               "more time to import.")    
         if  outputSet1 is not None:  
             summary.append("*%d* %s imported from:  %s" % (
                                 outputSet1.getSize(),
                                 'images related to the selected TiltSeries',
                                 basename(self.filesPath.get())))            
             summary.append("Sampling rate : *%0.2f* A/px" % (
-                                outputSet1.getSamplingRate()*10))
+                                outputSet1.getSamplingRate()))
             summary.append("*Imaging info*:\n" +
                            "Lens label: %s \n" % self.lensLabel.get() +
-                           "Energy (ev): %f \n" % self.energy.get() +
-                           "Date of imaging (ddmmyyy): %s" % self.date.get()) 
+                           "Energy (eV): %f \n" % self.energy.get() +
+                           "Date of imaging (yyyymmdd): %s" % self.date.get()) 
         elif outputSet2 is not None:
             summary.append("*%d* %s imported from:  %s" % (
                                 outputSet2.getSize(),
                                 'tiltSeries related to the selected FocalSeries',
                                 self.filesPath.get()))            
             summary.append("Sampling rate : *%0.2f* A/px" % (
-                                outputSet2.getSamplingRate()*10))
+                                outputSet2.getSamplingRate()))
             summary.append("*Imaging info*:\n" +
                            "Lens label: %s \n" % self.lensLabel.get() +
-                           "Energy (ev): %f \n" % self.energy.get() +
-                           "Date of imaging (ddmmyyy): %s" % self.date.get())                  
+                           "Energy (eV): %f \n" % self.energy.get() +
+                           "Date of imaging (yyyymmdd): %s" % self.date.get()) 
+        elif outputSet3 is not None:
+            summary.append("*%d* %s imported from:  %s" % (
+                                outputSet3.getSize(),
+                                'tiltSeries related to the selected SetOfTiltSeries',
+                                self.filesPath.get()))            
+            summary.append("Sampling rate : *%0.2f* A/px" % (
+                                outputSet3.getSamplingRate()))
+            summary.append("*Imaging info*:\n" +
+                           "Lens label: %s \n" % self.lensLabel.get() +
+                           "Energy (eV): %f \n" % self.energy.get() +
+                           "Date of imaging (yyyymmdd): %s" % self.date.get())                    
         return summary
     
     def _methods(self):
         methods = []
-        outputSet1 = self._getOutputSetTiltSeries()
+        outputSet1 = self._getOutputTiltSeries()
         outputSet2 = self._getOutputFocalSeries()
+        outputSet3 = self._getOutputSetOfTiltSeries()
         if outputSet1 is not None:
             methods.append("*%d* %s were imported with a sampling rate of "
                            "*%0.2f* A/px (Lens label: %s, "
-                           "Energy (ev): %f, Date of imaging (ddmmyyy): %s)."
+                           "Energy (eV): %f, Date of imaging (yyyymmdd): %s)."
                            " Output set is %s."
                            % (outputSet1.getSize(), 
                               'images related to the selected TiltSeries',
-                              outputSet1.getSamplingRate()*10,
+                              outputSet1.getSamplingRate(),
                               self.lensLabel.get(),
                               self.energy.get(), self.date.get(),
                               self.getObjectTag('outputTiltSeries'))) 
         if outputSet2 is not None:
             methods.append("*%d* %s were imported with a sampling rate of "
                            "*%0.2f* A/px (Lens label: %s, "
-                           "Energy (ev): %f, Date of imaging (ddmmyyy): %s)."
+                           "Energy (eV): %f, Date of imaging (yyyymmdd): %s)."
                            " Output set is %s."
                            % (outputSet2.getSize(), 
                               'tiltSeries related to the selected FocalSeries',
-                              outputSet2.getSamplingRate()*10,
+                              outputSet2.getSamplingRate(),
                               self.lensLabel.get(),
                               self.energy.get(), self.date.get(),
-                              self.getObjectTag('outputFocalSeries')))           
+                              self.getObjectTag('outputFocalSeries')))
+        if outputSet3 is not None:
+            methods.append("*%d* %s were imported with a sampling rate of "
+                           "*%0.2f* A/px (Lens label: %s, "
+                           "Energy (eV): %f, Date of imaging (yyyymmdd): %s)."
+                           " Output set is %s."
+                           % (outputSet3.getSize(), 
+                              'tiltSeries related to the selected SetOfTiltSeries',
+                              outputSet3.getSamplingRate(),
+                              self.lensLabel.get(),
+                              self.energy.get(), self.date.get(),
+                              self.getObjectTag('outputSetOftiltSeries')))               
         return methods 
        
     #--------------------------- UTILS functions -------------------------------    
@@ -364,8 +408,11 @@ class ProtImportTiltSeries(ProtImportImages):
         acquisition.setEnergy(self.energy.get())
         acquisition.setDate(self.date.get())
     
-    def _getOutputSetTiltSeries(self):
+    def _getOutputTiltSeries(self):
         return getattr(self, 'outputTiltSeries', None)
+    
+    def _getOutputSetOfTiltSeries(self):
+        return getattr(self, 'outputSetOfTiltSeries', None)
     
     def _getOutputFocalSeries(self):
         return getattr(self, 'outputFocalSeries', None)
