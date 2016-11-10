@@ -36,7 +36,6 @@ from pyworkflow.utils import getFloatListFromValues
 import numpy as np
 import pyworkflow.em as em
 import pickle
-import scipy as sp
 from pyworkflow.em.packages.sxt.data import PSF3D
 
 
@@ -79,8 +78,10 @@ class ProtPsfCalculation(Protocol):
                            "calculation. Default values are set to match "
                            "Xradia manufactured SS pattern")
         form.addParam('pixelSizeX', params.FloatParam, default=5.0,
+                      expertLevel=params.LEVEL_ADVANCED,
                       label="PSF pixel size along X axis (nm)")
         form.addParam('pixelSizeZ', params.FloatParam, default=150,
+                      expertLevel=params.LEVEL_ADVANCED,
                       label="PSF pixel size along Z axis (nm)") 
                       
         form.addParallelSection(threads=1, mpi=2)
@@ -171,47 +172,24 @@ class ProtPsfCalculation(Protocol):
         psfPixelSizeX = psfDict['dx']
         psfPixelSizeZ = self.pixelSizeZ.get()
         
-        #calculating DoF        
+        #calculating DoF
         psfArray = psfDict['psf']
-        #claculating best psf image 
-        xCenter = np.floor(np.shape(psfArray)[1]/2)
-        centerValues = psfArray[:, xCenter, xCenter]
-        thr = 0.3
-        thrv = max(centerValues) * thr
-        mp = np.where(centerValues > thrv)#indices array above threshold
-        maxValue = max(centerValues)
-        maxIndex = [i for i, j in enumerate(centerValues) if j == maxValue]        
-       
-        zPosPositive = np.arange(np.shape(psfArray)[0])
-        zc = np.ceil(np.shape(psfArray)[0]/2)#central slice
-        zPosCenter = np.array([i - zc for i in zPosPositive])
+        from xpytools.getDOF import GetDOFClass
+        getDoFObj = GetDOFClass()
+        psfDof = getDoFObj.getDOF(psfArray,)
         
-        argth = sp.optimize.fmin(lambda x:abs(np.power(np.sinc(x), 2)-thr),0)
-        #zm:index with maximum value
-        zm = abs(zPosCenter[mp[0][0]] - zPosCenter[mp[0][-1]])/2       
-        k0 = argth / zm
-        x0 = np.asarray([0, maxValue, k0[0], abs((zc-maxIndex)[0])])#initial values
-        
-        fminFunc = lambda x : np.mean(abs(self._IapsfFunction(x, zPosCenter[mp])-centerValues[mp]))
-        xf = sp.optimize.fmin(fminFunc , x0 ,maxiter = 3000, maxfun = 3000)
+        #calculating Rayleigh resolution
+        from xpytools.rayleighResolution import RayleighResolutionClass
+        RayleighResolutionClassObj = RayleighResolutionClass()
+        rayLeighResolution = RayleighResolutionClassObj.getRayleighResolution(
+                                                            psfArray, psfPixelSizeX)
                 
-        tapsf = self._IapsfFunction(xf,zPosCenter)
-        maxValueTapsf = max(tapsf)
-        maxIndexTapsf = [i for i, j in enumerate(tapsf) if j == maxValueTapsf]        
-        
-        dmin = sp.interpolate.interp1d(tapsf[0:(maxIndexTapsf[0]+1)], 
-                                       zPosCenter[0:(maxIndexTapsf[0]+1)], 
-                                       kind='cubic')
-        dmax = sp.interpolate.interp1d(tapsf[maxIndexTapsf[0]:], 
-                                       zPosCenter[maxIndexTapsf[0]:], 
-                                       kind='cubic') 
-        psfDof = abs(dmax(maxValueTapsf*0.8))-abs(dmin(maxValueTapsf*0.8))
-        
         outPsf = PSF3D()
         outPsf.setLocation(fnOutPsf)
         outPsf.setSamplingRate(psfPixelSizeX * 10)
         outPsf.setZpixelSize(psfPixelSizeZ)
-        outPsf.setDoF(psfDof)       
+        outPsf.setDoF(psfDof)
+        outPsf.setRayLeighResolution(rayLeighResolution)      
         self._defineOutputs(output3DPSF=outPsf)
               
     #--------------------------- INFO functions -------------------------------------------- 
@@ -220,6 +198,9 @@ class ProtPsfCalculation(Protocol):
         outputSet = self._getOutputSet3DPsf()
         if outputSet is None:
             summary.append("Output 3DPSF is not ready yet.") 
+        else:
+            summary.append("Output 3DPSF is ready.")
+        
         return summary
     def _validate(self):
         errors = []
@@ -240,10 +221,6 @@ class ProtPsfCalculation(Protocol):
     
     def _definePsfDicName(self):
         return self._getExtraPath('psfDic.p')
-    
-    def _IapsfFunction(self,x,Dz):       
-        Iapsf = x[0]+(x[1]*(np.sinc(x[2]*(Dz-x[3]))**2))
-        return Iapsf
     
     def _getOutputSet3DPsf(self):
         return getattr(self, 'output3DPSF', None)

@@ -187,3 +187,11 @@ class PSF3D(em.Volume):
     
     def setDoF(self, DoF):
         self._DoF.set(DoF)
+        
+    def getRayLeighResolution(self):
+        return self._RayLeighResolution.get()
+        
+    def setRayLeighResolution(self, RayLeighResolution):
+        self._RayLeighResolution.set(RayLeighResolution)
+        
+        
