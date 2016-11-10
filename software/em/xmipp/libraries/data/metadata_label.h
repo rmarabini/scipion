@@ -414,7 +414,13 @@ enum MDLabel
     MDL_WEIGHT_ACCURACY_ALIGNABILITY, ///< Weight due to Alignability Accuracy
     MDL_WEIGHT_PRECISION_MIRROR, ///< Weight due to Mirror Precision
     MDL_WROBUST, ///< Weight of t-student distribution in robust Maximum likelihood
-    MDL_X, ///< X component (double)
+
+	MDL_XRAY_FOCAL_IDX, ///< SXT focal ID (to import FocalSeries)
+	MDL_XRAY_TILT_IDX, ///< SXT TiltSeries index in each FocalSeries
+	MDL_XRAY_DEFOCUS, ///< SXT defocus value of each TiltSeries in a FocalSeries
+	MDL_XRAY_REF_IDX, ///< SXT reference tiltSeries index in each FocalSeies for alignment purpose
+
+	MDL_X, ///< X component (double)
     MDL_XCOOR, ///< X component (int)
     MDL_XCOOR_TILT, ///< X component in tilted micrograph (int)
     MDL_XSIZE, ///< X size (int)
@@ -1789,6 +1795,11 @@ private:
         MDL::addLabel(MDL_WROBUST, LABEL_DOUBLE, "wRobust");
         MDL::addLabel(MDL_XCOOR, LABEL_INT, "xcoor");
         MDL::addLabel(MDL_XCOOR_TILT, LABEL_INT, "xcoorTilt");
+
+        MDL::addLabel(MDL_XRAY_FOCAL_IDX, LABEL_INT, "focalGroup");
+        MDL::addLabel(MDL_XRAY_TILT_IDX, LABEL_INT, "tiltSeriesIndex");
+        MDL::addLabel(MDL_XRAY_DEFOCUS, LABEL_DOUBLE, "defocus");
+        MDL::addLabel(MDL_XRAY_REF_IDX, LABEL_INT, "refIndex");
 
         MDL::addLabel(MDL_X, LABEL_DOUBLE, "x");
         MDL::addLabel(MDL_XSIZE, LABEL_SIZET, "xSize");
