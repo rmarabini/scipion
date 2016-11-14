@@ -57,7 +57,7 @@ class ProtImportTiltSeries(ProtImportImages):
                            "related to the set of tilt series")
         form.addParam('importFocalSeries', params.BooleanParam, default=False,
                       condition="importSetOfTiltSeries",
-                      label='Import focal tilt series?',
+                      label='Import focal series?',
                       help="This is used to add more parameters "
                            "related to the focal tilt series")
         form.addParam('filesPath', params.PathParam,                      
