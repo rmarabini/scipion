@@ -176,14 +176,18 @@ class ProtPsfCalculation(Protocol):
         psfArray = psfDict['psf']
         from xpytools.getDOF import GetDOFClass
         getDoFObj = GetDOFClass()
-        psfDof = getDoFObj.getDOF(psfArray,)
+        psfDof = getDoFObj.getDOF(psfArray)
+        print "DoF = ", psfDof
         
         #calculating Rayleigh resolution
+        psfImageNumber = np.floor(np.shape(psfArray)[0]/2)
         from xpytools.rayleighResolution import RayleighResolutionClass
         RayleighResolutionClassObj = RayleighResolutionClass()
         rayLeighResolution = RayleighResolutionClassObj.getRayleighResolution(
-                                                            psfArray, psfPixelSizeX)
+                                                            psfArray[psfImageNumber], psfPixelSizeX)
                 
+        print "RayLeighResolution = ", rayLeighResolution
+        
         outPsf = PSF3D()
         outPsf.setLocation(fnOutPsf)
         outPsf.setSamplingRate(psfPixelSizeX * 10)

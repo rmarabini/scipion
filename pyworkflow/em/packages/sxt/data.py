@@ -175,6 +175,7 @@ class PSF3D(em.Volume):
         em.Volume.__init__(self, **kwargs)
         self._ZpixelSize = pwobj.Float(0.0)
         self._DoF = pwobj.Float(0.0)
+        self._RayLeighResolution = pwobj.Float(0.0)
         
     def getZpixelSize(self):
         return self._ZpixelSize.get()
