@@ -36,7 +36,6 @@ import numpy as np
 import xmipp
 from pyworkflow.em.packages.sxt.data import TiltSeries, SetOfTiltSeries
 from pyworkflow.utils import getFloatListFromValues
-import pyworkflow.em.metadata as md
 from pyworkflow.mapper.sqlite_db import SqliteDb
 
 
@@ -146,7 +145,10 @@ class ProtImportTiltSeries(ProtImportImages):
         
     def createOutputStepSetOfTiltSeries(self, pattern, fnOutMd):
         self.info("Using pattern: '%s'" % pattern)
-        focalSeries = self._createSetOfTiltSeries()
+        if self.importFocalSeries.get():
+            focalSeries = self._createSetOfTiltSeries('Focal')
+        else:
+            focalSeries = self._createSetOfTiltSeries('SetOfTilt') 
         focalSeries.setSamplingRate(self.samplingRate.get()* 10)        
         mdOut = xmipp.MetaData()
         tiltIndex = 0
@@ -420,10 +422,10 @@ class ProtImportTiltSeries(ProtImportImages):
     def _defineOutputMdName(self):
         return self._getExtraPath('normalized_tiltSeries_plus_related_info.xmd')
         
-    def _createSetOfTiltSeries(self):
+    def _createSetOfTiltSeries(self, prefix):
         """ Create a set and set the filename. 
         If the file exists, it will be delete. """
-        setFn = self._getPath('focalSeries.sqlite')
+        setFn = self._getPath('%sSeries.sqlite'%prefix)
         # Close the connection to the database if
         # it is open before deleting the file
         cleanPath(setFn)        
