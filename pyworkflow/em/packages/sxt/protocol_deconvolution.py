@@ -26,15 +26,17 @@
 # *
 # **************************************************************************
 
+import sys
 import pyworkflow.protocol.params as params
-from pyworkflow.em import Protocol
+from pyworkflow.em.packages.sxt.protocol_import import ProtImportTiltSeries
 from pyworkflow.em.packages.sxt.data import TiltSeries, SetOfTiltSeries
 import numpy as np
 import pyworkflow.em as em
 from pyworkflow.utils.path import cleanPath
 from pyworkflow.mapper.sqlite_db import SqliteDb
+import xmipp
 
-class ProtDeconvolution(Protocol):
+class ProtDeconvolution(ProtImportTiltSeries):
 
     """    
     This protocol is aimed to deconvolve tiltSeries and 3D PSF.        
@@ -81,14 +83,15 @@ class ProtDeconvolution(Protocol):
         form.addParallelSection(threads=1, mpi=2)
     #--------------------------- INSERT steps functions --------------------------------------------
     
-    def _insertAllSteps(self):
+    def _insertAllSteps(self):########################################## barkhi variable ha mesle khandane voroodi ha va psf dar inja anjam shavad va be function pass shavad ke hajme code ha kam shavad
         inputType = self.inputType.get()
         if inputType == self.TILT_SERIES:
             self._insertFunctionStep('createOutputStepTiltSeries')
         elif inputType == self.SET_OF_TILT_SERIES:
             self._insertFunctionStep('createOutputStepSetOfTiltSeries')
         else:
-            self._insertFunctionStep('createOutputStepFocalSeries')            
+            self._insertFunctionStep('focalSeriesStdDeconvolution')
+            #self._insertFunctionStep('createOutputStepFocalSeries')            
     #--------------------------- STEPS functions --------------------------------------------
         
     def createOutputStepTiltSeries(self):
@@ -127,10 +130,10 @@ class ProtDeconvolution(Protocol):
         angles = inputTiltSeries.getAngles()        
         tiltSeries.setAngles(angles)        
         tiltSeries.setSize(inputTiltSeries.getSize())
+        self._createTiltSeriesMd(1, fnOutTiltSeries, angles)
         self._defineOutputs(outputTiltSeries=tiltSeries)            
             
-    def createOutputStepSetOfTiltSeries(self):
-    
+    def createOutputStepSetOfTiltSeries(self):    
         inputSetOfTiltSeries = self.inputSetOfTiltSeries.get()
         inputPSF = self.inputPsf.get()
         psfPixelSizeX = self.inputPsf.get().getSamplingRate()/10 ######################################## ba obj jadid baray PSF3D bayad modify shavad
@@ -141,9 +144,11 @@ class ProtDeconvolution(Protocol):
         from xpytools.mtf_deconv_wiener import MTFDeconvWiener
         deconvolutionObj = MTFDeconvWiener()
         ih = em.ImageHandler()
-        outputSetOfTilt = self._createSetOfTiltSeries()
+        outputSetOfTilt = self._createSetOfTiltSeries('SetOfTilt')
+        outputSetOfTilt.setSamplingRate(inputSetOfTiltSeries.getSamplingRate())
         
-        for i, tilt in enumerate (inputSetOfTiltSeries.iterItems()):
+        mdOut = xmipp.MetaData()
+        for i, tilt in enumerate (inputSetOfTiltSeries.iterItems()):            
             inputTiltSeriesArray = ih.read(tilt).getData()
             tiltSeriesPixelSize = tilt.getSamplingRate()/10
             deconvTiltSeriesArray = deconvolutionObj.mtf_deconv_wiener(
@@ -151,7 +156,7 @@ class ProtDeconvolution(Protocol):
                                 psfArrayToDeconv, psfPixelSizeX, kw, pad=20, fc=-1)
         
             outputTiltSeries = ih.createImage()        
-            fnOutTiltSeries = self._defineOutputName(i)
+            fnOutTiltSeries = self._defineOutputName(i+1)
             k = 0
             for j in range(np.shape(deconvTiltSeriesArray)[0]):
                 outputTiltSeries.setData(deconvTiltSeriesArray[j, :, :])
@@ -168,17 +173,39 @@ class ProtDeconvolution(Protocol):
             tiltSeries.setSamplingRate(tilt.getSamplingRate())
             angles = tilt.getAngles()        
             tiltSeries.setAngles(angles)        
-            tiltSeries.setSize(tilt.getSize())
-            outputSetOfTilt.append(tiltSeries)           
-            
+            tiltSeries.setSize(tilt.getSize())            
+            fnOutMd = self._createTiltSeriesMd(i+1, fnOutTiltSeries, angles)
+            objId = mdOut.addObject()
+            mdOut.setValue(xmipp.MDL_TOMOGRAMMD, fnOutMd, objId)
+            outputSetOfTilt.append(tiltSeries)
+            sys.stdout.write("\rinputTiltSeries number %d Deconvolved \n\n" % (i+1))
+            sys.stdout.flush()           
+        mdOut.write(self._getExtraPath('deconvolvedSetOfTiltSeries.xmd'))
         self._defineOutputs(outputSetOfTiltSeries=outputSetOfTilt)
     
-    def createOutputStepFocalSeries(self): 
+    def focalSeriesStdDeconvolution(self):
+        inputFocalSeries = self.inputFocalSeries.get()
+        inputPSF = self.inputPsf.get()
+        psfPixelSizeX = self.inputPsf.get().getSamplingRate()/10 ######################################## ba obj jadid baray PSF3D bayad modify shavad
+        psfArrayToDeconv = self._preDeconvolution(inputPSF)
+        kw = self.kw.get()
         
         
-        x=1     
+        from xpytools.mtf_deconv_wiener import MTFDeconvWiener
+        deconvolutionObj = MTFDeconvWiener()
+        ih = em.ImageHandler()
+        
+        
+        
+    #def createOutputStepFocalSeries(self): 
+        
+        
+    #    x=1     
     #--------------------------- INFO functions -------------------------------------------- 
     
+    def _validate(self):
+        # to ignore validation function of import protocol!!!
+        pass
     #def _summary(self):
     #    summary = []
     #    outputSet = self._getOutputSetTiltSeries()
@@ -247,15 +274,26 @@ class ProtDeconvolution(Protocol):
         psfArrayToDeconv = np.mean(inputPsfArray[zPos, :, :], axis=0)
         return psfArrayToDeconv
     
-    def _createSetOfTiltSeries(self):
+    def _createSetOfTiltSeries(self, prefix):
         """ Create a set and set the filename. 
         If the file exists, it will be delete. """
-        setFn = self._getPath('focalSeries.sqlite')
+        setFn = self._getPath('%sSeries.sqlite'%prefix)
         # Close the connection to the database if
         # it is open before deleting the file
         cleanPath(setFn)        
         SqliteDb.closeConnection(setFn)        
         setObj = SetOfTiltSeries(filename=setFn)
         return setObj
+    
+    def _createTiltSeriesMd(self, suffix, tiltImagesStack, tiltAngles):
+        outputMd = self._getExtraPath('deconvolvedTiltSeries_%d.xmd'%suffix)
+        anglesArray = np.array(tiltAngles.split(','), dtype=np.float)
+        mdOut = xmipp.MetaData()            
+        for k in range(np.shape(anglesArray)[0]):
+            objId = mdOut.addObject()
+            mdOut.setValue(xmipp.MDL_IMAGE, "%d@%s" % (k+1,tiltImagesStack), objId)
+            mdOut.setValue(xmipp.MDL_ANGLE_TILT, anglesArray[k], objId)
+        mdOut.write(outputMd)
+        return outputMd
     
     
