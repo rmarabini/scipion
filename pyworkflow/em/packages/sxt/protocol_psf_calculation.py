@@ -180,11 +180,11 @@ class ProtPsfCalculation(Protocol):
         print "DoF = ", psfDof
         
         #calculating Rayleigh resolution
-        psfImageNumber = np.floor(np.shape(psfArray)[0]/2)
+        BestPsfArray = self._psfSelection(psfArray)
         from xpytools.rayleighResolution import RayleighResolutionClass
         RayleighResolutionClassObj = RayleighResolutionClass()
         rayLeighResolution = RayleighResolutionClassObj.getRayleighResolution(
-                                                            psfArray[psfImageNumber], psfPixelSizeX)
+                                                            BestPsfArray, psfPixelSizeX)
                 
         print "RayLeighResolution = ", rayLeighResolution
         
@@ -228,3 +228,24 @@ class ProtPsfCalculation(Protocol):
     
     def _getOutputSet3DPsf(self):
         return getattr(self, 'output3DPSF', None)
+    
+    def _psfSelection(self, psfArray):    
+        psfPixelSizeZ = self.pixelSizeZ.get() 
+        #psfPixelSizeZ = 150
+        #claculating best psf image to get their mean and use in calculating RayleighResolution
+        xCenter = np.floor(np.shape(psfArray)[1]/2)
+        centerValues = psfArray[:, xCenter, xCenter]
+        thr = 0.3
+        thrv = max(centerValues) * thr
+        #finding indices based on centerValues curne and thrv      
+        #mp: indices array above threshold, zm: central index
+        #zN: indices range that will use to select psf images to get their average
+        mp = np.where(centerValues > thrv)
+        zm = mp[0][np.floor((mp[0][0] - mp[0][-1])/2)]
+        zN = np.floor(np.shape(psfArray)[0]/psfPixelSizeZ/2);
+        zPos = []
+        for i in range(2*int(zN)+1):
+            zPos.append(int(zm-zN+i))
+        print "PSF image indices to calculate their mean are: ", zPos        
+        BestPsfArray = np.mean(psfArray[zPos, :, :], axis=0)
+        return BestPsfArray
