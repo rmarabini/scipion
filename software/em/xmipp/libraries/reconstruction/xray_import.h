@@ -67,6 +67,8 @@ public:
     bool logFix;
     /// Flag to apply self-attenuation corrections
     bool selfAttFix;
+    /// Flag to extract only the angles
+    bool anglesOnly;
     /// Xray microscopy data origin;
     enum DataSource
     {

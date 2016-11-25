@@ -94,6 +94,8 @@ void ProgXrayImport::defineParams()
     addParamsLine("                                     : t_ini and t_end denotes the range of the tomogram images, and");
     addParamsLine("                                     : f_ini and f_end denotes the range of the flatfield images stored in the same directory");
     addParamsLine("[--mistral <input_file>]       : hdf5 Nexus file acquired in Mistral microscope at Alba, which contains all data");
+    addParamsLine("[--angles_only]         : Extract the angle values from hdf5 Nexus file to raw tlt file, only");
+
     addParamsLine("   == Filters                                          ");
     addParamsLine("  [--bad_pixels <type=factor>]    : Apply a boundaries median filter to bad pixels");
     addParamsLine("       where <type>  ");
@@ -118,7 +120,7 @@ void ProgXrayImport::defineParams()
 void ProgXrayImport::init()
 {
     tIni = tEnd = fIni = fEnd = 0;
-    extFlat = darkFix = false;
+    extFlat = darkFix = anglesOnly = false;
     BPFactor = 0;
     dSource = NONE;
 }
@@ -176,6 +178,9 @@ void ProgXrayImport::readParams()
 
     selfAttFix   = checkParam("--correct");
     logFix   = (selfAttFix)? true : checkParam("--log");
+
+    if (checkParam("--angles_only"))
+        anglesOnly = true;
 }
 
 // Show ====================================================================
@@ -532,11 +537,11 @@ void runThread(ThreadArgument &thArg)
 
             MDRow rowGeo;
             ptrProg->readGeoInfo(fnImgIn, rowGeo);
-//            ptrProg->readAndCrop(fnImgIn, Iaux, ptrProg->cropSizeX, ptrProg->cropSizeY);
+            //            ptrProg->readAndCrop(fnImgIn, Iaux, ptrProg->cropSizeX, ptrProg->cropSizeY);
 
             Iaux.read(fnImgIn);
             Iaux().selfWindow(ptrProg->cropSizeYi,ptrProg->cropSizeXi,
-            		(int)(YSIZE(Iaux())-ptrProg->cropSizeYe-1),(int)(XSIZE(Iaux())-ptrProg->cropSizeXe-1));
+                              (int)(YSIZE(Iaux())-ptrProg->cropSizeYe-1),(int)(XSIZE(Iaux())-ptrProg->cropSizeXe-1));
 
             Iaux().resetOrigin();
 
@@ -700,69 +705,87 @@ void ProgXrayImport::run()
     inMD.findObjects(objIds);
     size_t nIm = inMD.size();
 
-    // Create empty output stack file
 
-    getImageInfo(inMD, imgInfo);
-
-
-    /* Get the flatfield:: We get the FF after the image list because we need the image size to adapt the FF
-     * in case they were already cropped.
-     */
-    if (!fnFlat.empty())
+    if (!anglesOnly)
     {
-        std::cout << "Getting flatfield from "+fnFlat << " ..." << std::endl;
-        getFlatfield(fnFlat,IavgFlat);
-        if ( XSIZE(IavgFlat()) != 0 )
+        // Create empty output stack file
+
+        getImageInfo(inMD, imgInfo);
+
+
+        /* Get the flatfield:: We get the FF after the image list because we need the image size to adapt the FF
+         * in case they were already cropped.
+         */
+        if (!fnFlat.empty())
         {
-            FileName ffName = fnRoot+"_flatfield_avg.xmp";
-            IavgFlat.write(ffName);
-            fMD.setValue(MDL_IMAGE, ffName, fMD.addObject());
+            std::cout << "Getting flatfield from "+fnFlat << " ..." << std::endl;
+            getFlatfield(fnFlat,IavgFlat);
+            if ( XSIZE(IavgFlat()) != 0 )
+            {
+                FileName ffName = fnRoot+"_flatfield_avg.xmp";
+                IavgFlat.write(ffName);
+                fMD.setValue(MDL_IMAGE, ffName, fMD.addObject());
+            }
         }
-    }
 
-    createEmptyFile(fnOut, imgInfo.adim.xdim-cropSizeXi-cropSizeXe, imgInfo.adim.ydim-cropSizeYi-cropSizeYe, 1, nIm);
+        createEmptyFile(fnOut, imgInfo.adim.xdim-cropSizeXi-cropSizeXe, imgInfo.adim.ydim-cropSizeYi-cropSizeYe, 1, nIm);
 
-    // Process images
-    td = new ThreadTaskDistributor(nIm, XMIPP_MAX(1, nIm/30));
-    tm = new ThreadManager(thrNum, this);
-    std::cerr << "Getting data from " << fnInput << " ...\n";
-    init_progress_bar(nIm);
-    tm->run(runThread);
-    progress_bar(nIm);
+        // Process images
+        td = new ThreadTaskDistributor(nIm, XMIPP_MAX(1, nIm/30));
+        tm = new ThreadManager(thrNum, this);
+        std::cerr << "Getting data from " << fnInput << " ...\n";
+        init_progress_bar(nIm);
+        tm->run(runThread);
+        progress_bar(nIm);
 
-    // Write Metadata and angles
-    MetaData MDSorted;
-    MDSorted.sort(outMD,MDL_ANGLE_TILT);
-    MDSorted.write("tomo@"+fnRoot + ".xmd");
-    if ( fMD.size() > 0 )
-        fMD.write("flatfield@"+fnRoot + ".xmd", MD_APPEND);
-
-    // We also reference initial and final images at 0 degrees for Mistral tomograms
-    if ( dSource == MISTRAL )
-    {
-        fMD.clear();
-        FileName degree0Fn = "NXtomo/instrument/sample/0_degrees_initial_image";
-        if ( H5File.checkDataset(degree0Fn.c_str()))
-            fMD.setValue(MDL_IMAGE, degree0Fn + "@" + fnInput, fMD.addObject());
-        degree0Fn = "NXtomo/instrument/sample/0_degrees_final_image";
-        if ( H5File.checkDataset(degree0Fn.c_str()))
-            fMD.setValue(MDL_IMAGE, degree0Fn + "@" + fnInput, fMD.addObject());
+        // Write Metadata and angles
+        MetaData MDSorted;
+        MDSorted.sort(outMD,MDL_ANGLE_TILT);
+        MDSorted.write("tomo@"+fnRoot + ".xmd");
         if ( fMD.size() > 0 )
-            fMD.write("degree0@"+fnRoot + ".xmd", MD_APPEND);
-    }
+            fMD.write("flatfield@"+fnRoot + ".xmd", MD_APPEND);
 
-    // Write tlt file for IMOD
-    std::ofstream fhTlt;
-    fhTlt.open((fnRoot+".tlt").c_str());
-    if (!fhTlt)
-        REPORT_ERROR(ERR_IO_NOWRITE,fnRoot+".tlt");
-    FOR_ALL_OBJECTS_IN_METADATA(MDSorted)
-    {
-        double tilt;
-        MDSorted.getValue(MDL_ANGLE_TILT,tilt,__iter.objId);
-        fhTlt << tilt << std::endl;
+        // We also reference initial and final images at 0 degrees for Mistral tomograms
+        if ( dSource == MISTRAL )
+        {
+            fMD.clear();
+            FileName degree0Fn = "NXtomo/instrument/sample/0_degrees_initial_image";
+            if ( H5File.checkDataset(degree0Fn.c_str()))
+                fMD.setValue(MDL_IMAGE, degree0Fn + "@" + fnInput, fMD.addObject());
+            degree0Fn = "NXtomo/instrument/sample/0_degrees_final_image";
+            if ( H5File.checkDataset(degree0Fn.c_str()))
+                fMD.setValue(MDL_IMAGE, degree0Fn + "@" + fnInput, fMD.addObject());
+            if ( fMD.size() > 0 )
+                fMD.write("degree0@"+fnRoot + ".xmd", MD_APPEND);
+        }
+        // Write tlt file for IMOD
+        std::ofstream fhTlt;
+        fhTlt.open((fnRoot+".tlt").c_str());
+        if (!fhTlt)
+            REPORT_ERROR(ERR_IO_NOWRITE,fnRoot+".tlt");
+        FOR_ALL_OBJECTS_IN_METADATA(MDSorted)
+        {
+            double tilt;
+            MDSorted.getValue(MDL_ANGLE_TILT,tilt,__iter.objId);
+            fhTlt << tilt << std::endl;
+        }
+        fhTlt.close();
+        delete td;
+        delete tm;
     }
-    fhTlt.close();
-    delete td;
-    delete tm;
+    else
+    {
+        // Write tlt file for IMOD
+        std::ofstream fhTlt;
+        fhTlt.open((fnRoot+".tlt").c_str());
+        if (!fhTlt)
+            REPORT_ERROR(ERR_IO_NOWRITE,fnRoot+".tlt");
+        FOR_ALL_ELEMENTS_IN_MATRIX1D(anglesArray)
+        {
+            double tilt;
+            tilt = dMi(anglesArray, i);
+            fhTlt << tilt << std::endl;
+        }
+        fhTlt.close();
+    }
 }
