@@ -95,7 +95,7 @@ def loadHostsConf(hostsConf):
                 
                 return od
 
-            host.setScipionHome(get('SCIPION_HOME', os.environ['SCIPION_HOME']))
+            host.setScipionHome(get('SCIPION_HOME', pw.SCIPION_HOME))
             host.setScipionConfig(get('SCIPION_CONFIG'))
             # Read the address of the remote hosts, 
             # using 'localhost' as default for backward compatibility
@@ -122,23 +122,25 @@ def loadHostsConf(hostsConf):
         return hosts
     except Exception as e:
         sys.exit('Failed to read settings. The reported error was:\n  %s\n'
-                 'To solve it, delete %s and run again.' % (e, hostsConf)) 
-        
+                 'To solve it, delete %s and run again.' % (e, hostsConf))
+
+
+# Helper function to recursively add items to a menu.
+def addToTree(menu, item):
+    """Add item (a dictionary that can contain more dictionaries) to menu"""
+    children = item.pop('children', [])
+    subMenu = menu.addSubMenu(**item)  # we expect item={'text': ...}
+    for child in children:
+        addToTree(subMenu, child)  # add recursively to sub-menu
+
+    return subMenu
+
 
 def loadProtocolsConf(protocolsConf):
     """ Read the protocol configuration from a .conf
     file similar to the one in ~/.config/scipion/protocols.conf,
     which is the default one when no file is passed.
     """
-
-    # Helper function to recursively add items to a menu.
-    def add(menu, item):
-        "Add item (a dictionary that can contain more dictionaries) to menu"
-        children = item.pop('children', [])
-        subMenu = menu.addSubMenu(**item)  # we expect item={'text': ...}
-        for child in children:
-            add(subMenu, child)  # add recursively to sub-menu
-
     # Read menus from users' config file.
     cp = ConfigParser()
     cp.optionxform = str  # keep case (stackoverflow.com/questions/1611799)
@@ -147,14 +149,16 @@ def loadProtocolsConf(protocolsConf):
     try:
         assert cp.read(protocolsConf) != [], 'Missing file %s' % protocolsConf
 
-        # Populate the protocol menu from the config file.
+        # Populate the protocols menu from the config file.
         for menuName in cp.options('PROTOCOLS'):
             menu = ProtocolConfig(menuName)
             children = json.loads(cp.get('PROTOCOLS', menuName))
             for child in children:
-                add(menu, child)
+                addToTree(menu, child)
             protocols[menuName] = menu
-        
+
+        addAllProtocols(protocols)
+
         return protocols
     
     except Exception as e:
@@ -162,7 +166,58 @@ def loadProtocolsConf(protocolsConf):
         traceback.print_exc()
         sys.exit('Failed to read settings. The reported error was:\n  %s\n'
                  'To solve it, delete %s and run again.' % (e, protocolsConf))
-        
+
+
+def isAFinalProtocol(v, k):
+    from pyworkflow.viewer import ProtocolViewer
+    if issubclass(v, ProtocolViewer):
+        return False
+    elif v.isBase():
+        return False
+    # To remove duplicated protocol, ProtMovieAlignment turns into OF:
+    # ProtMovieAlignment = XmippProtOFAlignment
+    elif v.__name__ != k:
+        return False
+    else:
+        return True
+
+
+def addAllProtocols(protocols):
+    # Add all protocols
+    from pyworkflow.em import getProtocols
+    allProts = getProtocols()
+
+    # Sort the dictionary
+    allProtsSorted = OrderedDict(sorted(allProts.items(), key= lambda e: e[1].getClassLabel()))
+
+    allProtMenu = ProtocolConfig("All")
+    packages = {}
+    # Group protocols by package name
+    for k, v in allProtsSorted.iteritems():
+
+        if isAFinalProtocol(v, k):
+
+            packageName = v.getClassPackageName()
+
+            # Get the package submenu
+            packageMenu = packages.get(packageName)
+
+            # If no package menu available
+            if packageMenu is None:
+
+                # Add it to the menu ...
+                packageLine = {"tag": "package", "value": packageName, "text": packageName}
+                packageMenu = addToTree(allProtMenu, packageLine)
+
+                # Store it in the dict
+                packages[packageName] = packageMenu
+
+            # Add the protocol
+            protLine = {"tag": "protocol", "value": k, "text": v.getClassLabel(prependPackageName=False)}
+            addToTree(packageMenu, protLine)
+
+    protocols["All"] = allProtMenu
+
 
 def loadWebConf():
     """ Load configuration parameters to be used in web.
@@ -247,11 +302,8 @@ class ProjectSettings(pwobj.OrderedObject):
         self.readOnly.set(value)
         
     def getCreationTime(self):
-        f = "%Y-%m-%d %H:%M:%S.%f"
-        creationTime = self.creationTime.get()
+        return self.creationTime.datetime()
 
-        return dt.datetime.strptime(creationTime, f)
-    
     def setCreationTime(self, value):
         self.creationTime.set(value)
         

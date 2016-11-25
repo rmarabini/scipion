@@ -20,7 +20,7 @@
 # * 02111-1307  USA
 # *
 # *  All comments concerning this program package may be sent to the
-# *  e-mail address 'jmdelarosa@cnb.csic.es'
+# *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
 
@@ -47,7 +47,8 @@ class GctfImportCTF():
         fnBase = pwutils.removeExt(fileName)
         for suffix in ['_psd.mrc', '.mrc', '.ctf']:
             psdPrefixes = [fnBase, 
-                           fnBase.replace('_ctffind3', '')]
+                           fnBase.replace('_ctffind3', ''),
+                           fnBase.replace('_gctf', '')]
             for prefix in psdPrefixes:
                 psdFile =  prefix + suffix
                 if os.path.exists(psdFile):
@@ -55,4 +56,3 @@ class GctfImportCTF():
                         psdFile += ':mrc'
                     ctf.setPsdFile(psdFile)
         return ctf
-
