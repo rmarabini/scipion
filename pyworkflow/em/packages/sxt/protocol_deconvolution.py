@@ -32,7 +32,7 @@ from pyworkflow.em.packages.sxt.protocol_import import ProtImportTiltSeries
 from pyworkflow.em.packages.sxt.data import TiltSeries, SetOfTiltSeries
 import numpy as np
 import pyworkflow.em as em
-from pyworkflow.utils.path import cleanPath
+from pyworkflow.utils.path import cleanPath, removeExt
 from pyworkflow.mapper.sqlite_db import SqliteDb
 import xmipp
 
@@ -79,6 +79,14 @@ class ProtDeconvolution(ProtImportTiltSeries):
         form.addParam('kw', params.FloatParam,default = 0.05, 
                       label='k-Factor',
                       help="----")
+        form.addParam('firstAngle', params.FloatParam,default = -65.0021,
+                      condition = '(inputType == %d)' % self.FOCAL_SERIES, 
+                      label='First angle',
+                      help="The angle of the first image in degrees")
+        form.addParam('incrementStep', params.FloatParam,default = 1.004, 
+                      condition = '(inputType == %d)' % self.FOCAL_SERIES,
+                      label='Angles increment step',
+                      help="Angles increment step in degrees")
         
         form.addParallelSection(threads=1, mpi=2)
     #--------------------------- INSERT steps functions --------------------------------------------
@@ -195,6 +203,22 @@ class ProtDeconvolution(ProtImportTiltSeries):
         deconvolutionObj = MTFDeconvWiener()
         ih = em.ImageHandler()
         
+        ### for test
+        for i, tilt in enumerate (inputFocalSeries.iterItems()):            
+            inputTiltSeriesArray = ih.read(tilt).getData()
+            tiltSeriesPixelSize = tilt.getSamplingRate()/10
+            deconvTiltSeriesArray = deconvolutionObj.mtf_deconv_wiener(
+                                inputTiltSeriesArray, tiltSeriesPixelSize, 
+                                psfArrayToDeconv, psfPixelSizeX, kw, pad=20, fc=-1)
+        
+            outputTiltSeries = ih.createImage()        
+            fnOutTiltSeries = self._defineOutputName(i+1)
+            k = 0
+            for j in range(np.shape(deconvTiltSeriesArray)[0]):
+                outputTiltSeries.setData(deconvTiltSeriesArray[j, :, :])
+                k += 1
+                outputTiltSeries.write((k,fnOutTiltSeries))
+            self. _sxtFastalign(fnOutTiltSeries, self.firstAngle.get(), self.incrementStep.get())
         
         
     #def createOutputStepFocalSeries(self): 
@@ -296,4 +320,83 @@ class ProtDeconvolution(ProtImportTiltSeries):
         mdOut.write(outputMd)
         return outputMd
     
-    
+    def _sxtFastalign(self, fnStack, firsttiltAngle, incrementStep):
+        fnBase = removeExt(fnStack)
+        
+        #Prealignment file generation               
+        tiltxcorrArgs = "-input %s -output %s" % (fnStack, fnBase + '.prexf')
+        tiltxcorrArgs += " -first %f" % firsttiltAngle
+        tiltxcorrArgs += " -increment %f" % incrementStep
+        tiltxcorrArgs += " -rotation 90.0 -sigma1 0.03"
+        tiltxcorrArgs += " -radius2 0.25 -sigma2 0.05"        
+        self.runJob('tiltxcorr', tiltxcorrArgs)
+        
+        #alignment file generation        
+        xftoxgArgs = "-input %s -goutput %s" % (fnBase + '.prexf', fnBase + '.prexg')
+        xftoxgArgs += " -nfit 0" 
+        self.runJob('xftoxg', xftoxgArgs)
+        
+        newstackArgs = "-input %s -output %s" % (fnStack, fnBase + '.preali')
+        newstackArgs += " -mode 0 -float 2"
+        newstackArgs += " -xform" % (fnBase + '.prexg')
+        self.runJob('newstack', newstackArgs)
+        
+        tiltxcorrArgs = "-input %s -output %s" % (fnBase + '.preali', fnBase + '.fid')
+        tiltxcorrArgs += " -first %f" % firsttiltAngle
+        tiltxcorrArgs += " -increment %f" % incrementStep
+        tiltxcorrArgs += " -prexf %s" % (fnBase + '.prexg')
+        tiltxcorrArgs += " -rotation 90.0 -sigma1 0.03"
+        tiltxcorrArgs += " -radius2 0.25 -sigma2 0.05" 
+        tiltxcorrArgs += " -border 49,49 -size 300,300"
+        tiltxcorrArgs += " -LengthAndOverlap 15,4 -overlap 0.33,0.33"       
+        self.runJob('tiltxcorr', tiltxcorrArgs)
+        
+        #Alignment (last step - creating aligned output .mrc)
+        tiltalignArgs = "-ModelFile %s" % (fnBase + '.fid')
+        tiltalignArgs += " -ImageFile %s" % (fnBase + '.preali')
+        tiltalignArgs += " -OutputTransformFile %s" % (fnBase + '.tltxf')
+        tiltalignArgs += " -OutputLocalFile %s" % (fnBase + '_local.xf')
+        tiltalignArgs += " -OutputTiltFile %s" % (fnBase + '.tlt')        
+        tiltalignArgs += " -first %f" % firsttiltAngle
+        tiltalignArgs += " -increment %f" % incrementStep
+        tiltalignArgs += " -RotationAngle 90.0 -AngleOffset 0.0"
+        tiltalignArgs += " -RotOption -1 -RotDefaultGrouping 5"
+        tiltalignArgs += " -TiltOption 0 -MagReferenceView 1"
+        tiltalignArgs += " -MagOption 0 -MagDefaultGrouping 4"
+        tiltalignArgs += " -XStretchOption 0 -XStretchDefaultGrouping 7"
+        tiltalignArgs += " -SkewOption 0 -SkewDefaultGrouping 11"
+        tiltalignArgs += " -ResidualReportCriterion 3.0 -SurfacesToAnalyze 1"
+        tiltalignArgs += " -MetroFactor 0.25 -MaximumCycles 1000"
+        tiltalignArgs += " -AxisZShift 0.0 -LocalAlignments 0"
+        tiltalignArgs += " -MinFidsTotalAndEachSurface 8,3 -LocalOutputOptions 1,0,1"
+        tiltalignArgs += " -LocalRotOption 3 -LocalRotDefaultGrouping 6"
+        tiltalignArgs += " -LocalTiltOption 5 -LocalTiltDefaultGrouping 6"
+        tiltalignArgs += " -LocalMagReferenceView 1 -LocalMagOption 3"
+        tiltalignArgs += " -LocalMagDefaultGrouping 7 -LocalXStretchOption 0"
+        tiltalignArgs += " -LocalXStretchDefaultGrouping 7 -LocalSkewOption 0"
+        tiltalignArgs += " -LocalSkewDefaultGrouping 11 -BeamTiltOption 0"
+        self.runJob('tiltalign', tiltalignArgs)
+        
+        xfproductArgs = "-in1 %s -in2 %s" % (fnBase + '.prexg', fnBase + '.tltxf')
+        xfproductArgs += " -output %s" % (fnBase + '_fid.xf')
+        self.runJob('xfproduct', xfproductArgs)
+        
+        newstackArgs = "-input %s" % fnStack
+        newstackArgs += " -output %s" % (fnBase + '_fastAlignedOutput.mrc')
+        newstackArgs += " -offset 0,0 -origin -taper 1,0"
+        newstackArgs += " -xform" % (fnBase + '_fid.xf')
+        self.runJob('newstack', newstackArgs)
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
