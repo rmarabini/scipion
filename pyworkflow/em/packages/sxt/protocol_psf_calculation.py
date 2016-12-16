@@ -183,17 +183,17 @@ class ProtPsfCalculation(Protocol):
         BestPsfArray = self._psfSelection(psfArray)
         from xpytools.rayleighResolution import RayleighResolutionClass
         RayleighResolutionClassObj = RayleighResolutionClass()
-        rayLeighResolution = RayleighResolutionClassObj.getRayleighResolution(
+        rayleighResolution = RayleighResolutionClassObj.getRayleighResolution(
                                                             BestPsfArray, psfPixelSizeX)
                 
-        print "RayLeighResolution = ", rayLeighResolution
+        print "RayLeighResolution = ", rayleighResolution
         
         outPsf = PSF3D()
         outPsf.setLocation(fnOutPsf)
         outPsf.setSamplingRate(psfPixelSizeX * 10)
         outPsf.setZpixelSize(psfPixelSizeZ)
         outPsf.setDoF(psfDof)
-        outPsf.setRayLeighResolution(rayLeighResolution)      
+        outPsf.setRayleighResolution(rayleighResolution)      
         self._defineOutputs(output3DPSF=outPsf)
               
     #--------------------------- INFO functions -------------------------------------------- 

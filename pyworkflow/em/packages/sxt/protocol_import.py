@@ -197,7 +197,7 @@ class ProtImportTiltSeries(ProtImportImages):
                         refTilt = 2
             
                 focalInfo = tiltSeries.getFocalSeries()            
-                focalInfo.settiltSeriesGroup(focalId)
+                focalInfo.setfocalGroup(focalId)
                 focalInfo.setIndex(tiltIndex)
                 focalInfo.setDefocus(defocusValue)
                 focalInfo.setReference(refTilt)

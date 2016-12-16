@@ -109,7 +109,7 @@ class FocalSeries(em.EMObject):
     """Info related to the setOfTiltSeries"""   
     def __init__(self, **kwargs):
         em.EMObject.__init__(self, **kwargs)
-        self._tiltSeriesGroup = pwobj.Integer(kwargs.get('tiltSeriesGroup', None))
+        self._focalGroup = pwobj.Integer(kwargs.get('tiltSeriesGroup', None))
         self._index = pwobj.Integer(kwargs.get('index', None))
         self._defocus = pwobj.Float(kwargs.get('defocus', None))
         self._reference = pwobj.Integer(kwargs.get('reference', None))
@@ -175,7 +175,7 @@ class PSF3D(em.Volume):
         em.Volume.__init__(self, **kwargs)
         self._ZpixelSize = pwobj.Float(0.0)
         self._DoF = pwobj.Float(0.0)
-        self._RayLeighResolution = pwobj.Float(0.0)
+        self._RayleighResolution = pwobj.Float(0.0)
         
     def getZpixelSize(self):
         return self._ZpixelSize.get()
@@ -190,9 +190,9 @@ class PSF3D(em.Volume):
         self._DoF.set(DoF)
         
     def getRayLeighResolution(self):
-        return self._RayLeighResolution.get()
+        return self._RayleighResolution.get()
         
-    def setRayLeighResolution(self, RayLeighResolution):
-        self._RayLeighResolution.set(RayLeighResolution)
+    def setRayLeighResolution(self, RayleighResolution):
+        self._RayleighResolution.set(RayleighResolution)
         
         

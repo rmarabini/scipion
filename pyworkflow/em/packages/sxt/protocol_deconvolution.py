@@ -218,6 +218,7 @@ class ProtDeconvolution(ProtImportTiltSeries):
                 outputTiltSeries.setData(deconvTiltSeriesArray[j, :, :])
                 k += 1
                 outputTiltSeries.write((k,fnOutTiltSeries))
+            
             self. _sxtFastalign(fnOutTiltSeries, self.firstAngle.get(), self.incrementStep.get())
         
         
@@ -270,7 +271,7 @@ class ProtDeconvolution(ProtImportTiltSeries):
     #--------------------------- UTILS functions --------------------------------------------
     
     def _defineOutputName(self, suffix):
-        return self._getExtraPath('deconvolved-tiltSeries_%01d.stk' % suffix)
+        return self._getExtraPath('deconvolved-tiltSeries_%01d.mrc' % suffix)
     
     #def _getOutputSetTiltSeries(self):
     #    return getattr(self, 'outputTiltSeries', None)
@@ -338,7 +339,7 @@ class ProtDeconvolution(ProtImportTiltSeries):
         
         newstackArgs = "-input %s -output %s" % (fnStack, fnBase + '.preali')
         newstackArgs += " -mode 0 -float 2"
-        newstackArgs += " -xform" % (fnBase + '.prexg')
+        newstackArgs += " -xform %s" % (fnBase + '.prexg')
         self.runJob('newstack', newstackArgs)
         
         tiltxcorrArgs = "-input %s -output %s" % (fnBase + '.preali', fnBase + '.fid')
