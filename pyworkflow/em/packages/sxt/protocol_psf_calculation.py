@@ -22,7 +22,7 @@
 # * 02111-1307  USA
 # *
 # *  All comments concerning this program package may be sent to the
-# *  e-mail address 'jmdelarosa@cnb.csic.es'
+# *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
 
@@ -141,7 +141,7 @@ class ProtPsfCalculation(Protocol):
         print "Resolution of Siemens star image is:\n" , imgSsResolution [0]        
         dx = imgSsResolution [0]
         
-        imgSingle = imgSS[imgNumber]
+        #imgSingle = imgSS[imgNumber]
         from xpytools.getMTFfromSiemensStar import MTFfromSiemensStar
         MTFObj = MTFfromSiemensStar()
         mtfOut = MTFObj.getMTFfromSiemensStar(imgSS, dx, nRef, orders, ringPos)  
@@ -231,12 +231,13 @@ class ProtPsfCalculation(Protocol):
     
     def _psfSelection(self, psfArray):    
         psfPixelSizeZ = self.pixelSizeZ.get() 
-        #psfPixelSizeZ = 150
+        
         #claculating best psf image to get their mean and use in calculating RayleighResolution
         xCenter = np.floor(np.shape(psfArray)[1]/2)
         centerValues = psfArray[:, xCenter, xCenter]
         thr = 0.3
         thrv = max(centerValues) * thr
+        
         #finding indices based on centerValues curne and thrv      
         #mp: indices array above threshold, zm: central index
         #zN: indices range that will use to select psf images to get their average
@@ -249,3 +250,4 @@ class ProtPsfCalculation(Protocol):
         print "PSF image indices to calculate their mean are: ", zPos        
         BestPsfArray = np.mean(psfArray[zPos, :, :], axis=0)
         return BestPsfArray
+    

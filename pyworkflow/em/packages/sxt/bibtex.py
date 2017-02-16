@@ -21,7 +21,7 @@
 # * 02111-1307  USA
 # *
 # *  All comments concerning this program package may be sent to the
-# *  e-mail address 'jmdelarosa@cnb.csic.es'
+# *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
 """
@@ -50,14 +50,14 @@ keywords = ""
 
 @article{J.Oton2016,
 title = "XTEND: Extending the depth of field in soft X-ray tomography",
-journal = "Journal",
+journal = "Gordon Research Conference",
 volume = "",
 number = "",
 pages = "",
 year = "2016",
 note = "",
 issn = "",
-doi = "",
+doi = "10.13140/RG.2.2.34331.87845",
 url = "http://www.biocomp.cnb.csic.es/publications",
 author = "J. Oton, E. Pereiro, J.J. Conesa, F.J. Chichon, D. Luque, J.M. Rodriguez, A.J. Perez-Berna, C.O.S. Sorzano, J. Klukowska, G.T. Herman, J. Vargas, R. Marabini, J.L. Carrascosa, J.M. Carazo",
 keywords = "",

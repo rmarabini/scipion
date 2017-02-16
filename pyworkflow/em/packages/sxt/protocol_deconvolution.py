@@ -22,7 +22,7 @@
 # * 02111-1307  USA
 # *
 # *  All comments concerning this program package may be sent to the
-# *  e-mail address 'jmdelarosa@cnb.csic.es'
+# *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
 
@@ -39,7 +39,7 @@ import xmipp
 class ProtDeconvolution(ProtImportTiltSeries):
 
     """    
-    This protocol is aimed to deconvolve tiltSeries and 3D PSF.        
+    This protocol is aimed to deconvolve tiltSeries/setOfTiltSeies/focalSeries and 3D PSF.        
     """
     
     _label = 'deconvolving tiltSeries and 3d psf'
@@ -91,21 +91,22 @@ class ProtDeconvolution(ProtImportTiltSeries):
         form.addParallelSection(threads=1, mpi=2)
     #--------------------------- INSERT steps functions --------------------------------------------
     
-    def _insertAllSteps(self):########################################## barkhi variable ha mesle khandane voroodi ha va psf dar inja anjam shavad va be function pass shavad ke hajme code ha kam shavad
+    def _insertAllSteps(self):
         inputType = self.inputType.get()
+        inputPSF = self.inputPsf.get()
         if inputType == self.TILT_SERIES:
-            self._insertFunctionStep('createOutputStepTiltSeries')
+            self._insertFunctionStep('createOutputStepTiltSeries', inputPSF)
         elif inputType == self.SET_OF_TILT_SERIES:
-            self._insertFunctionStep('createOutputStepSetOfTiltSeries')
+            self._insertFunctionStep('createOutputStepSetOfTiltSeries', inputPSF)
         else:
-            self._insertFunctionStep('focalSeriesStdDeconvolution')
+            self._insertFunctionStep('focalSeriesStdDeconvolution', inputPSF)
             #self._insertFunctionStep('createOutputStepFocalSeries')            
     #--------------------------- STEPS functions --------------------------------------------
         
-    def createOutputStepTiltSeries(self):
+    def createOutputStepTiltSeries(self, inputPSF):
         inputTiltSeries = self.inputTiltSeries.get()
-        inputPSF = self.inputPsf.get()
-        psfPixelSizeX = self.inputPsf.get().getSamplingRate()/10 ######################################## ba obj jadid baray PSF3D bayad modify shavad
+        
+        psfPixelSizeX = self.inputPsf.get().getSamplingRate()/10 ##if any new object like XpixelSize will be defined, it maybe replaces ## divided by 10 is to go through A and nm
         psfArrayToDeconv = self._preDeconvolution(inputPSF)
         kw = self.kw.get()
                 
@@ -141,10 +142,10 @@ class ProtDeconvolution(ProtImportTiltSeries):
         self._createTiltSeriesMd(1, fnOutTiltSeries, angles)
         self._defineOutputs(outputTiltSeries=tiltSeries)            
             
-    def createOutputStepSetOfTiltSeries(self):    
+    def createOutputStepSetOfTiltSeries(self, inputPSF):    
         inputSetOfTiltSeries = self.inputSetOfTiltSeries.get()
-        inputPSF = self.inputPsf.get()
-        psfPixelSizeX = self.inputPsf.get().getSamplingRate()/10 ######################################## ba obj jadid baray PSF3D bayad modify shavad
+        
+        psfPixelSizeX = self.inputPsf.get().getSamplingRate()/10 ##if any new object like XpixelSize will be defined, it maybe replaces ## divided by 10 is to go through A and nm
         psfArrayToDeconv = self._preDeconvolution(inputPSF)
         kw = self.kw.get()
         
@@ -191,10 +192,10 @@ class ProtDeconvolution(ProtImportTiltSeries):
         mdOut.write(self._getExtraPath('deconvolvedSetOfTiltSeries.xmd'))
         self._defineOutputs(outputSetOfTiltSeries=outputSetOfTilt)
     
-    def focalSeriesStdDeconvolution(self):
+    def focalSeriesStdDeconvolution(self, inputPSF):
         inputFocalSeries = self.inputFocalSeries.get()
-        inputPSF = self.inputPsf.get()
-        psfPixelSizeX = self.inputPsf.get().getSamplingRate()/10 ######################################## ba obj jadid baray PSF3D bayad modify shavad
+        
+        psfPixelSizeX = self.inputPsf.get().getSamplingRate()/10 ##if any new object like XpixelSize will be defined, it maybe replaces ## divided by 10 is to go through A and nm
         psfArrayToDeconv = self._preDeconvolution(inputPSF)
         kw = self.kw.get()
         
@@ -225,7 +226,7 @@ class ProtDeconvolution(ProtImportTiltSeries):
     #def createOutputStepFocalSeries(self): 
         
         
-    #    x=1     
+      
     #--------------------------- INFO functions -------------------------------------------- 
     
     def _validate(self):
@@ -233,59 +234,29 @@ class ProtDeconvolution(ProtImportTiltSeries):
         pass
     #def _summary(self):
     #    summary = []
-    #    outputSet = self._getOutputSetTiltSeries()
-    #    if outputSet is None:
-    #        summary.append("Output TiltSeries is not ready yet. Deconvolution "
-    #                       "process is in progress.") 
-    #    if  outputSet is not None:  
-    #        summary.append("*%d* "% outputSet.getSize() +
-    #                       "images related to the input TiltSeries "
-    #                       "deconvolved with input 3D PSF.")             
-    #        summary.append("Sampling rate : *%0.2f* A/px" % (
-    #                        outputSet.getSamplingRate()))
-    #        summary.append("*Imaging info*:\n" +
-    #                       "Lens label: %s \n" % (
-    #                        outputSet.getXrayAcquisition().getLensLabel()) +
-    #                       "Energy (ev): %f \n" % (
-    #                        outputSet.getXrayAcquisition().getEnergy()) +
-    #                       "Date of imaging (ddmmyyy): %s" % (
-    #                        outputSet.getXrayAcquisition().getDate()))             
+            
     #    return summary
     
     #def _methods(self):
     #    methods = []
-    #    outputSet = self._getOutputSetTiltSeries()
-    #    if outputSet is not None:
-    #        methods.append("*%d* %s were deconvolved with the input 3D PSF. "
-    #                       " Output set is %s with a sampling rate of *%0.2f* A/px, "
-    #                       "Lens label: %s, Energy (ev): %f, and "
-    #                       "Date of imaging (ddmmyyy): %s)."                           
-    #                       % (outputSet.getSize(), 
-    #                          'images related to the input TiltSeries',
-    #                          self.getObjectTag('outputTiltSeries'),
-    #                          outputSet.getSamplingRate(),
-    #                          outputSet.getXrayAcquisition().getLensLabel(),
-    #                          outputSet.getXrayAcquisition().getEnergy(),
-    #                          outputSet.getXrayAcquisition().getDate()))          
+    
     #    return methods 
     #--------------------------- UTILS functions --------------------------------------------
     
     def _defineOutputName(self, suffix):
         return self._getExtraPath('deconvolved-tiltSeries_%01d.mrc' % suffix)
     
-    #def _getOutputSetTiltSeries(self):
-    #    return getattr(self, 'outputTiltSeries', None)
-    
     def _preDeconvolution(self, inputPSF):
         ih = em.ImageHandler()
         inputPsfArray = ih.read(inputPSF).getData()        
-        psfPixelSizeZ = self.inputPsf.get().getZpixelSize() ######################################## ba obj jadid baray PSF3D bayad modify shavad
-        #psfPixelSizeZ = 150
+        psfPixelSizeZ = self.inputPsf.get().getZpixelSize() 
+        
         #claculating best psf image to get their mean and use in deconvolution process
         xCenter = np.floor(np.shape(inputPsfArray)[1]/2)
         centerValues = inputPsfArray[:, xCenter, xCenter]
         thr = 0.3
         thrv = max(centerValues) * thr
+        
         #finding indices based on centerValues curne and thrv      
         #mp: indices array above threshold, zm: central index
         #zN: indices range that will use to select psf images to get their average
@@ -330,17 +301,17 @@ class ProtDeconvolution(ProtImportTiltSeries):
         tiltxcorrArgs += " -increment %f" % incrementStep
         tiltxcorrArgs += " -rotation 90.0 -sigma1 0.03"
         tiltxcorrArgs += " -radius2 0.25 -sigma2 0.05"        
-        self.runJob('tiltxcorr', tiltxcorrArgs)
+        self.runJob('tiltxcorr', tiltxcorrArgs) ### iMod needs to be installed
         
         #alignment file generation        
         xftoxgArgs = "-input %s -goutput %s" % (fnBase + '.prexf', fnBase + '.prexg')
         xftoxgArgs += " -nfit 0" 
-        self.runJob('xftoxg', xftoxgArgs)
+        self.runJob('xftoxg', xftoxgArgs) 
         
         newstackArgs = "-input %s -output %s" % (fnStack, fnBase + '.preali')
         newstackArgs += " -mode 0 -float 2"
         newstackArgs += " -xform %s" % (fnBase + '.prexg')
-        self.runJob('newstack', newstackArgs)
+        self.runJob('newstack', newstackArgs) 
         
         tiltxcorrArgs = "-input %s -output %s" % (fnBase + '.preali', fnBase + '.fid')
         tiltxcorrArgs += " -first %f" % firsttiltAngle
@@ -387,17 +358,6 @@ class ProtDeconvolution(ProtImportTiltSeries):
         newstackArgs += " -offset 0,0 -origin -taper 1,0"
         newstackArgs += " -xform" % (fnBase + '_fid.xf')
         self.runJob('newstack', newstackArgs)
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
         
         
         

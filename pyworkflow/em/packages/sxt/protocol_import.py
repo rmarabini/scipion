@@ -21,7 +21,7 @@
 # * 02111-1307  USA
 # *
 # *  All comments concerning this program package may be sent to the
-# *  e-mail address 'jmdelarosa@cnb.csic.es'
+# *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
 
@@ -42,7 +42,7 @@ from pyworkflow.mapper.sqlite_db import SqliteDb
 
 class ProtImportTiltSeries(ProtImportImages):
     """    
-    This prtocol is to import tilt seies and related info included tilt angles.
+    This prtocol is to import tiltSeies/setOfTiltSeries/FocalSeries and their related info included tilt angles.
     """
     _label = 'import tilt series'     
            
@@ -176,7 +176,7 @@ class ProtImportTiltSeries(ProtImportImages):
             self._fillXrayAcquisition(acquisition)
             tiltSeries.setXrayAcquisition(acquisition)
                         
-            if self.importFocalSeries.get():
+            if self.importFocalSeries.get(): ### eventually these info should be read from input hdf5 file, not from the file name
                 fileBaseName = basename(fileName)
                 for focalId in range(100):
                     if '_tomo_%02d' % focalId in fileBaseName:
