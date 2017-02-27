@@ -222,7 +222,8 @@ def _pass_though_no_gui_state(command):
 
 def _run(command, wait, stdin=None, stdout=None, stderr=None):
     """ Execute a command in a subprocess and return the pid. """
-    gcmd = greenStr(command)
+    guicmd = _pass_though_no_gui_state(command)
+    gcmd = greenStr(guicmd)
     print "** Running command: '%s'" % gcmd
     guicmd = _pass_though_no_gui_state(command)
     p = Popen(guicmd, shell=True, stdout=stdout, stderr=stderr)
