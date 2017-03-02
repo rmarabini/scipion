@@ -63,6 +63,10 @@ int
 Image_compare(PyObject * obj, PyObject * obj2);
 
 
+PyObject *
+Image_correlate(PyObject *obj, PyObject *args, PyObject *kwargs);
+
+
 /* Compare two images up to a precision */
 PyObject *
 Image_equal(PyObject *obj, PyObject *args, PyObject *kwargs);

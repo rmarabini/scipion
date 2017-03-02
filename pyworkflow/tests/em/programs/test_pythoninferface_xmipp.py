@@ -393,6 +393,16 @@ class TestXmippPythonInterface(unittest.TestCase):
         vol.convert2DataType(DT_DOUBLE)
         proj=vol.projectVolumeDouble(0.,0.,0.)
         self.assertEqual(1,1)
+        
+    def test_Image_correlate(self):
+        vol = Image(testFile('progVol.vol'))
+        vol.convert2DataType(DT_DOUBLE)
+        corr = vol.correlate(vol)
+        self.assertEqual(corr,1)
+        
+        vol2 = vol * 0
+        corr = vol2.correlate(vol)
+        self.assertEqual(corr,0)
 
     def test_Image_projectFourier(self):
         vol = Image(testFile('progVol.vol'))

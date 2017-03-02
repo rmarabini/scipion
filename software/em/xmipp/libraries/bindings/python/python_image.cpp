@@ -114,7 +114,8 @@ PyMethodDef Image_methods[] =
           "Return NumPy array from image data" },
         { "projectVolumeDouble", (PyCFunction) Image_projectVolumeDouble, METH_VARARGS,
           "project a volume using Euler angles" },
-
+        { "correlate", (PyCFunction) Image_correlate,  METH_VARARGS,
+          "Return correlation between two images (or volumes)" },
         { "setData", (PyCFunction) Image_setData, METH_VARARGS,
           "Copy NumPy array to image data" },
         { "getPixel", (PyCFunction) Image_getPixel, METH_VARARGS,
@@ -303,6 +304,38 @@ Image_compare(PyObject * obj, PyObject * obj2)
     }
     return result;
 }//function Image_compare
+
+
+PyObject *
+Image_correlate(PyObject *obj, PyObject *args, PyObject *kwargs)
+{
+    PyObject *pyValue; // get the second image argument
+    ImageObject *self = (ImageObject*) obj;
+
+    double corr;
+
+    if (PyArg_ParseTuple(args, "O", &pyValue))
+    {
+        try
+        {
+        	ImageObject *other = (ImageObject*) pyValue;
+
+            MultidimArray<double> * pVolume;
+            MultidimArray<double> * pVolume2;
+            self->image->data->getMultidimArrayPointer(pVolume);
+
+            other->image->data->getMultidimArrayPointer(pVolume2);
+            corr = correlationIndex(*pVolume, *pVolume2);
+
+            return Py_BuildValue("f", corr);
+        }
+        catch (XmippError &xe)
+        {
+            PyErr_SetString(PyXmippError, xe.msg.c_str());
+        }
+    }
+    return NULL;
+}
 
 /* Compare two images up to a precision */
 PyObject *
