@@ -88,6 +88,10 @@ FILL_AVG = 2
 RECONSTRUCT_FOURIER = 0
 RECONSTRUCT_WSLART = 1
 
+# 2D Classification methods
+ML2D = 0
+CL2D = 1
+
 # Micrograph type constants for particle extraction
 SAME_AS_PICKING = 0
 OTHER = 1
