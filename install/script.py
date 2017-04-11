@@ -149,7 +149,7 @@ python = env.addLibrary(
     'python',
     tar='Python-2.7.8.tgz',
     targets=[env.getLib('python2.7'), env.getBin('python')],
-    flags=['--enable-shared'],
+    flags=['--enable-shared --with-ssl'],
     deps=[sqlite, tk, zlib])
 
 pcre = env.addLibrary(
@@ -219,6 +219,13 @@ nfft3 = env.addLibrary(
     'nfft3',
     tar='nfft-3.2.3.tgz',
     deps=[fftw3],
+    default=False)
+
+# Required by tensorflow
+bazel = env.addLibrary(
+    'bazel',
+    tar='bazel-0.4.5.tgz',
+    commands=[('cd software/tmp/bazel-0.4.5; bash ./compile.sh; cp output/bazel ../../bin', 'software/bin/bazel')],
     default=False)
 
 #  ************************************************************************
@@ -332,6 +339,35 @@ lxml = env.addModule(
     deps=[], # libxml2, libxslt],
     incs=['/usr/include/libxml2'],
     default=False)
+
+wheel = env.addModule(
+    'wheel',
+    tar='wheel-0.30.0a0.tgz',
+    targets=['wheel-0.30.0*'],
+    default=False)
+
+pip = env.addTarget('pip')
+pip.addCommand('python scripts/get-pip.py', targets='software/lib/python2.7/site-packages/pip', default=False, final=True)
+
+scpSoftware = os.environ['SCIPION_SOFTWARE']
+# tensorflow = env.addTarget('tensorflow')
+# tensorflow.addCommand('python %s/lib/python2.7/site-packages/pip install tensorflow'%scpSoftware,
+#                       targets='software/lib/python2.7/site-packages/tensorflow', default=False, final=True)
+
+tensorflow = env.addLibrary(
+    'tensorflow',
+    tar='tensorflow-1.1.tgz', # -mavx -msse4.2 -msse4.1 -msse3-k
+    commands=[('export PYTHON_BIN_PATH=%s/bin/python; export CC_OPT_FLAGS=-march=native ; '\
+               'export TF_NEED_JEMALLOC=1; export TF_NEED_GCP=0; export TF_NEED_HDFS=0; '\
+               'export TF_ENABLE_XLA=0; export TF_NEED_OPENCL=0; export TF_NEED_CUDA=0; export USE_DEFAULT_PYTHON_LIB_PATH=1; '\
+               'cd software/tmp/tensorflow-1.1; ./configure; bazel build --config=opt //tensorflow/tools/pip_package:build_pip_package; '\
+               'bazel-bin/tensorflow/tools/pip_package/build_pip_package %s/tmp/tensorflow_pkg; '\
+               '%s/bin/python %s/lib/python2.7/site-packages/pip install %s/tmp/tensorflow_pkg/tensorflow-1.1*.whl'%\
+               (scpSoftware,scpSoftware,scpSoftware,scpSoftware,scpSoftware),
+               'software/lib/python2.7/site-packages/tensorflow')],
+    deps=[python,bazel,wheel,pip],
+    default=False)
+
 # libxml2 and libxslt are checked instead of compiled because
 # they are so hard to compile right.
 
