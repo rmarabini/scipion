@@ -65,6 +65,7 @@ Protocols SPA = [
 				{"tag": "protocol", "value": "XmippProtExtractMovieParticles", "text": "default"},
 				{"tag": "protocol", "value": "XmippProtExtractParticlesPairs", "text": "default"},
 				{"tag": "protocol", "value": "XmippProtScreenParticles", "text": "default"},
+				{"tag": "protocol", "value": "XmippProtScreenDeepLearning1", "text": "default"},
                 {"tag": "protocol", "value": "ProtRelionSortParticles", "text": "default"}
 			]}
 		]},
