@@ -40,3 +40,24 @@ if __name__ == '__main__':
 
     runProgram(program, params)
     
+    env = None
+    
+    if program.startswith('xmipp'):
+        import pyworkflow.em.packages.xmipp3 as xmipp3
+        env = xmipp3.getEnviron()
+    if program.startswith('relion'):
+        import pyworkflow.em.packages.relion as relion
+        env = relion.getEnviron()        
+    elif (program.startswith('e2') or 
+          program.startswith('sx')):
+        import pyworkflow.em.packages.eman2 as eman2
+        env = eman2.getEnviron()
+    elif program.startswith('b'):
+        import pyworkflow.em.packages.bsoft as bsoft
+        env = bsoft.getEnviron()
+    elif program.startswith('simple'):
+        import pyworkflow.em.packages.simple as simple
+        env = simple.getEnviron()
+    
+    runProgram(None, program, params, env=env)
+         

@@ -1,6 +1,7 @@
 # **************************************************************************
 # *
 # * Authors:     Carlos Oscar Sorzano (coss@cnb.csic.es)
+# *              J.M. de la Rosa Trevin (jmdelarosa@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -20,22 +21,27 @@
 # * 02111-1307  USA
 # *
 # *  All comments concerning this program package may be sent to the
-# *  e-mail address 'coss@cnb.csic.es'
+# *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-"""
-This sub-package contains data and protocol classes
-wrapping Simple programs http://simple.stanford.edu
-"""
+
 from bibtex import _bibtex # Load bibtex dict with references
 
 _logo = "simple_logo.png"
+_references = ['Elmlund2012']
 
 from simple import *
 
-
 _environ = getEnviron()
 
-# from viewer import *
-from protocol_prime import ProtPrime
+from protocol_prime2d import ProtPrime2D
+from protocol_prime3d_initial import ProtPrime3DInitial
+from protocol_prime3d_refine import ProtPrime3DRefine
+from protocol_reconstruct import ProtSimpleReconstruct
 
+from wizard import SimpleParticleMaskRadiusWizard
+
+from viewer_prime2D import SimpleViewerPrime2D
+
+# Just for backward compatibility
+ProtPrime = ProtPrime3DInitial
