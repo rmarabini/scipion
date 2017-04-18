@@ -36,16 +36,12 @@ from convert import rowToAlignment, writeSetOfParticles, writeSetOfClasses2D
 
 class ProtPrime2D(em.ProtClassify2D):
     """
-    This protocol wraps the *simple_prime2D* program,
+    This protocol wraps the *prime2D* program,
     which is a reference-free 2D alignment/clustering algorithm adopted
     from the prime3D probabilistic ab initio 3D reconstruction algorithm.
 
-    It is assumed that the images are phase-flipped
-    (phase flipping can be done inside the protocol using simple_stackops).
-
     Do not search the origin shifts initially, when the cluster centers are
-    of low quality. If your images are far off centre, you can select to
-    pre-align them (internally using simple_stackops with option shalgn=yes).
+    of low quality.
     """
     _label = 'prime 2d'
 
@@ -68,6 +64,10 @@ class ProtPrime2D(em.ProtClassify2D):
                       label="Input particles", important=True,
                       help='')
 
+        form.addParam('doCTF', params.BooleanParam, default=True,
+                      label='Do CTF correction?',
+                      help='')
+
         form.addParam('numberOfClasses', params.IntParam,
                       condition='generateReferences',
                       label="Number of classes",
@@ -84,39 +84,26 @@ class ProtPrime2D(em.ProtClassify2D):
                       help='')
 
         form.addParam('originShift', params.FloatParam, default=0,
+                      expertLevel=params.LEVEL_ADVANCED,
                       label='Search origin shifts (px)',
                       help='')
 
         form.addParam('lowPassFilter', params.IntParam, default=20,
                       label='Low pass filter (A)')
 
-        form.addParam('doPhaseFlip', params.BooleanParam, default=True,
-                      label='Phase flip input particles?',
-                      help='Phase flip the input particles if they contains '
-                           'CTF information and have not already been flipped.')
 
         form.addParam('doAlign', params.BooleanParam, default=False,
                       expertLevel=params.LEVEL_ADVANCED,
                       label='Align input particles?',
                       help="")
 
-        form.addParallelSection(threads=4, mpi=0)
+        form.addParallelSection(threads=4, mpi=1)
     
     #--------------------------- INSERT steps functions ------------------------
     
     def _insertAllSteps(self):
         self._insertFunctionStep('convertInputStep',
                                  self.inputParticles.getUniqueId())
-
-        if self.doPhaseFlip:
-            self._insertFunctionStep('phaseFlipStep')
-
-        if self.doAlign:
-            self._insertFunctionStep('alignStep')
-
-        if self.generateReferences:
-            self._insertFunctionStep('runPrime2DInitStep')
-
         self._insertFunctionStep('runPrime2DStep')
         self._insertFunctionStep('createOutputStep')
 
@@ -124,7 +111,10 @@ class ProtPrime2D(em.ProtClassify2D):
 
     def convertInputStep(self, inputId):
         stackFn = self.getParticlesStack()
-        ctfFn = self._getExtraPath('ctfparams.txt')
+
+        # Set to None if doCTF is False, then the ctf information will not be
+        # written, neither if the input does not have CTF info.
+        ctfFn = self._getExtraPath('ctfparams.txt') if self.doCTF else None
 
         if self.generateReferences:
             writeSetOfParticles(self.inputParticles.get(), stackFn, None, ctfFn)
@@ -133,77 +123,9 @@ class ProtPrime2D(em.ProtClassify2D):
             clsStack = self._getExtraPath('startcavgs.mrc')
             docFn = self._getExtraPath('prime2D_startdoc.txt')
             writeSetOfClasses2D(inputClasses, clsStack, stackFn, docFn, ctfFn)
-            # SIMPLE_DOC2CAVGS stk=<stack.ext> smpd=<sampling distance(in A)>
-            # msk=<mask radius(in pixels)> ncls=<nr of clusters>
-            # oritab=<previous clustering doc> which_iter=<iteration nr>
-            # [mul=<shift multiplication factor{1}>] [nthr=<nr of OpenMP threads{1}>]
-            # args = " stk=particles.mrcs "
-            # args += " oritab=prime2D_startdoc.txt "
-            # args += " smpd=%f" % inputClasses.getFirstItem().getSamplingRate()
-            # args += " ncls=%d" % inputClasses.getSize()
-            # args += " msk=%d" % self.getMaskRadius()
-            # args += " nthr=%d" % self.numberOfThreads
-            # args += " which_iter=1"
-            # self.runJob("simple_doc2cavgs", args, cwd=self._getExtraPath())
-
-    def phaseFlipStep(self):
-        inputParticles = self.inputParticles.get()
-
-        if not inputParticles.hasCTF():
-            self.info('Input particles does not have CTF information. '
-                      'NOT phase flipping.')
-            return
-
-        if inputParticles.isPhaseFlipped():
-            self.info('Input particles are already phase flipped. '
-                      'NOT phase flipping again.')
-            return
-
-        # simple_stackops stk=ptcls.mrc smpd=2 deftab=ctfparams.txt
-        # ctf=flip kv=300 cs=2.7 fraca=0.07 outstk=ptcls_phflip.mrc
-        acq = inputParticles.getAcquisition()
-        outputName = "particles_phflip.mrcs"
-
-        args = " stk=particles.mrcs deftab=ctfparams.txt ctf=flip"
-        args += " smpd=%f" % inputParticles.getSamplingRate()
-        args += " kv=%f" % acq.getVoltage()
-        args += " cs=%f" % acq.getSphericalAberration()
-        args += " fraca=%f" % acq.getAmplitudeContrast()
-        args += " outstk=%s" % outputName
-
-        self.info("Phase flipping input particles.")
-        self.runJob("simple_stackops", args, cwd=self._getExtraPath())
-
-        # Replace the initial converted stack with the phase flipped one
-        pwutils.moveFile(self._getExtraPath(outputName),
-                         self.getParticlesStack())
-
-    def alignStep(self):
-        inputParticles = self.inputParticles.get()
-
-        # $ simple_stackops stk=particles.spi smpd=1.62 msk=60
-        # shalgn=yes trs=3.5 lp=20 nthr=8 outstk=particles_sh.spi
-        acq = inputParticles.getAcquisition()
-        outputName = "particles_sh.mrcs"
-
-        args = " stk=particles.mrcs shalgn=yes "
-        args += " smpd=%f" % inputParticles.getSamplingRate()
-        args += " msk=%d" % self.getMaskRadius()
-        args += " lp=%d" % self.lowPassFilter
-        args += " trs=3.5" #FIXME
-        args += " nthr=%d" % self.numberOfThreads
-        args += " outstk=%s" % outputName
-
-        self.info("Aligning input particles.")
-        self.runJob("simple_stackops", args, cwd=self._getExtraPath())
-
-        # Replace the initial converted stack with the phase flipped one
-        pwutils.moveFile(self._getExtraPath(outputName),
-                         self.getParticlesStack())
 
     def _getCommonArgs(self):
         """ Return common command line argument for programs:
-        - simple_prime2D_init
         - simple_prime2D
         """
         inputParticles = self.inputParticles.get()
@@ -211,25 +133,33 @@ class ProtPrime2D(em.ProtClassify2D):
         # We will run simple_prime2d in the extra folder, so 'particles.mrcs'
         # should be there
         args = " stk=particles.mrcs"
-        args += " smpd=%f" % inputParticles.getSamplingRate()
+        args += " smpd=%0.3f" % inputParticles.getSamplingRate()
         args += " msk=%d" % self.getMaskRadius()
         args += " lp=%d" % self.lowPassFilter
         args += " ncls=%d" % self.numberOfClasses
+        args += " nparts=%d" % self.numberOfMpi
         args += " nthr=%d" % self.numberOfThreads
+
 
         return args
 
-    def runPrime2DInitStep(self):
-        self.runJob("simple_prime2D_init", self._getCommonArgs(),
-                    cwd=self._getExtraPath())
-
     def runPrime2DStep(self):
         args = self._getCommonArgs()
+
         if self.originShift > 0:
             args += " trs=%d" % self.originShift
-        args += " refs=startcavgs.mrc"
-        args += " oritab=prime2D_startdoc.txt"
-        self.runJob("simple_prime2D", args, cwd=self._getExtraPath())
+
+        if not self.generateReferences:
+            args += " refs=startcavgs.mrc"
+            args += " oritab=prime2D_startdoc.txt"
+
+        args += " ctf=%s " % ('yes' if self.doCTF else 'no')
+
+        if self.doCTF:
+            args += ' deftab=ctfparams.txt'
+
+        self.runJob(simple.getProgram("prime2D", distr=True), args,
+                    cwd=self._getExtraPath())
 
     def createOutputStep(self):
         classes2D = self._createSetOfClasses2D(self.inputParticles.get())
@@ -326,3 +256,4 @@ class ProtPrime2D(em.ProtClassify2D):
         item.setAlignment2D()
         fn = self.getClassesStack(self._iter) + ":mrcs"
         item.getRepresentative().setLocation(item.getObjId(), fn)
+
