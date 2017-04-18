@@ -76,7 +76,7 @@ def writeSetOfParticles(imgSet, stackFn, docFn, ctfFn, alignType=ALIGN_2D,
         for particle in imgSet:
 
             if writeCTF:
-                ctfModelToRow(particle.getCTF(), ctfRow)
+                ctfModelToRow(particle, ctfRow)
                 ctfDoc.writeRow(ctfRow)
 
             if writeDoc:
@@ -123,7 +123,7 @@ def writeSetOfClasses2D(clsSet, clsStack, stackFn, docFn, ctfFn,
                     alignmentToRow(particle.getTransform(), row, ALIGN_2D)
                     doc.writeRow(row)
                 if writeCTF:
-                    ctfModelToRow(particle.getCTF(), ctfRow)
+                    ctfModelToRow(particle, ctfRow)
                     ctfDoc.writeRow(ctfRow)
 
     if writeParticles:
@@ -146,9 +146,15 @@ def particlesFromClasses(inputSet, partSet, docFile):
     doc.close()
 
 
-def ctfModelToRow(ctfModel, ctfRow):
+def ctfModelToRow(particle, ctfRow):
     """ Set labels values from ctfModel to md row. """
     # Convert defocus values to microns
+    ctfModel = particle.getCTF()
+    acq = particle.getAcquisition()
+
+    ctfRow['kv'] = acq.getVoltage()
+    ctfRow['cs'] = acq.getSphericalAberration()
+    ctfRow['fraca'] = acq.getAmplitudeContrast()
     ctfRow['dfx'] = ctfModel.getDefocusU() / 10000
     ctfRow['dfy'] = ctfModel.getDefocusV() / 10000
     ctfRow['angast'] = ctfModel.getDefocusAngle()
