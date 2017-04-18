@@ -24,14 +24,16 @@
 # *
 # **************************************************************************
 
+import os
 from collections import OrderedDict
 import numpy as np
 
+import pyworkflow.utils as pwutils
 from pyworkflow.em import ImageHandler
-from pyworkflow.em.constants import ALIGN_2D, ALIGN_3D, ALIGN_PROJ
-from pyworkflow.em.transformations import (translation_from_matrix,
-                                           euler_matrix, euler_from_matrix)
-from pyworkflow.em.data import Transform
+from pyworkflow.em.constants import ALIGN_2D, ALIGN_PROJ
+from pyworkflow.em.data import Transform, Coordinate
+import pyworkflow.em.metadata as md
+
 
 from simple import SimpleDocFile
 
@@ -241,3 +243,29 @@ def alignmentToRow(alignment, alignmentRow, alignType):
         alignmentRow[ANGLE_THE] = angles[1]
         alignmentRow[ANGLE_PSI] = angles[0]
         
+
+def readSetOfCoordinates(workDir, micSet, coordSet):
+    """ Read from coordinates from SIMPLE3 pikcing program.
+     It generates .box files with Eman1.9 convention:
+     The lower-left coordinate is reported together with the box file.
+    """
+    for mic in micSet:
+        micBase = pwutils.removeBaseExt(mic.getFileName())
+        fnCoords = os.path.join(workDir, micBase + '.box')
+        readCoordinates(mic, fnCoords, coordSet)
+
+
+def readCoordinates(mic, fileName, coordsSet):
+    if os.path.exists(fileName):
+        coordsMd = md.MetaData()
+        coordsMd.readPlain(fileName, "xcoor ycoor particleSize")
+        size = coordsMd.getValue(md.MDL_PICKING_PARTICLE_SIZE,
+                                 coordsMd.firstObject())
+        half = size / 2
+        for objId in coordsMd:
+            x = coordsMd.getValue(md.MDL_XCOOR, objId)
+            y = coordsMd.getValue(md.MDL_YCOOR, objId)
+            coord = Coordinate()
+            coord.setPosition(x + half, y + half)
+            coord.setMicrograph(mic)
+            coordsSet.append(coord)

@@ -43,5 +43,8 @@ from wizard import SimpleParticleMaskRadiusWizard
 
 from viewer_prime2D import SimpleViewerPrime2D
 
+from protocol_simple_unblur import ProtSimpleUnblur
+from protocol_simple_pick import ProtSimplePick
+
 # Just for backward compatibility
 ProtPrime = ProtPrime3DInitial
