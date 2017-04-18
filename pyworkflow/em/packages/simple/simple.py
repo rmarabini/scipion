@@ -40,9 +40,10 @@ def getEnviron():
     SIMPLE_SCRIPTS = os.path.join(SIMPLE_HOME, 'scripts')
 
     environ.update({
-                    'SIMPLEBIN': SIMPLE_BIN,
-                    'SIMPLEPATH': SIMPLE_HOME,
-                    'SIMPLESYS': SIMPLE_HOME,
+                    'SIMPLE_BIN': SIMPLE_BIN,
+                    'SIMPLE_PATH': SIMPLE_HOME,
+                    'SIMPLE_QSYS': os.environ.get('SIMPLE_QSYS', 'local'),
+                    'SIMPLE_EMAIL': os.environ.get('SIMPLE_EMAIL', ''),
                     'PATH': os.pathsep.join([SIMPLE_BIN, SIMPLE_APPS,
                                              SIMPLE_SCRIPTS])
                     }, 
@@ -91,8 +92,9 @@ class SimpleDocFile(object):
         self._file.close()
 
 
-def getProgram(programName):
+def getProgram(programName, distr=False):
     """ Simple wrapper to add 'simple_exec' on top of the program name.
     """
     # TODO: check whether to use simple_distr_exec
-    return "simple_exec prg=%s" % programName
+    d = 'distr_' if distr else ''
+    return "simple_%sexec prg=%s" % (d, programName)
