@@ -475,6 +475,9 @@ env.addPackage('motioncor2', version='17.01.30',
 env.addPackage('simple', version='2.1',
                tar='simple2.tgz')
 
+env.addPackage('simple', version='3.0',
+               tar='simple3.tgz')
+
 env.addPackage('chimera', version='1.10.1',
                tar='chimera-1.10.1-linux_x86_64.tgz',
                targetDir='chimera-1.10.1',
