@@ -89,3 +89,10 @@ class SimpleDocFile(object):
 
     def close(self):
         self._file.close()
+
+
+def getProgram(programName):
+    """ Simple wrapper to add 'simple_exec' on top of the program name.
+    """
+    # TODO: check whether to use simple_distr_exec
+    return "simple_exec prg=%s" % programName
