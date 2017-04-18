@@ -202,13 +202,13 @@ class ProtPrime2D(em.ProtClassify2D):
         if iteration is None:
             iteration = self.getLastIteration()
 
-        return self._getExtraPath("prime2D_doc%d.txt" % iteration)
+        return self._getExtraPath("prime2Ddoc_%03d.txt" % iteration)
 
     def getClassesStack(self, iteration=None):
         if iteration is None:
             iteration = self.getLastIteration()
 
-        return self._getExtraPath("cavgs_iter%d.mrc" % iteration)
+        return self._getExtraPath("cavgs_iter%03d.mrc" % iteration)
 
     def getParticlesStack(self):
         return self._getExtraPath('particles.mrcs')
