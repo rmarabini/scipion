@@ -73,19 +73,21 @@ class ProtSimplePick(ProtParticlePicking):
                       label='Point group symmetry',
                       help='point-group symmetry(cn|dn|t|o|i)')
 
-        form.addParam('invertTemplatesContrast', params.BooleanParam, default=False,
+        form.addParam('invertTemplatesContrast', params.BooleanParam,
+                      default=False,
                       label='References have inverted contrast',
                       help='Set to Yes to indicate that the reference have '
                            'inverted contrast with respect to the particles '
                            'in the micrographs.\n')
 
-        form.addParam('lowpass', params.IntParam,
+        form.addParam('lowpass', params.IntParam, default=20,
                       label='Low-pass filter (A)',
                       help='')
 
-        form.addParam('threshold', params.FloatParam, default=0.5,
-                      label='Threshold',
-                      help='(binarisation: 0-1; distance filer: in pixels)')
+        form.addParam('distance', params.IntParam, default=-1,
+                      label='Inter-particles distance (px)',
+                      help='Inter particles distance, if -1 is used, then'
+                           'the default value is half of the box size. ')
 
         form.addParam('rmOutliers', params.BooleanParam, default=True,
                       label='Remove outliers?',
@@ -98,7 +100,7 @@ class ProtSimplePick(ProtParticlePicking):
 
         form.addParallelSection(mpi=1, threads=4)
 
-    # --------------------------- INSERT steps functions --------------------------------------------
+    # --------------------------- INSERT steps functions -----------------------
 
     def _insertAllSteps(self):
         self._insertFunctionStep('makePickReferencesStep')
@@ -106,7 +108,7 @@ class ProtSimplePick(ProtParticlePicking):
         self._insertFunctionStep('runSimplePickStep')
         self._insertFunctionStep('createOutputStep')
 
-    # --------------------------- STEPS functions ---------------------------------------------------
+    # --------------------------- STEPS functions ------------------------------
 
     def makePickReferencesStep(self):
         """ Convert input data to mrc format and generate the references.
@@ -141,6 +143,9 @@ class ProtSimplePick(ProtParticlePicking):
         args += 'refs=pickrefs.mrc '
         args += 'nthr=%d ' % self.numberOfThreads
         args += 'rm_outliers=%s ' % ('yes' if self.rmOutliers else 'no')
+        if self.distance > 0:
+            args += 'thres=%d ' % self.distance
+
         self.runJob(simple.getProgram('pick'), args, cwd=self._getExtraPath())
 
     def createOutputStep(self):
@@ -153,11 +158,12 @@ class ProtSimplePick(ProtParticlePicking):
 
         coordSet = self._createSetOfCoordinates(micSet)
         coordSet.setBoxSize(boxSize)
-        readSetOfCoordinates(self.getMicrographsDir(), micSet, coordSet)
+        readSetOfCoordinates(self.getMicrographsDir(), micSet, coordSet,
+                             boxSize)
         self._defineOutputs(outputCoordinates=coordSet)
         self._defineSourceRelation(micSet, coordSet)
 
-    # --------------------------- INFO functions --------------------------------------------
+    # --------------------------- INFO functions -------------------------------
     def _validate(self):
         errors = []
         return errors
@@ -173,7 +179,7 @@ class ProtSimplePick(ProtParticlePicking):
     def _citations(self):
         return []
 
-    # --------------------------- UTILS functions --------------------------------------------------
+    # --------------------------- UTILS functions ------------------------------
     def getMicrographsDir(self):
         return self._getExtraPath('micrographs')
 

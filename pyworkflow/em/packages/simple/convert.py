@@ -244,7 +244,7 @@ def alignmentToRow(alignment, alignmentRow, alignType):
         alignmentRow[ANGLE_PSI] = angles[0]
         
 
-def readSetOfCoordinates(workDir, micSet, coordSet):
+def readSetOfCoordinates(workDir, micSet, coordSet, boxSize):
     """ Read from coordinates from SIMPLE3 pikcing program.
      It generates .box files with Eman1.9 convention:
      The lower-left coordinate is reported together with the box file.
@@ -252,16 +252,14 @@ def readSetOfCoordinates(workDir, micSet, coordSet):
     for mic in micSet:
         micBase = pwutils.removeBaseExt(mic.getFileName())
         fnCoords = os.path.join(workDir, micBase + '.box')
-        readCoordinates(mic, fnCoords, coordSet)
+        readCoordinates(mic, fnCoords, coordSet, boxSize)
 
 
-def readCoordinates(mic, fileName, coordsSet):
+def readCoordinates(mic, fileName, coordsSet, boxSize):
     if os.path.exists(fileName):
         coordsMd = md.MetaData()
         coordsMd.readPlain(fileName, "xcoor ycoor particleSize")
-        size = coordsMd.getValue(md.MDL_PICKING_PARTICLE_SIZE,
-                                 coordsMd.firstObject())
-        half = size / 2
+        half = boxSize / 2
         for objId in coordsMd:
             x = coordsMd.getValue(md.MDL_XCOOR, objId)
             y = coordsMd.getValue(md.MDL_YCOOR, objId)
