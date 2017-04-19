@@ -36,9 +36,39 @@ import convert
 
 class ProtPrime3DInitial(em.ProtInitialVolume):
     """
-    This protocol wraps *simple_prime3D*, an ab inito reconstruction/refinement
-    program based on probabilistic projection matching.
+    This protocol wraps *ini3D_from_cavgs*, to generate an initial
+    volume from 2D averages.
+
+    josem@artemis:~/work/development/SIMPLE3.0$ simple_distr_exec prg=ini3D_from_cavgs
+USAGE:
+bash-3.2$ simple_exec prg=simple_program key1=val1 key2=val2 ...
+
+REQUIRED
+stk    = particle stack with all images(ptcls.ext)
+smpd   = sampling distance, same as EMANs apix(in A)
+msk    = mask radius(in pixels)
+pgrp   = point-group symmetry(cn|dn|t|o|i)
+nparts = # partitions in distributed exection
+
+OPTIONAL
+nthr        = # OpenMP threads{1}
+nthr_master = # OpenMP threads on master node{1}
+ncunits     = # computing units, can be < nparts {nparts}
+hp          = high-pass limit(in A)
+lp          = low-pass limit(in A)
+frac        = fraction of ptcls(0-1){1}
+automsk     = envelope masking(yes|no|cavg){no}
+mw          = molecular weight(in kD)
+amsklp      = low-pass limit for envelope mask generation(in A)
+edge        = edge size for softening molecular envelope(in pixels)
+binwidth    = binary layers grown for molecular envelope(in pixels){1}
+inner       = inner mask radius(in pixels)
+width       = falloff of inner mask(in pixels){10}
+nspace      = # projection directions
+shbarrier   = use shift search barrier constraint(yes|no){yes}
     """
+
+
     _label = 'prime 3d initial'
 
     #--------------------------- DEFINE param functions ------------------------
@@ -47,13 +77,13 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
         form.addSection('Input')
 
         form.addParam('inputSet', params.PointerParam,
-                      pointerClass='SetOfParticles,SetOfClasses,SetOfAverages',
-                      label="Input set", important=True,
+                      pointerClass='SetOfClasses,SetOfAverages',
+                      label="Input references", important=True,
                       help='You can selected the following type of sets:'
-                           'SetOfPartices, SetOfClasses or SetOfAverages '
+                           'SetOfClasses or SetOfAverages '
                            'in order to produce an initial volume. ')
 
-        form.addParam('maskRadius', params.IntParam, default=-1,
+        form.addParam('maskRadius', params.IntParam,
                       label='Particle mask radius (px)',
                       help='')
 
@@ -69,136 +99,37 @@ class ProtPrime3DInitial(em.ProtInitialVolume):
                       label='Extra parameters',
                       help='')
 
-        form.addParallelSection(threads=4, mpi=0)
+        form.addParallelSection(threads=4, mpi=1)
     
     #--------------------------- INSERT steps functions ------------------------
     
     def _insertAllSteps(self):
         self._insertFunctionStep('convertInputStep',
                                  self.inputSet.getUniqueId())
-
-        sym = self.getSym()
-        initSym = 'c1' if self.searchSymAxis else sym
-        self._insertFunctionStep('prime3DInitStep', initSym)
-        # The following files should be output from the prime 3d - init step
-        initVol, initOritab = 'startvol_state1.mrc', 'prime3D_startdoc.txt'
-        self.finalRoot = self.getRoot(initSym)
-        self._insertFunctionStep('prime3DStep', initSym, initVol, initOritab)
-
-        if self.searchSymAxis:
-            self._insertFunctionStep('findSymAxisStep')
-            # The following files should be produced after finding symmetry axis
-            vol, oritab = "recvol_state1.mrc", "sym_%s.txt" % sym
-            self.finalRoot = self.getRoot(sym)
-            self._insertFunctionStep('prime3DStep', sym, vol, oritab)
-
-        if isinstance(self.inputSet.get(), em.SetOfClasses2D):
-            self._insertFunctionStep('mapClassesToParticlesStep')
-
-        self._insertFunctionStep('createOutputStep', pwutils.prettyTimestamp())
+        self._insertFunctionStep('createInitialVolumeStep')
+        self._insertFunctionStep('createOutputStep')
 
     #--------------------------- STEPS functions -------------------------------
 
     def convertInputStep(self, inputId):
         inputSet = self.inputSet.get()
-        stkFn = self._getExtraPath(self.getInputStack())
+        inputSet.writeStack(self._getExtraPath('input_references.mrcs'))
 
-        if isinstance(inputSet, em.SetOfAverages):
-            inputSet.writeStack(stkFn)
-        elif isinstance(inputSet, em.SetOfClasses2D):
-            ctfFile = self.getCtfFile()
-            ctfFn = self._getExtraPath(ctfFile) if ctfFile else None
-            convert.writeSetOfClasses2D(inputSet, stkFn,
-                                stackFn=self._getExtraPath('particles.mrcs'),
-                                docFn=self._getExtraPath('particles.txt'),
-                                ctfFn=ctfFn)
-        elif isinstance(inputSet, em.SetOfParticles):
-            convert.writeSetOfParticles(inputSet, stkFn, docFn=None, ctfFn=None)
-        else:
-            raise Exception('Unexpected input type: %s' % type(inputSet))
-
-    def prime3DInitStep(self, initSym):
-        args = self._getCommonArgs()
-        args += " pgrp=%s" % initSym
-
-        self.runJob("simple_prime3D_init", args, cwd=self._getExtraPath())
-
-    def prime3DStep(self, sym, vol, oritab):
-        root = self._getExtraPath(self.getRoot(sym))
-        pwutils.makePath(root)
-        args = self._getCommonArgs(prefix='../')
-        args += " vol1=../%s" % vol
-        args += " oritab=../%s" % oritab
-        args += " pgrp=%s" % sym
-        args += " %s " % self.extraParams.get()
-
-        self.runJob("simple_prime3D", args, cwd=root)
-
-    def findSymAxisStep(self):
-        root = self.getRoot('c1') # Get root from previous prime 3D
-        docFile = self.getDocFile(root)
-        volFile = self.getVolFile(root)
-        symFile = 'sym_%s.txt' % self.getSym()
-        doc = simple.SimpleDocFile(docFile)
-        row = doc.getLastRow()
-        doc.close()
-
-        args = self._getCommonArgs(stk=False)
-        args += " vol1=%s" % volFile.replace(self._getExtraPath(), '.')
-        args += " oritab=%s" % docFile.replace(self._getExtraPath(), '.')
-        args += " pgrp=%s" % self.getSym()
-        args += " lp=%s" % row['lp']
-        args += " outfile=%s" % symFile
-        # Find symmetry axis
-        self.runJob("simple_symsrch", args, cwd=self._getExtraPath())
-
-        # Check some files that need to be produced
-        if not os.path.exists(self._getExtraPath(symFile)):
-            raise Exception('Expected file %s not produced.' % symFile)
-
-        # Now reconstruct with the defined symmetry
-        args = self._getCommonArgs()
-        args += " oritab=%s" % symFile
-        args += " pgrp=%s" % self.getSym()
-        self.runJob("simple_eo_recvol", args, cwd=self._getExtraPath())
-
-    def mapClassesToParticlesStep(self):
-        root = self._getExtraPath('map2ptcls')
-        pwutils.makePath(root)
-        lastDoc = self.getDocFile(self.finalRoot).replace(self._getExtraPath(),
-                                                          '..')
-        mappedDoc = 'mapped_ptcls_params.txt'
-        args = "stk=../particles.mrcs stk2=../averages.mrcs stk3=../averages.mrcs"
-        args += " oritab=../particles.txt oritab2=%s" % lastDoc
-        args += " outfile=%s" % mappedDoc
-        ctfFn = self.getCtfFile()
-        if ctfFn is not None:
-            args += " deftab=../%s" % ctfFn
-        self.runJob("simple_map2ptcls", args, cwd=root)
-
-        if not os.path.exists(os.path.join(root, mappedDoc)):
-            raise Exception("File '%s' was not produced!" % mappedDoc)
-
-        # Now reconstruct mapped particles
-        args = self._getCommonArgs(stk='particles.mrcs', prefix='../')
-        args += " oritab=%s" % mappedDoc
-        args += " pgrp=%s" % self.getSym()
-        self.runJob("simple_eo_recvol", args, cwd=root)
-
-    def _getCommonArgs(self, stk=None, prefix=''):
+    def createInitialVolumeStep(self):
         inputSet = self.inputSet.get()
-
-        if stk is None:
-            stk = self.getInputStack()
-
-        args = " stk=%s%s" % (prefix, stk) if stk else ""
-        args += " smpd=%f" % inputSet.getSamplingRate()
-        args += " msk=%d" % self.getMaskRadius()
+        args = " stk=input_references.mrcs"
+        args += " smpd=%0.3f" % inputSet.getSamplingRate()
+        args += " msk=%d" % self.maskRadius
+        args += " pgrp=%s" % self.symmetry
+        args += " %s " % self.extraParams.get('')
+        args += " nparts=%d" % self.numberOfMpi
         args += " nthr=%d" % self.numberOfThreads
 
-        return args
+        self.runJob(simple.getProgram('ini3D_from_cavgs', distr=True),
+                    args, cwd=self._getExtraPath())
 
-    def createOutputStep(self, v):
+    def createOutputStep(self, v=1):
+        return
         inputSet = self.inputSet.get()
 
         if isinstance(inputSet, em.SetOfClasses2D):

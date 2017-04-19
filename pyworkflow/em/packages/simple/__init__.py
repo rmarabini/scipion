@@ -34,17 +34,19 @@ from simple import *
 
 _environ = getEnviron()
 
+# Started update to SIMPLE 3.0
+from protocol_simple_unblur import ProtSimpleUnblur
+from protocol_simple_pick import ProtSimplePick
 from protocol_prime2d import ProtPrime2D
 from protocol_prime3d_initial import ProtPrime3DInitial
+
+# To be updated
 from protocol_prime3d_refine import ProtPrime3DRefine
 from protocol_reconstruct import ProtSimpleReconstruct
 
 from wizard import SimpleParticleMaskRadiusWizard
-
 from viewer_prime2D import SimpleViewerPrime2D
 
-from protocol_simple_unblur import ProtSimpleUnblur
-from protocol_simple_pick import ProtSimplePick
 
 # Just for backward compatibility
 ProtPrime = ProtPrime3DInitial
