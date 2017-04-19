@@ -70,15 +70,6 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                       label="Input coordinates",
                       help='Select the SetOfCoordinates ')
 
-        form.addParam('extractNoise', params.BooleanParam, default=False,
-                      label='Extract noise particles',
-                      help='Select this option to extract background noise particles instead of the true particles.'
-                           'This is useful for training some classifiers.')
-        form.addParam('extractNoiseNumber', params.IntParam, default=-1, condition="extractNoise",
-                      label='Number of noise particles',
-                      help='Number of noise particles to extract from each micrograph. '
-                           'Set to -1 for extracting the same amount of noise particles as the number true particles for that micrograph')
-
         # The name for the followig param is because historical reasons
         # now it should be named better 'micsSource' rather than
         # 'downsampleType', but this could make inconsistent previous executions
@@ -298,8 +289,6 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                                                  self.doInvert.get(),
                                                  self._getNormalizeArgs(),
                                                  self.doBorders.get(),
-                                                 self.extractNoise.get(),
-                                                 self.extractNoiseNumber.get(),
                                                  prerequisites=localDeps))
 
         # Insert step to create output objects
@@ -356,7 +345,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                         
     def extractParticlesStep(self, micId, baseMicName, fnCTF,
                              micrographToExtract, micOps,
-                             doInvert, normalizeArgs, doBorders, extractNoise, extractNoiseNumber):
+                             doInvert, normalizeArgs, doBorders):
         """ Extract particles from one micrograph """
         outputRoot = str(self._getExtraPath(baseMicName))
         fnPosFile = self._getExtraPath(baseMicName + ".pos")
@@ -384,9 +373,6 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
             if doBorders:
                 args += " --fillBorders"
             
-            if extractNoise:
-                args += " --extractNoise %d"%extractNoiseNumber
-
             self.runJob("xmipp_micrograph_scissor", args)
 
             # Normalize
