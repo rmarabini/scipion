@@ -58,7 +58,8 @@ class XmippProtPickNoise(ProtParticlePicking, XmippProtocol):
                       pointerClass='SetOfCoordinates',
                       important=True,
                       label="Input coordinates",
-                      help='Select the SetOfCoordinates ')
+                      help='Set of true particle coordinates. Noise coordinates are chosen'
+                           'so that they are sufficiently far from particles')
 
         form.addParam('extractNoiseNumber', params.IntParam, default=-1, expertLevel=LEVEL_ADVANCED,
                       label='Number of noise particles',
