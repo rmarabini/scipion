@@ -99,6 +99,9 @@ CUDA_BIN = /usr/local/cuda-7.5/bin
 NVCC = nvcc --x cu -D_FORCE_INLINES
 NVCC_INCLUDE = /usr/local/cuda/include
 NVCC_LIBDIR = CUDA_LIB
+CUDA_VERSION = 7.5
+CUDNN_VERSION = 5
+TF_CUDA_COMPUTE_CAPABILITIES = 3.5,5.2
 
 MATLAB_DIR = /usr/local/MATLAB/R2011a
 
