@@ -354,16 +354,34 @@ scpSoftware = os.environ['SCIPION_SOFTWARE']
 # tensorflow.addCommand('python %s/lib/python2.7/site-packages/pip install tensorflow'%scpSoftware,
 #                       targets='software/lib/python2.7/site-packages/tensorflow', default=False, final=True)
 
+if get('CUDA'):
+    cuda_home= os.environ.get('CUDA_BIN').replace('/bin','')
+    cc=os.environ.get("CC")
+    tf_cuda_version=os.environ.get("CUDA_VERSION")
+    tf_cudnn=os.environ.get("CUDNN_VERSION")
+    tf_cuda_capabilities=os.environ.get("TF_CUDA_COMPUTE_CAPABILITIES")
+    tensorflowVars ='export TF_NEED_CUDA=1; export CUDA_HOME=%s; '\
+                    'export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:%s/lib64:%s/extras/CUPTI/lib64"; '\
+                    'export GCC_HOST_COMPILER_PATH=`which %s`; export TF_CUDA_VERSION=%s; '\
+                    'export CUDA_TOOLKIT_PATH=%s ;export TF_CUDNN_VERSION=%s;'\
+                    'export CUDNN_INSTALL_PATH=%s; export TF_CUDA_COMPUTE_CAPABILITIES=%s'%(cuda_home,
+                                                   cuda_home,cuda_home,cc,tf_cuda_version, cuda_home,tf_cudnn, cuda_home,
+                                                   tf_cuda_capabilities)
+    tensorflowFlags = '--config=cuda'
+else:
+    tensorflowVars = 'export TF_NEED_CUDA=0'
+    tensorflowFlags = ''
+
 tensorflow = env.addLibrary(
     'tensorflow',
     tar='tensorflow-1.1.tgz', # -mavx -msse4.2 -msse4.1 -msse3-k
-    commands=[('export PYTHON_BIN_PATH=%s/bin/python; export CC_OPT_FLAGS=-march=native ; '\
+    commands=[('export PYTHON_BIN_PATH=%(scpSoftware)s/bin/python; export CC_OPT_FLAGS=-march=native ; '\
                'export TF_NEED_JEMALLOC=1; export TF_NEED_GCP=0; export TF_NEED_HDFS=0; '\
-               'export TF_ENABLE_XLA=0; export TF_NEED_OPENCL=0; export TF_NEED_CUDA=0; export USE_DEFAULT_PYTHON_LIB_PATH=1; '\
-               'cd software/tmp/tensorflow-1.1; ./configure; bazel build --config=opt //tensorflow/tools/pip_package:build_pip_package; '\
-               'bazel-bin/tensorflow/tools/pip_package/build_pip_package %s/tmp/tensorflow_pkg; '\
-               '%s/bin/python %s/lib/python2.7/site-packages/pip install %s/tmp/tensorflow_pkg/tensorflow-1.1*.whl'%\
-               (scpSoftware,scpSoftware,scpSoftware,scpSoftware,scpSoftware),
+               'export TF_ENABLE_XLA=0; export TF_NEED_OPENCL=0; %(tensorflowVars)s; export USE_DEFAULT_PYTHON_LIB_PATH=1; '\
+               'cd software/tmp/tensorflow-1.1; ./configure; bazel build --config=opt %(tensorflowFlags)s //tensorflow/tools/pip_package:build_pip_package; '\
+               'bazel-bin/tensorflow/tools/pip_package/build_pip_package %(scpSoftware)s/tmp/tensorflow_pkg; '\
+               '%(scpSoftware)s/bin/python %(scpSoftware)s/lib/python2.7/site-packages/pip install %(scpSoftware)s/tmp/tensorflow_pkg/tensorflow-1.1*.whl'%\
+               locals(),
                'software/lib/python2.7/site-packages/tensorflow')],
     deps=[python,bazel,wheel,pip],
     default=False)
