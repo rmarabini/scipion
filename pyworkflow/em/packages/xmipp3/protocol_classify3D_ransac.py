@@ -344,8 +344,42 @@ class XmippProtClass3DRansac(ProtClassify3D, XmippProtDirectionalClasses, XmippP
                 mdOut.clear()
 
     def reconstruct3DStep(self):
+        
         fnDirectionalClasses = self._getPath("directionalClasses.xmd")
         listOfBlocks = xmipp.getBlocksInMetaDataFile(fnDirectionalClasses)
+        numClass = len(listOfBlocks)
+        numParticlePerClass = self.numClasses.get()
+        
+        #Generate all possible combinations and reconstruct everything
+        from numpy import mgrid, rollaxis, reshape
+        args = "numComb=mgrid[0:%s, "%(str(numParticlePerClass))
+        for i in range(numClass-2):
+            args += "0:%s, "%(str(numParticlePerClass))
+        args += "0:%s] "%(str(numParticlePerClass))
+        exec args
+        
+        args = "numComb = rollaxis(numComb, 0, %s)"%(str(numClass+1))
+        exec args
+        
+        args = "numComb=numComb.reshape(%s * "%(str(self.numClasses.get()))
+        for i in range(numClass-2):
+            args += "%s * "%(str(numParticlePerClass))
+        args += "%s, %s) "%(str(numParticlePerClass), str(numClass))
+        exec args
+
+        
+        raise Exception('spam', 'eggs')
+
+        #  exec "from numpy import mgrid \na=mgrid[1:%s] \nprint(a)"%(str(n))
+        #  exec "a=mgrid[1:%s] \nprint(a)"%(str(n))
+        
+        # a = np.mgrid[0:3, 0:3, 0:3, 0:3]
+        # a = np.rollaxis(a, 0, 5)
+        #
+        #  a = np.rollaxis(a, 0, 5)
+        #  a = a.reshape((3 * 3 * 3* 3, 4))
+        
+
         md = xmipp.MetaData()
         fnRecons = self._getExtraPath("recons")
         Ts = self.inputParticles.get().getSamplingRate()
@@ -369,9 +403,6 @@ class XmippProtClass3DRansac(ProtClassify3D, XmippProtDirectionalClasses, XmippP
         self.runJob("xmipp_transform_filter",   "-i %s.vol -o %s.vol --fourier low_pass %f --bad_pixels outliers 0.5" %(fnRecons,fnRecons,normFreq))
         self.runJob("xmipp_transform_mask","-i %s.vol  -o %s.vol --mask circular -%f" %(fnRecons,fnRecons,self.newRadius))
         md.clear()
-
-        raise Exception('spam', 'eggs')
- 
 
 
                 
