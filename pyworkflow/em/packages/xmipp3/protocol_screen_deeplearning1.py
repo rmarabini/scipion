@@ -67,7 +67,7 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                       help='Number of epochs for the neural network training')  
         form.addParam('learningRate', params.FloatParam, label="Learning rate", default=0.001, expertLevel=params.LEVEL_ADVANCED,
                       help='Learning rate of the neural network training')  
-        if os.environ['CUDA']:
+        if not os.environ['CUDA']=="False":
             form.addParallelSection(threads=0, mpi=0)           
         else:
             form.addParallelSection(threads=8, mpi=0)    
@@ -91,7 +91,7 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
         writeSetOfParticles(testFalseParticles, self._getExtraPath("testFalseParticles.xmd"))
         
 #    def estimateBatchSize(self,xdim,ydim):
-#      if os.environ['CUDA']:
+#      if not os.environ['CUDA']=="False":
 #        from tensorflow.python.client import device_lib
 #        local_device_protos = device_lib.list_local_devices()
 #        gpu_mem_list=[x.memory_limit for x in local_device_protos if x.device_type == 'GPU']
@@ -118,7 +118,7 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
     def train(self, inputConsensus, inputNegatives, testPos, testNeg, learningRate):
       
         from pyworkflow.em.packages.xmipp3.deepLearning1 import  DeepTFSupervised, DataManager
-        numberOfThreads= None if os.environ['CUDA'] else self.numberOfThreads.get()
+        numberOfThreads= None if not os.environ['CUDA']=="False" else self.numberOfThreads.get()
         #data preproc        
 #        mdTrue = md.MetaData(self._getExtraPath("inputTrueParticles.xmd"))
 #        mdNegatives = md.MetaData(self._getExtraPath("inputFalseParticles.xmd"))
@@ -164,7 +164,7 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                               negImagesObject= testParticlesNeg)
 
         nnet = DeepTFSupervised(rootPath=self._getExtraPath("nnetData"))
-        numberOfThreads= None if os.environ['CUDA'] else self.numberOfThreads.get()
+        numberOfThreads= None if not os.environ['CUDA']=="False" else self.numberOfThreads.get()
         nnet.createNet( *testData.shape)
         nnet.startSessionAndInitialize(numberOfThreads)
         y_pred , labels, metadataAndId_list= nnet.predictNet(testData)      

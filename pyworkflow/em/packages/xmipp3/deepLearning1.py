@@ -302,7 +302,7 @@ class DataManager(object):
 
   @staticmethod
   def getFREE_GPU_MEM():
-    if os.environ['CUDA']:
+    if not os.environ['CUDA']=="False":
       from tensorflow.python.client import device_lib
       local_device_protos = device_lib.list_local_devices()
       gpu_mem_list=[x.memory_limit for x in local_device_protos if x.device_type == 'GPU']
