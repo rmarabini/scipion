@@ -3,8 +3,8 @@ from __future__ import print_function
 from six.moves import range
 import numpy as np
 import sys, os
-import tensorflow as tf 
-import numpy as np 
+import tensorflow as tf
+import numpy as np
 from math import ceil
 
 import time
@@ -24,13 +24,12 @@ def updateEnviron():
         environ.update({'LD_LIBRARY_PATH': os.environ['CUDA_HOME']+"/extras/CUPTI/lib64"}, position=Environ.BEGIN)
 updateEnviron()
 
-import tensorflow as tf 
 
 LEARNING_RATE= 1e-4
 EPSILION=1e-8 # Para el modelo original
 #EPSILION=1e-3
 
-BATCH_SIZE= 256
+BATCH_SIZE= 128
 EVALUATE_AT= 10
 CHECK_POINT_AT= 50
 
@@ -300,7 +299,7 @@ class DeepTFSupervised(object):
     return y_pred , labels, metadataAndId_list
 
 class DataManager(object):
-  
+
   @staticmethod
   def getFREE_GPU_MEM():
     if os.environ['CUDA']:
@@ -313,17 +312,17 @@ class DataManager(object):
       return None
   FREE_GPU_MEM=  getFREE_GPU_MEM.__func__()
   def __init__(self, posImagesFname, posImagesObject,  negImagesFname=None, negImagesObject=None):
-    
+
     self.mdFalse=None
     self.nFalse=0
-    self.mdTrue  = md.MetaData() 
+    self.mdTrue  = md.MetaData()
     self.mdTrue.randomize( md.MetaData(posImagesFname) )
-    
+
     xdim, ydim, _     = posImagesObject.getDim()
     self.shape= (xdim,ydim,1)
-    self.nTrue= posImagesObject.getSize()    
+    self.nTrue= posImagesObject.getSize()
 #    self.batchSize= self.estimateBatchSize()
-    self.batchSize= 128
+    self.batchSize= BATCH_SIZE
 #    self.batchSize= 256  # Para la primera version del modelo
 #    self.batchSize= 512  # Para la primera version del modelo
 
@@ -331,12 +330,12 @@ class DataManager(object):
 
     self.batchStack   = np.zeros((self.batchSize, xdim,ydim,1))
     if not ( negImagesFname is None or negImagesObject is None):
-      self.mdFalse  = md.MetaData() 
+      self.mdFalse  = md.MetaData()
       self.mdFalse.randomize( md.MetaData(negImagesFname) )
       xdim_1, ydim_1, _ = negImagesObject.getDim()
-      self.nFalse= negImagesObject.getSize()    
+      self.nFalse= negImagesObject.getSize()
       assert xdim==xdim_1 and ydim==ydim_1
-      self.getRandomBatch= self.getRandomBatchWorker 
+      self.getRandomBatch= self.getRandomBatchWorker
     else:
         self.getRandomBatch= self.NOgetRandomBatchWorker
   
@@ -426,7 +425,7 @@ class DataManager(object):
         I.read(fnImage)
         batchStack[n,...]= np.expand_dims(I.getData(),-1)
         batchLabels[n, 0]= 1
-        metaDataList.append( (mdFalse, id) )        
+        metaDataList.append( (mdFalse, id) )
         n+=1
         if n>=batchSize:
           yield batchStack, batchLabels, metaDataList
@@ -435,7 +434,7 @@ class DataManager(object):
           batchLabels  = np.zeros((batchSize, 2))
     if n>0:
       yield batchStack[:n,...], batchLabels[:n,...], metaDataList[:n]
-      
+
   def getIteratorTestBatch(self, nBatches= 10):
     batchSize = self.batchSize
     xdim,ydim,nChann= self.shape
@@ -462,7 +461,7 @@ class DataManager(object):
         batchLabels  = np.zeros((batchSize, 2))
         currNBatches+=1
         if currNBatches>=nBatches:
-          break     
+          break
       fnImageFalse = mdFalse.getValue(md.MDL_IMAGE, idFalse)
       I.read(fnImageFalse)
       batchStack[n,...]= np.expand_dims(I.getData(),-1)
@@ -480,4 +479,3 @@ class DataManager(object):
     if n>0:
       yield batchStack[:n,...], batchLabels[:n,...], metaDataList[:n]
 
-         
