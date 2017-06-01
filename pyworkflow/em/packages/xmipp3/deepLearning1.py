@@ -1,3 +1,29 @@
+# **************************************************************************
+# *
+# * Authors:  Ruben Sanchez (rsanchez@cnb.csic.es), April 2017
+# *
+# * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# *
+# * This program is free software; you can redistribute it and/or modify
+# * it under the terms of the GNU General Public License as published by
+# * the Free Software Foundation; either version 2 of the License, or
+# * (at your option) any later version.
+# *
+# * This program is distributed in the hope that it will be useful,
+# * but WITHOUT ANY WARRANTY; without even the implied warranty of
+# * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# * GNU General Public License for more details.
+# *
+# * You should have received a copy of the GNU General Public License
+# * along with this program; if not, write to the Free Software
+# * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
+# * 02111-1307  USA
+# *
+# *  All comments concerning this program package may be sent to the
+# *  e-mail address 'scipion@cnb.csic.es'
+# *
+# **************************************************************************
+
 from __future__ import print_function
 
 from six.moves import range
@@ -17,19 +43,17 @@ import pyworkflow.em.metadata as md
 import tflearn
 
 def updateEnviron():
-    """ Create the needed environment for TensorFlow programs. """
-    environ = Environ(os.environ)
-    if  os.environ['CUDA']:
-        environ.update({'LD_LIBRARY_PATH': os.environ['CUDA_LIB']}, position=Environ.BEGIN)
-        environ.update({'LD_LIBRARY_PATH': os.environ['CUDA_HOME']+"/extras/CUPTI/lib64"}, position=Environ.BEGIN)
+  """ Create the needed environment for TensorFlow programs. """
+  environ = Environ(os.environ)
+  if  'CUDA' in os.environ and not os.environ['CUDA']=="False":
+    environ.update({'LD_LIBRARY_PATH': os.environ['CUDA_LIB']}, position=Environ.BEGIN)
+    environ.update({'LD_LIBRARY_PATH': os.environ['CUDA_HOME']+"/extras/CUPTI/lib64"}, position=Environ.BEGIN)
 updateEnviron()
 
 
-LEARNING_RATE= 1e-4
-EPSILION=1e-8 # Para el modelo original
-#EPSILION=1e-3
 
-BATCH_SIZE= 128
+BATCH_SIZE= 256
+
 EVALUATE_AT= 10
 CHECK_POINT_AT= 50
 
@@ -38,21 +62,26 @@ def printAndOverride(msg):
   print("\r%s"%(msg), end="")
     
 class DeepTFSupervised(object):
-  def __init__(self, rootPath, learningRate=LEARNING_RATE):
+  def __init__(self, rootPath, learningRate= 1e-4, batch_size= BATCH_SIZE):
+    '''
+      @param rootPath: str. Root directory where neural net data will be saved.
+                            Generally "extra/nnetData/"
+                                                      tfchkpoints/
+                                                      tflogs/
+      @param learningRate: float. Learning rate for net training
+      @param batch_size: integer. The number of elemets that will be fed to the net at each
+                                  step          
+    '''
     self.lRate= learningRate
     self.rootPath= rootPath
-#    if not os.path.isdir(self.rootPath):
-#      os.mkdir(self.rootPath)
+
     self.checkPointsNames= os.path.join(rootPath,"tfchkpoints")
-#    if not os.path.isdir(self.checkPointsNames):
-#      os.mkdir(self.checkPointsNames)
+
     self.checkPointsNames= os.path.join(self.checkPointsNames,"screening")
 
     self.logsSaveName= os.path.join(rootPath,"tflogs")
-#    if not os.path.isdir(self.logsSaveName):
-#      os.mkdir(self.logsSaveName)
         
-    self.batch_size= BATCH_SIZE
+    self.batch_size= batch_size
     self.num_labels=2
     self.num_channels=None
     self.image_size=None
@@ -69,7 +98,12 @@ class DeepTFSupervised(object):
     self.optimizer= None
                                               
   def createNet(self, xdim, ydim, num_chan):
-    print ("Creating net. Learning rate %f"%self.lRate)
+    '''
+      @param xdim: int. height of images
+      @param ydim: int. width of images
+      @param num_chan: int. number of channels of images      
+    '''
+    print ("Creating net. Learning rate %.1e"%self.lRate)
     ##############################################################
     # INTIALIZE INPUT PLACEHOLDERS
     ##############################################################
@@ -90,7 +124,9 @@ class DeepTFSupervised(object):
   
   def startSessionAndInitialize(self, numberOfThreads=8):
     '''
-      numberOfThreads==None -> default (use GPU or all threads)
+      @param numberOfThreads. Number of threads to use in cpu mode. If numberOfThreads==None 
+                              then default behaviour is expected (use GPU if available otherwise
+                              one thread per cpu)
     '''
     print("Initializing tf session")
     
@@ -131,6 +167,11 @@ class DeepTFSupervised(object):
     return self.session
   
   def close(self, saveModel= False):
+    '''
+      Closes a tensorflow connection and related objects.
+      @param. saveModel: boolean. If True, model will be saved prior closing model
+    
+    '''
     if saveModel:
       self.saver.save(self.session, save_path= self.checkPointsNames, global_step= self.global_step) 
       print("\nSaved checkpoint.")
@@ -141,45 +182,26 @@ class DeepTFSupervised(object):
 
 
   def reset(self):
-
+    '''
+      Resets a tensorflow connection and related objects.
+      Needed if 2 independent trains want to be done in the same program.
+    
+    '''
     self.train_writer.close()
     self.test_writer.close()
     self.session.close()
     tf.reset_default_graph()
     self.createNet()
     self.startSessionAndInitialize()
-    
-#  def trainNet(self, numberOfBatches, dataManagerTrain, dataManagerTest=None):
-#
-#    
-#    ########################
-#    # TENSOR FLOW RUN
-#    ########################
-#    print("Training net for %d batches of size %d"%(numberOfBatches,batchSize))
-#
-#    x_batchTrain= np.concatenate([posImages, negImages])
-#    labels_batchTrain= np.zeros( (posImages.shape[0] + negImages.shape[0],2) )
-#    labels_batchTrain[:posImages.shape[0],1]=1
-#    labels_batchTrain[posImages.shape[0]:,0]=1
-#    del posImages, negImages
-#    feed_dict_train= {self.X : x_batchTrain, self.Y: labels_batchTrain }
-#    tflearn.is_training(True, session=self.session)
-#    i_global, __, stepLoss,= self.session.run( [self.global_step, self.optimizer, self.loss],
-#                                                 feed_dict=feed_dict_train )
-#      
-#
-##    printAndOverride("iterNum %d/%d trainLoss: %3.4f"%((i_global), numberOfBatches, stepLoss) )
-#    if i_global % EVALUATE_AT ==0:
-#      print("iterNum %d/%d trainLoss: %3.4f"%((i_global), numberOfBatches, stepLoss) )
-#      sys.stdout.flush()
-#    if (i_global + 1 ) % CHECK_POINT_AT==0:
-#      self.saver.save(self.session, save_path= self.checkPointsNames, global_step= self.global_step) 
-#      print("\nSaved checkpoint.")   
-#
-##    self.testPerformance( iterNum, trainBatchData, useTestData=True)
+
 
   def trainNet(self, numberOfBatches, dataManagerTrain, dataManagerTest=None):
-
+    '''
+      @param numberOfBatches: int. The number of batches that will be used for training 
+      @param dataManagerTrain: DataManager. Object that will provide training batches (Xs and labels)
+      @param dataManagerTest:  DataManager. Optional Object that will provide testing batches (Xs and labels)
+                                            If not provided, no testing will be done
+    '''
     
     ########################
     # TENSOR FLOW RUN
@@ -238,7 +260,7 @@ class DeepTFSupervised(object):
     if not testDataManager is None:
       y_pred_list=[]
       labels_list=[]
-      for images, labels, __ in testDataManager.getIteratorTestBatch(20):
+      for images, labels in testDataManager.getIteratorTestBatch(20):
         feed_dict_train= {self.X : images, self.Y : labels }
         y_pred, merged= self.session.run( [self.y_pred,self.merged_summaries], feed_dict=feed_dict_train )
         y_pred_list.append(y_pred)
@@ -255,24 +277,17 @@ class DeepTFSupervised(object):
     tflearn.is_training(True, session=self.session)      
     
 
-#  def predictNet(self, images):
-#
-#    feed_dict_train= {self.X : images}
-#    y_pred= self.session.run( self.y_pred,
-#                              feed_dict=feed_dict_train )
-#    return y_pred[:,1]                                                 
-
   def predictNet(self, dataManger):
     tflearn.is_training(False, session=self.session)      
     y_pred_list=[]
     labels_list=[]
-    metadataAndId_list=[]
-    for images, labels, metadataAndId in dataManger.getIteratorPredictBatch():
+    metadataId_list=[]
+    for images, labels, metadataIdTuple in dataManger.getIteratorPredictBatch():
       feed_dict_train= {self.X : images}
       y_pred= self.session.run( self.y_pred, feed_dict=feed_dict_train )
       y_pred_list.append(y_pred)
       labels_list.append(labels)
-      metadataAndId_list+= metadataAndId
+      metadataId_list+= metadataIdTuple
     y_pred= np.concatenate(y_pred_list)
     labels= np.concatenate(labels_list)
     accuracy= self.accuracy_score(labels, y_pred)
@@ -285,74 +300,51 @@ class DeepTFSupervised(object):
     print("pos_mean %f pos_sd %f neg_mean %f neg_perc90 %f neg_perc95 %f"%(np.mean(posScores),np.std(posScores),
                                                          np.mean(negScores), np.percentile(negScores,90),
                                                          np.percentile(negScores,95)))
-    with open("/home/rsanchez/app/scipion/pyworkflow/em/packages/xmipp3/backupDeepLearning/scores.tab","w") as f:
-      best_accuracy= 0
-      thr=0
-      for score, label in zip(y_pred, pos_labels):
-        f.write("%f\t%d\n"%(float(score),float(label)))
-        tmpY=[ 1 if elem>=score else 0 for elem in y_pred]
-        tmp_accu=accuracy_score(pos_labels, tmpY)
-        if tmp_accu> best_accuracy:
-          best_accuracy= tmp_accu
-          thr= score
-    print("best thr %f --> accuracy %f"%(thr,best_accuracy))
-    return y_pred , labels, metadataAndId_list
+##    with open("/home/rsanchez/app/scipion/pyworkflow/em/packages/xmipp3/backupDeepLearning/scores.tab","w") as f:
+##      best_accuracy= 0
+##      thr=0
+##      for score, label in zip(y_pred, pos_labels):
+##        f.write("%f\t%d\n"%(float(score),float(label)))
+##        tmpY=[ 1 if elem>=score else 0 for elem in y_pred]
+##        tmp_accu=accuracy_score(pos_labels, tmpY)
+##        if tmp_accu> best_accuracy:
+##          best_accuracy= tmp_accu
+##          thr= score
+##    print("best thr %f --> accuracy %f"%(thr,best_accuracy))
+    return y_pred , labels, metadataIdTuple
 
 class DataManager(object):
 
-  @staticmethod
-  def getFREE_GPU_MEM():
-    if not os.environ['CUDA']=="False":
-      from tensorflow.python.client import device_lib
-      local_device_protos = device_lib.list_local_devices()
-      gpu_mem_list=[x.memory_limit for x in local_device_protos if x.device_type == 'GPU']
-      nBytes= gpu_mem_list[0]
-      return nBytes
-    else:
-      return None
-  FREE_GPU_MEM=  getFREE_GPU_MEM.__func__()
-  def __init__(self, posImagesFname, posImagesObject,  negImagesFname=None, negImagesObject=None):
+  def __init__(self, posImagesXMDFname, posImagesSetOfParticles,  negImagesXMDFname=None, negImagesSetOfParticles=None):
 
     self.mdFalse=None
-    self.nFalse=0
-    self.mdTrue  = md.MetaData()
-    self.mdTrue.randomize( md.MetaData(posImagesFname) )
+    self.nFalse=0 #Number of negative particles in dataManager
+    
+    self.mdTrue  = md.MetaData(posImagesXMDFname)
+    self.fnListTrue =self.mdTrue.getColumnValues(md.MDL_IMAGE)
 
-    xdim, ydim, _     = posImagesObject.getDim()
+    xdim, ydim, _     = posImagesSetOfParticles.getDim()
     self.shape= (xdim,ydim,1)
-    self.nTrue= posImagesObject.getSize()
-#    self.batchSize= self.estimateBatchSize()
+    self.nTrue= posImagesSetOfParticles.getSize()
+    
     self.batchSize= BATCH_SIZE
-#    self.batchSize= 256  # Para la primera version del modelo
-#    self.batchSize= 512  # Para la primera version del modelo
 
     self.splitPoint= self.batchSize//2
 
-    self.batchStack   = np.zeros((self.batchSize, xdim,ydim,1))
-    if not ( negImagesFname is None or negImagesObject is None):
-      self.mdFalse  = md.MetaData()
-      self.mdFalse.randomize( md.MetaData(negImagesFname) )
-      xdim_1, ydim_1, _ = negImagesObject.getDim()
-      self.nFalse= negImagesObject.getSize()
+    self.batchStack = np.zeros((self.batchSize, xdim,ydim,1))
+    if not ( negImagesXMDFname is None or negImagesSetOfParticles is None):
+      self.mdFalse  = md.MetaData(negImagesXMDFname)
+      self.fnListFalse  = self.mdFalse.getColumnValues(md.MDL_IMAGE)
+      xdim_1, ydim_1, _ = negImagesSetOfParticles.getDim()
+      self.nFalse= negImagesSetOfParticles.getSize()
       assert xdim==xdim_1 and ydim==ydim_1
       self.getRandomBatch= self.getRandomBatchWorker
     else:
-        self.getRandomBatch= self.NOgetRandomBatchWorker
-  
-  def getMetadata(self):
-    return self.mdTrue, self.mdFalse
-  
-#  def estimateBatchSize(self):
-#    if os.environ['CUDA']:
-#      nBytes= int(0.3* DataManager.FREE_GPU_MEM) #30% gpu memory for data. Rest for model
-##      print(nBytes, np.prod(self.shape),PICK_MEM, nBytes // (np.prod(self.shape)*PICK_MEM))
-#      batchSize= nBytes // (np.prod(self.shape)*PICK_MEM)
-##      print("Batchsize %d"%batchSize)
-#      return batchSize
-#    else:
-#      return 4096
+      self.getRandomBatch= self.NOgetRandomBatchWorker
     
-  
+  def getMetadata(self) :
+    return  self.mdTrue, self.mdFalse
+
   def getNBatches(self, Nepochs):
     return  int(ceil(2*self.nTrue*Nepochs/self.batchSize))
 
@@ -363,36 +355,37 @@ class DataManager(object):
     raise ValueError("needs positive and negative images to compute random batch. Just pos provided")
     
   def getRandomBatchWorker(self):
+
     batchSize = self.batchSize
     splitPoint = self.splitPoint
     batchStack   = self.batchStack
     batchLabels  = np.zeros((batchSize, 2))
-    mdTrue  = md.MetaData() 
-    mdTrue.randomize( self.mdTrue )
-    mdFalse  = md.MetaData() 
-    mdFalse.randomize( self.mdFalse )
-    
+    idxListTrue = np.random.choice(len(self.fnListTrue),splitPoint,False)
+    idxListFalse = np.random.choice(len(self.fnListFalse),splitPoint,False)
+
     I = xmipp.Image()
     n = 0
-    for id in mdTrue:
-      fnImage = mdTrue.getValue(md.MDL_IMAGE, id)
+    for idx in idxListTrue:
+      fnImage = self.fnListTrue[idx]
       I.read(fnImage)
       batchStack[n,...]= np.expand_dims(I.getData(),-1)
       batchLabels[n, 1]= 1
       n+=1
       if n>=splitPoint:
           break
-    for id in mdFalse:
-      fnImage = mdFalse.getValue(md.MDL_IMAGE, id)
+    for idx in idxListFalse:
+      fnImage = self.fnListFalse[idx]
       I.read(fnImage)
       batchStack[n,...]= np.expand_dims(I.getData(),-1)
       batchLabels[n, 0]= 1
       n+=1
       if n>=batchSize:
           break
+
     shuffInd= np.random.choice(n,n, replace=False)
     batchStack= batchStack[shuffInd, ...]
-    batchLabels= batchLabels[shuffInd, ...]    
+    batchLabels= batchLabels[shuffInd, ...]
+
     return batchStack, batchLabels
 
   def getIteratorPredictBatch(self):
@@ -403,79 +396,69 @@ class DataManager(object):
     mdTrue  = self.mdTrue
     I = xmipp.Image()
     n = 0
-    metaDataList= []
-    for id in mdTrue:
+    idAndType=[]
+    for objId in mdTrue:
 #      print("True id", id)
-      fnImage = mdTrue.getValue(md.MDL_IMAGE, id)
+      fnImage = mdTrue.getValue(md.MDL_IMAGE, objId)
       I.read(fnImage)
       batchStack[n,...]= np.expand_dims(I.getData(),-1)
       batchLabels[n, 1]= 1
-      metaDataList.append( (mdTrue, id) )
+      idAndType.append((True,objId))
       n+=1
       if n>=batchSize:
-        yield batchStack, batchLabels,  metaDataList
+        yield batchStack, batchLabels,  idAndType
         n=0
-        metaDataList= []
         batchLabels  = np.zeros((batchSize, 2))
-
+        idAndType= []
     if not self.mdFalse is None:
       mdFalse= self.mdFalse
-      for id in mdFalse:
-        fnImage = mdFalse.getValue(md.MDL_IMAGE, id)
+      for objId in mdFalse:
+        fnImage = mdFalse.getValue(md.MDL_IMAGE, objId)
         I.read(fnImage)
         batchStack[n,...]= np.expand_dims(I.getData(),-1)
         batchLabels[n, 0]= 1
-        metaDataList.append( (mdFalse, id) )
+        idAndType.append((False,objId))
         n+=1
         if n>=batchSize:
-          yield batchStack, batchLabels, metaDataList
+          yield batchStack, batchLabels,  idAndType
           n=0
-          metaDataList= []
+          idAndType= []
           batchLabels  = np.zeros((batchSize, 2))
     if n>0:
-      yield batchStack[:n,...], batchLabels[:n,...], metaDataList[:n]
+      yield batchStack[:n,...], batchLabels[:n,...], idAndType[:n]
 
   def getIteratorTestBatch(self, nBatches= 10):
     batchSize = self.batchSize
     xdim,ydim,nChann= self.shape
     batchStack = np.zeros((self.batchSize, xdim,ydim,nChann))
     batchLabels  = np.zeros((batchSize, 2))
-    mdTrue  = self.mdTrue
-    mdFalse = self.mdFalse
     I = xmipp.Image()
     n = 0
-    metaDataList= []
 
     currNBatches=0
-    for idTrue, idFalse in zip(mdTrue, mdFalse):
-      fnImageTrue = mdTrue.getValue(md.MDL_IMAGE, idTrue)
+    for fnImageTrue, fnImageFalse in zip(self.fnListTrue, self.fnListFalse):
       I.read(fnImageTrue)
       batchStack[n,...]= np.expand_dims(I.getData(),-1)
       batchLabels[n, 1]= 1
-      metaDataList.append( (mdTrue, idTrue) )
       n+=1
       if n>=batchSize:
-        yield batchStack, batchLabels,  metaDataList
+        yield batchStack, batchLabels
         n=0
-        metaDataList= []
         batchLabels  = np.zeros((batchSize, 2))
         currNBatches+=1
         if currNBatches>=nBatches:
           break
-      fnImageFalse = mdFalse.getValue(md.MDL_IMAGE, idFalse)
       I.read(fnImageFalse)
       batchStack[n,...]= np.expand_dims(I.getData(),-1)
       batchLabels[n, 0]= 1
-      metaDataList.append( (mdTrue, idFalse) )
       n+=1
       if n>=batchSize:
-        yield batchStack, batchLabels,  metaDataList
+        yield batchStack, batchLabels
         n=0
-        metaDataList= []
         batchLabels  = np.zeros((batchSize, 2))
         currNBatches+=1
         if currNBatches>=nBatches:
           break
     if n>0:
-      yield batchStack[:n,...], batchLabels[:n,...], metaDataList[:n]
+      yield batchStack[:n,...], batchLabels[:n,...]
 
