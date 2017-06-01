@@ -150,8 +150,8 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
         nnet.trainNet(numberOfBatches, trainData, testData)
         nnet.close(saveModel= True)
         
-        self.predict( testPos, testNeg)
-        raise ValueError("Debugging mode")
+        #self.predict( testPos, testNeg)
+        #raise ValueError("Debugging mode")
 
         del nnet
         

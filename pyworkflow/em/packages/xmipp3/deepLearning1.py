@@ -286,17 +286,17 @@ class DeepTFSupervised(object):
     print("pos_mean %f pos_sd %f neg_mean %f neg_perc90 %f neg_perc95 %f"%(np.mean(posScores),np.std(posScores),
                                                          np.mean(negScores), np.percentile(negScores,90),
                                                          np.percentile(negScores,95)))
-    with open("/home/rsanchez/app/scipion/pyworkflow/em/packages/xmipp3/backupDeepLearning/scores.tab","w") as f:
-      best_accuracy= 0
-      thr=0
-      for score, label in zip(y_pred, pos_labels):
-        f.write("%f\t%d\n"%(float(score),float(label)))
-        tmpY=[ 1 if elem>=score else 0 for elem in y_pred]
-        tmp_accu=accuracy_score(pos_labels, tmpY)
-        if tmp_accu> best_accuracy:
-          best_accuracy= tmp_accu
-          thr= score
-    print("best thr %f --> accuracy %f"%(thr,best_accuracy))
+    #with open("/home/rsanchez/app/scipion/pyworkflow/em/packages/xmipp3/backupDeepLearning/scores.tab","w") as f:
+    #  best_accuracy= 0
+    #  thr=0
+    #  for score, label in zip(y_pred, pos_labels):
+    #    f.write("%f\t%d\n"%(float(score),float(label)))
+    #    tmpY=[ 1 if elem>=score else 0 for elem in y_pred]
+    #    tmp_accu=accuracy_score(pos_labels, tmpY)
+    #    if tmp_accu> best_accuracy:
+    #      best_accuracy= tmp_accu
+    #      thr= score
+    #print("best thr %f --> accuracy %f"%(thr,best_accuracy))
     return y_pred , labels, metadataAndId_list
 
 class DataManager(object):
