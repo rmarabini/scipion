@@ -1,7 +1,6 @@
 import os, sys
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.client import device_lib
 import tflearn
 '''
 Inception-like deep net
@@ -71,7 +70,7 @@ def createOneConvLayer(layerNum, prev_layer_out, outChanNum, kernerSize=3, pooli
                                      strides=[1, poolingStep, poolingStep, 1], padding='SAME')
     return conv_out, kernel
         
-def createInceptionModule(layerNum, prev_layer, outChanNum, poolingStep=-1):
+def createInceptionModule(layerNum, prev_layer, outChanNum):
   with tf.variable_scope('inceptionModule_'+str(layerNum) ) as scope:
     prev_layer_shapes= prev_layer.get_shape().as_list()
     
@@ -111,10 +110,6 @@ def createInceptionModule(layerNum, prev_layer, outChanNum, poolingStep=-1):
         conv_1x1_4 = conv2d_s1(maxpool1, W_conv_1x1_4)+b_conv_1x1_4
       
     conv_out= relu_function(tf.concat( values=[conv_1x1_1, conv_3x3, conv_5x5, conv_1x1_4], axis=3 ) )
-  if poolingStep>1:
-    with tf.variable_scope('maxpool_Incep_'+str(layerNum) ) as scope:
-      conv_out = tf.nn.max_pool( conv_out, ksize=[1, 3, 3, 1], 
-                                   strides=[1, poolingStep, poolingStep, 1], padding='SAME')
   return conv_out
 
 def main_network(x, labels, num_labels, learningRate, globalStep):
@@ -132,19 +127,18 @@ def main_network(x, labels, num_labels, learningRate, globalStep):
   prev_layer = tflearn.layers.core.input_data(placeholder=x, data_augmentation=img_aug)
 
   NUM_FILTERS=[32, 48, 48,  64, 80, 96]
-  KERNEL_SIZE=[5,   1,  3,  -1, -1, -1]
-  MAX_POOL=   [2,   1,  2,  -1,  2, -1]
+  KERNEL_SIZE=[5,   1,  3,  -1, -1, -1]  # -1 for inception module
+  MAX_POOL=   [2,   1,  2,   1,  2,  1]
   
-  for i in range(3):
-    prev_layer = tflearn.conv_2d(prev_layer, NUM_FILTERS[i], KERNEL_SIZE[i],activation="relu", regularizer= None)
+  for i in range(len(NUM_FILTERS)):
+    if KERNEL_SIZE[i]>0:
+      prev_layer = tflearn.conv_2d(prev_layer, NUM_FILTERS[i], KERNEL_SIZE[i],activation="relu", regularizer= None)
+    else:
+      prev_layer= createInceptionModule(i, prev_layer, NUM_FILTERS[i])
+      
     if MAX_POOL[i]>1:
       prev_layer = tflearn.layers.conv.max_pool_2d(prev_layer, kernel_size=3,  strides= MAX_POOL[i])
-      prev_layer = tflearn.layers.normalization.local_response_normalization(prev_layer)
-    
-  prev_layer= createInceptionModule(0, prev_layer, NUM_FILTERS[-3], MAX_POOL[-3] )  
-##  prev_layer= tflearn.layers.normalization.batch_normalization (prev_layer)  
-  prev_layer= createInceptionModule(1, prev_layer, NUM_FILTERS[-2], MAX_POOL[-2] )
-  prev_layer= createInceptionModule(2, prev_layer, NUM_FILTERS[-1], MAX_POOL[-1] )
+      prev_layer = tflearn.layers.normalization.local_response_normalization(prev_layer)      
         
   prev_layer_flat = tflearn.global_avg_pool(prev_layer)
   

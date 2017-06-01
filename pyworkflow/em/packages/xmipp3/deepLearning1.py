@@ -241,13 +241,13 @@ class DeepTFSupervised(object):
         self.saver.save(self.session, save_path= self.checkPointsNames, global_step= self.global_step) 
         print("\nSaved checkpoint.")   
 
-    self.testPerformance(i_global,trainDataBatch,dataManagerTest)
+    self.testPerformance(i_global,trainDataBatch, dataManagerTest)
     
   def accuracy_score(self, labels, predictions ):
     return (100.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1))
             / predictions.shape[0])    
 
-  def testPerformance(self, stepNum, trainDataBatch, testDataManager):
+  def testPerformance(self, stepNum, trainDataBatch, testDataManager=None):
     tflearn.is_training(False, session=self.session)      
 
     batch_x, batch_y= trainDataBatch
