@@ -139,7 +139,6 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
             
         metadataPos.write(self._getPath("particles.xmd"))
         metadataNeg.write(self._getPath("particlesNegative.xmd"))
-
         
     def createOutputStep(self):
         imgSet = self.testPosSetOfParticles.get()

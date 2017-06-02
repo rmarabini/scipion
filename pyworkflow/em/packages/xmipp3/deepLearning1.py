@@ -300,6 +300,7 @@ class DeepTFSupervised(object):
     print("pos_mean %f pos_sd %f neg_mean %f neg_perc90 %f neg_perc95 %f"%(np.mean(posScores),np.std(posScores),
                                                          np.mean(negScores), np.percentile(negScores,90),
                                                          np.percentile(negScores,95)))
+    print("number of y_pred , labels, metadataIdTuple %d %d %d"%(len(y_pred) , len(labels), len(metadataIdTuple)))                                                         
 ##    with open("/home/rsanchez/app/scipion/pyworkflow/em/packages/xmipp3/backupDeepLearning/scores.tab","w") as f:
 ##      best_accuracy= 0
 ##      thr=0
@@ -311,7 +312,7 @@ class DeepTFSupervised(object):
 ##          best_accuracy= tmp_accu
 ##          thr= score
 ##    print("best thr %f --> accuracy %f"%(thr,best_accuracy))
-    return y_pred , labels, metadataIdTuple
+    return y_pred , labels, metadataId_list
 
 class DataManager(object):
 
@@ -323,7 +324,7 @@ class DataManager(object):
     self.mdTrue  = md.MetaData(posImagesXMDFname)
     self.fnListTrue =self.mdTrue.getColumnValues(md.MDL_IMAGE)
 
-    xdim, ydim, _     = posImagesSetOfParticles.getDim()
+    xdim, ydim, _   = posImagesSetOfParticles.getDim()
     self.shape= (xdim,ydim,1)
     self.nTrue= posImagesSetOfParticles.getSize()
     
