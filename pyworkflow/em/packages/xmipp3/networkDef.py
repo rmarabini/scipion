@@ -126,9 +126,13 @@ def main_network(x, labels, num_labels, learningRate, globalStep):
 
   prev_layer = tflearn.layers.core.input_data(placeholder=x, data_augmentation=img_aug)
 
-  NUM_FILTERS=[32, 48, 48,  64, 80, 96]
-  KERNEL_SIZE=[5,   1,  3,  -1, -1, -1]  # -1 for inception module
-  MAX_POOL=   [2,   1,  2,   1,  2,  1]
+#  NUM_FILTERS=[32, 48, 48,  64, 80, 96]
+#  KERNEL_SIZE=[5,   1,  3,  -1, -1, -1]  # -1 for inception module. Overfits for ribosome data
+#  MAX_POOL=   [2,   1,  2,   1,  2,  1]
+
+  NUM_FILTERS=[32, 48, 48, 80, 96]
+  KERNEL_SIZE=[5,   1,  3, -1, -1]  # -1 for inception module
+  MAX_POOL=   [2,   1,  2,  2,  1]
   
   for i in range(len(NUM_FILTERS)):
     if KERNEL_SIZE[i]>0:
