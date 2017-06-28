@@ -29,18 +29,22 @@ from __future__ import print_function
 from six.moves import range
 import numpy as np
 import sys, os
-import tensorflow as tf
+
 import numpy as np
+import scipy
+import random
 from math import ceil
 
 import time
 from os.path import expanduser
 from pyworkflow.utils import Environ
-from pyworkflow.em.packages.xmipp3.networkDef import main_network
 from sklearn.metrics import roc_auc_score, accuracy_score
 import xmipp
 import pyworkflow.em.metadata as md
-import tflearn
+import joblib
+
+DEBUG=False
+if DEBUG: print("Debug MODE")
 
 def updateEnviron():
   """ Create the needed environment for TensorFlow programs. """
@@ -48,14 +52,19 @@ def updateEnviron():
   if  'CUDA' in os.environ and not os.environ['CUDA']=="False":
     environ.update({'LD_LIBRARY_PATH': os.environ['CUDA_LIB']}, position=Environ.BEGIN)
     environ.update({'LD_LIBRARY_PATH': os.environ['CUDA_HOME']+"/extras/CUPTI/lib64"}, position=Environ.BEGIN)
+
+    os.environ['CUDA_VISIBLE_DEVICES']="2"  #THIS IS FOR USING JUST GPU:2 must be changed to select desired gpu
+#    print(">>Environment", os.environ)
 updateEnviron()
 
+import tensorflow as tf
+import tflearn
+from pyworkflow.em.packages.xmipp3.networkDef import main_network
 
-
-BATCH_SIZE= 256
+BATCH_SIZE= 128
 
 EVALUATE_AT= 10
-CHECK_POINT_AT= 50
+CHECK_POINT_AT= 100
 
 
 def printAndOverride(msg):
@@ -212,6 +221,8 @@ class DeepTFSupervised(object):
     tflearn.is_training(False, session=self.session)
     i_global,stepLoss= self.session.run( [self.global_step, self.loss], feed_dict= feed_dict_train)
     numberOfRemainingBatches= max(0, numberOfBatches- i_global)
+    bestStepLoss= 2^30
+    currentLoss=[]
     if numberOfBatches >0:
       print("Training net for %d batches of size %d"%(numberOfRemainingBatches, dataManagerTrain.getBatchSize()))
       print("Initial loss %f"%stepLoss)
@@ -226,7 +237,7 @@ class DeepTFSupervised(object):
       feed_dict_train= {self.X : x_batchTrain, self.Y: labels_batchTrain }
       i_global, __, stepLoss,= self.session.run( [self.global_step, self.optimizer, self.loss],
                                                  feed_dict=feed_dict_train )
-      
+      currentLoss.append( stepLoss)
 
       print("iterNum %d/%d trainLoss: %3.4f"%((i_global), numberOfBatches, stepLoss))
       sys.stdout.flush()      
@@ -237,9 +248,16 @@ class DeepTFSupervised(object):
         print("%d batches time: %f s. time for test %f s"%(EVALUATE_AT, timeBatches, time.time() -timeTest))
         time0 = time.time()
         sys.stdout.flush()
+          
       if (i_global + 1 ) % CHECK_POINT_AT==0:
-        self.saver.save(self.session, save_path= self.checkPointsNames, global_step= self.global_step) 
-        print("\nSaved checkpoint.")   
+        stepLossMean= np.mean(currentLoss)
+        currentLoss=[]
+        improvement= bestStepLoss-stepLossMean
+        print("Improvement since last checkpoint %.5f"%(improvement))
+        if improvement>0:
+          bestStepLoss= stepLossMean
+          self.saver.save(self.session, save_path= self.checkPointsNames, global_step= self.global_step) 
+          print("\nSaved checkpoint.")   
 
     self.testPerformance(i_global,trainDataBatch, dataManagerTest)
     
@@ -323,6 +341,7 @@ class DataManager(object):
     
     self.mdTrue  = md.MetaData(posImagesXMDFname)
     self.fnListTrue =self.mdTrue.getColumnValues(md.MDL_IMAGE)
+    
 
     xdim, ydim, _   = posImagesSetOfParticles.getDim()
     self.shape= (xdim,ydim,1)
@@ -343,6 +362,10 @@ class DataManager(object):
     else:
       self.getRandomBatch= self.NOgetRandomBatchWorker
     
+    if DEBUG:
+      self.nTrue=  2**9
+      self.nFalse= 2**9
+
   def getMetadata(self) :
     return  self.mdTrue, self.mdFalse
 
@@ -351,7 +374,51 @@ class DataManager(object):
 
   def getBatchSize(self):
     return self.batchSize
+
+  def _random_flip_leftright(self, batch):
+    for i in range(len(batch)):
+      if bool(random.getrandbits(1)):
+        batch[i] = np.fliplr(batch[i])
+    return batch
+
+  def _random_flip_updown(self, batch):
+    for i in range(len(batch)):
+      if bool(random.getrandbits(1)):
+        batch[i] = np.flipud(batch[i])
+    return batch
+
+  def _random_90degrees_rotation(self, batch, rotations=[0, 1, 2, 3]):
+    for i in range(len(batch)):
+      num_rotations = random.choice(rotations)
+      batch[i] = np.rot90(batch[i], num_rotations)
+    return batch
+
+  def _random_rotation(self, batch, max_angle):
+    for i in range(len(batch)):
+      if bool(random.getrandbits(1)):
+        # Random angle
+        angle = random.uniform(-max_angle, max_angle)
+        batch[i] = scipy.ndimage.interpolation.rotate(batch[i], angle,reshape=False, mode="reflect")
+    return batch
+
+  def _random_blur(self, batch, sigma_max):
+    for i in range(len(batch)):
+      if bool(random.getrandbits(1)):
+        # Random sigma
+        sigma = random.uniform(0., sigma_max)
+        batch[i] =scipy.ndimage.filters.gaussian_filter(batch[i], sigma)
+    return batch
   
+  def augmentBatch(self, batch):
+    if bool(random.getrandbits(1)):
+      batch= self._random_flip_leftright(batch)
+      batch= self._random_flip_updown(batch)
+    if bool(random.getrandbits(1)):
+      batch= self._random_90degrees_rotation(batch)
+    if bool(random.getrandbits(1)):
+      batch= self._random_rotation(batch, 10.0)
+    return batch
+
   def NOgetRandomBatchWorker(self):
     raise ValueError("needs positive and negative images to compute random batch. Just pos provided")
     
@@ -361,8 +428,9 @@ class DataManager(object):
     splitPoint = self.splitPoint
     batchStack   = self.batchStack
     batchLabels  = np.zeros((batchSize, 2))
-    idxListTrue = np.random.choice(len(self.fnListTrue),splitPoint,False)
-    idxListFalse = np.random.choice(len(self.fnListFalse),splitPoint,False)
+
+    idxListTrue =  np.random.choice( self.nTrue,  splitPoint, False)
+    idxListFalse = np.random.choice( self.nFalse, splitPoint, False)
 
     I = xmipp.Image()
     n = 0
@@ -387,7 +455,18 @@ class DataManager(object):
     batchStack= batchStack[shuffInd, ...]
     batchLabels= batchLabels[shuffInd, ...]
 
-    return batchStack, batchLabels
+    return self.augmentBatch(batchStack), batchLabels
+
+  def getDataAsNp(self):
+    allData= self.getIteratorPredictBatch()
+    x, labels, __ = zip(* allData)
+    x= np.concatenate(x)
+    y= np.concatenate(labels)
+    print(x.shape, y.shape)
+    print(np.min(x), np.mean(x), np.max(x))
+#    joblib.dump(x, "/home/jsegura/Tesis/DataStack.pckl")
+#    joblib.dump(y, "/home/jsegura/Tesis/labelsStack.pckl")
+    return x,y
 
   def getIteratorPredictBatch(self):
     batchSize = self.batchSize

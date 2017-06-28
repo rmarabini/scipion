@@ -41,8 +41,18 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
+        form.addParam('doContinue', params.BooleanParam, default=False,
+                      label='Continue training from a previous run?',
+                      help='If you set to *Yes*, you should select a previous'
+                      'run of type *%s* class and some of the input parameters'
+                      'will be taken from it.' % self.getClassName())
+        form.addParam('continueRun', params.PointerParam, pointerClass=self.getClassName(),
+                      condition='doContinue', allowsNull=True,
+                      label='Select previous run',
+                      help='Select a previous run to continue from.')
+
         form.addParam('inPosSetOfParticles', params.PointerParam, label="Consensus particles (mostly true particles)", 
-                      pointerClass='SetOfParticles',
+                      pointerClass='SetOfParticles', 
                       help='Select the intersection set of particles (mostly true particles).')  
         form.addParam('inNegSetOfParticles', params.PointerParam, label="Set of negative particles", 
                       pointerClass='SetOfParticles',
@@ -55,9 +65,9 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                       pointerClass='SetOfParticles',
                       help='Select the set of ground false positive particles.')
         
-        form.addParam('Nepochs', params.FloatParam, label="Number of epochs", default=4.0, expertLevel=params.LEVEL_ADVANCED,
+        form.addParam('Nepochs', params.FloatParam, label="Number of epochs", default=8.0, expertLevel=params.LEVEL_ADVANCED,
                       help='Number of epochs for neural network training')  
-        form.addParam('learningRate', params.FloatParam, label="Learning rate", default=1e-4, expertLevel=params.LEVEL_ADVANCED,
+        form.addParam('learningRate', params.FloatParam, label="Learning rate", default=1e-3, expertLevel=params.LEVEL_ADVANCED,
                       help='Learning rate for neural network training')
 
         if 'CUDA' in os.environ and not os.environ['CUDA']=="False":
@@ -87,6 +97,11 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
         inPosSetOfParticles, inNegSetOfParticles, testPosSetOfParticles, testNegSetOfParticles: SetOfParticles
         learningRate: float
         '''
+        if self.doContinue:
+            previousRun=self.continueRun.get()
+            print( previousRun._getExtraPath('nnetData') )
+            copyDir(previousRun._getExtraPath('nnetData'),self._getExtraPath('nnetData'))
+
       
         from pyworkflow.em.packages.xmipp3.deepLearning1 import  DeepTFSupervised, DataManager
         numberOfThreads= None if ('CUDA' in os.environ and not os.environ['CUDA']=="False") \
@@ -96,6 +111,8 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                                        posImagesSetOfParticles= inPosSetOfParticles,
                                        negImagesXMDFname= self._getExtraPath("inputFalseParticlesSet.xmd"),
                                        negImagesSetOfParticles= inNegSetOfParticles)
+
+
         testDataManager= DataManager(posImagesXMDFname=  self._getExtraPath("testTrueParticlesSet.xmd"),
                                       posImagesSetOfParticles= testPosSetOfParticles,
                                       negImagesXMDFname= self._getExtraPath("testFalseParticlesSet.xmd"),
@@ -108,10 +125,11 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
         nnet.startSessionAndInitialize(numberOfThreads)
         
         nnet.trainNet(numberOfBatches, trainDataManager, testDataManager)
-        nnet.close(saveModel= True)
+        nnet.close(saveModel= False) #Models will be automatically saved during training
         
-####        self.predict( testPosSetOfParticles, testNegSetOfParticles)
-####        raise ValueError("Debug mode")
+#        self.predict( testPosSetOfParticles, testNegSetOfParticles)
+#        raise ValueError("Debug mode")
+
         del nnet
         
     def predict(self, testPosSetOfParticles, testNegSetOfParticles):
