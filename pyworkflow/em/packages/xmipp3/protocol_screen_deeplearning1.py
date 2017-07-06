@@ -64,16 +64,26 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
         form.addParam('testNegSetOfParticles', params.PointerParam, label="Set of negative test particles", 
                       pointerClass='SetOfParticles',
                       help='Select the set of ground false positive particles.')
-        
-        form.addParam('Nepochs', params.FloatParam, label="Number of epochs", default=8.0, expertLevel=params.LEVEL_ADVANCED,
+
+        if 'CUDA' in os.environ and not os.environ['CUDA']=="False":
+
+            form.addParam('gpuToUse', params.StringParam, default='0',
+                          label='Which GPU to use:',
+                          help='Currently just one GPU will be use, by '
+			                   'default GPU number 0 You can override the default '
+                               'allocation by providing other GPU number, p.e. 2')
+        else:
+            form.addParallelSection(threads=8, mpi=0)
+
+        form.addParam('Nepochs', params.FloatParam, label="Number of epochs", default=10.0, expertLevel=params.LEVEL_ADVANCED,
                       help='Number of epochs for neural network training')  
         form.addParam('learningRate', params.FloatParam, label="Learning rate", default=1e-3, expertLevel=params.LEVEL_ADVANCED,
                       help='Learning rate for neural network training')
 
-        if 'CUDA' in os.environ and not os.environ['CUDA']=="False":
-            form.addParallelSection(threads=0, mpi=0)           
-        else:
-            form.addParallelSection(threads=8, mpi=0)
+        form.addParam('useAdaptativeLabels', params.BooleanParam, default=False,expertLevel=params.LEVEL_ADVANCED,
+                      label='Allow reassignation during training?',
+                      help='If you set to *Yes* labels will switch to the opposite category with'+
+                      ' a probability given by how confident the network is about predictions')
     
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -97,16 +107,20 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
         inPosSetOfParticles, inNegSetOfParticles, testPosSetOfParticles, testNegSetOfParticles: SetOfParticles
         learningRate: float
         '''
-        if self.doContinue:
+        if self.doContinue.get():
             previousRun=self.continueRun.get()
             print( previousRun._getExtraPath('nnetData') )
             copyDir(previousRun._getExtraPath('nnetData'),self._getExtraPath('nnetData'))
 
       
-        from pyworkflow.em.packages.xmipp3.deepLearning1 import  DeepTFSupervised, DataManager
-        numberOfThreads= None if ('CUDA' in os.environ and not os.environ['CUDA']=="False") \
-                              else self.numberOfThreads.get()
-        
+        from pyworkflow.em.packages.xmipp3.deepLearning1 import  DeepTFSupervised, DataManager, updateEnviron
+
+        if self.doGpu:
+            updateEnviron( self.gpuToUse.get() )
+            numberOfThreads=None
+        else:
+            numberOfThreads=self.numberOfThreads.get()
+
         trainDataManager= DataManager(posImagesXMDFname= self._getExtraPath("inputTrueParticlesSet.xmd"),
                                        posImagesSetOfParticles= inPosSetOfParticles,
                                        negImagesXMDFname= self._getExtraPath("inputFalseParticlesSet.xmd"),
@@ -124,16 +138,22 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
         nnet.createNet( *trainDataManager.shape)
         nnet.startSessionAndInitialize(numberOfThreads)
         
-        nnet.trainNet(numberOfBatches, trainDataManager, testDataManager)
-        nnet.close(saveModel= False) #Models will be automatically saved during training
+        nnet.trainNet(numberOfBatches, trainDataManager, testDataManager, useAdaptatLabels= self.useAdaptativeLabels.get())
+        nnet.close(saveModel= False) #Models will be automatically saved during training, so True no needed
         
-#        self.predict( testPosSetOfParticles, testNegSetOfParticles)
-#        raise ValueError("Debug mode")
+        self.predict( testPosSetOfParticles, testNegSetOfParticles)
+        raise ValueError("Debug mode")
 
         del nnet
         
     def predict(self, testPosSetOfParticles, testNegSetOfParticles):
-        from pyworkflow.em.packages.xmipp3.deepLearning1 import  DeepTFSupervised, DataManager
+        from pyworkflow.em.packages.xmipp3.deepLearning1 import  DeepTFSupervised, DataManager, updateEnviron
+
+        if self.doGpu:
+            updateEnviron( self.gpuToUse.get() )
+            numberOfThreads=None
+        else:
+            numberOfThreads=self.numberOfThreads.get()
       
         testDataManager= DataManager(posImagesXMDFname=  self._getExtraPath("testTrueParticlesSet.xmd"), 
                               posImagesSetOfParticles= testPosSetOfParticles,
@@ -141,8 +161,6 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                               negImagesSetOfParticles= testNegSetOfParticles)
 
         nnet = DeepTFSupervised(rootPath=self._getExtraPath("nnetData"))
-        numberOfThreads= None if ('CUDA' in os.environ and not os.environ['CUDA']=="False")\
-                              else self.numberOfThreads.get()
         nnet.createNet( *testDataManager.shape)
         nnet.startSessionAndInitialize(numberOfThreads)
         y_pred , labels, typeAndIdList = nnet.predictNet(testDataManager)
