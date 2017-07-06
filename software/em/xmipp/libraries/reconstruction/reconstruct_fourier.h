@@ -261,7 +261,8 @@ private:
 			float weight,
 			ProgRecFourier * parent,
 			Matrix1D<double>& real_position,
-			MultidimArray<double>* fourierWeightsOut);
+			MultidimArray<double>* fourierWeightsOut,
+            int m, int l, int k);
 };
 //@}
 #endif
