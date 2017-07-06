@@ -115,7 +115,7 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
       
         from pyworkflow.em.packages.xmipp3.deepLearning1 import  DeepTFSupervised, DataManager, updateEnviron
 
-        if self.doGpu:
+        if self.gpuToUse:
             updateEnviron( self.gpuToUse.get() )
             numberOfThreads=None
         else:
@@ -149,7 +149,7 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
     def predict(self, testPosSetOfParticles, testNegSetOfParticles):
         from pyworkflow.em.packages.xmipp3.deepLearning1 import  DeepTFSupervised, DataManager, updateEnviron
 
-        if self.doGpu:
+        if self.gpuToUse:
             updateEnviron( self.gpuToUse.get() )
             numberOfThreads=None
         else:

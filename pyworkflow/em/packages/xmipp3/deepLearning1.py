@@ -46,16 +46,14 @@ import joblib
 DEBUG=False
 if DEBUG: print("Debug MODE")
 
-def updateEnviron():
+def updateEnviron(gpuNum=None):
   """ Create the needed environment for TensorFlow programs. """
   environ = Environ(os.environ)
-  if  'CUDA' in os.environ and not os.environ['CUDA']=="False":
+  if not gpuNum is None:
     environ.update({'LD_LIBRARY_PATH': os.environ['CUDA_LIB']}, position=Environ.BEGIN)
     environ.update({'LD_LIBRARY_PATH': os.environ['CUDA_HOME']+"/extras/CUPTI/lib64"}, position=Environ.BEGIN)
 
-    os.environ['CUDA_VISIBLE_DEVICES']="2"  #THIS IS FOR USING JUST GPU:2 must be changed to select desired gpu
-#    print(">>Environment", os.environ)
-updateEnviron()
+    os.environ['CUDA_VISIBLE_DEVICES']=str(gpuNum)  #THIS IS FOR USING JUST GPU:# must be changed to select desired gpu
 
 import tensorflow as tf
 import tflearn
@@ -143,7 +141,8 @@ class DeepTFSupervised(object):
     if not os.path.exists(save_dir):
       os.makedirs(save_dir)
 
-    self.saver = tf.train.Saver()  
+    self.saver = tf.train.Saver()
+    print("numberOfThreads",numberOfThreads)
     if numberOfThreads is None:
       self.session = tf.Session()
     else:
@@ -203,8 +202,17 @@ class DeepTFSupervised(object):
     self.createNet()
     self.startSessionAndInitialize()
 
+  def mutateLabels(self, prevScoresDict, trueLabels, md_ids, temp):
+    newLabels= np.copy(trueLabels)
+    for i in range(trueLabels.shape[0]):
+      mdId= md_ids[i]
+      if mdId in prevScoresDict:
+#        if random.random() > (1.0- 2.0*abs(prevScoresDict[mdId]-0.5) )/2.0*temp:
+        if random.random() > (1.0- 2.0*abs(prevScoresDict[mdId]-0.5) )*temp:
+          newLabels[i,...]= (trueLabels[i,...] +1) %2
+    return newLabels
 
-  def trainNet(self, numberOfBatches, dataManagerTrain, dataManagerTest=None):
+  def trainNet(self, numberOfBatches, dataManagerTrain, dataManagerTest=None, useAdaptatLabels=False):
     '''
       @param numberOfBatches: int. The number of batches that will be used for training 
       @param dataManagerTrain: DataManager. Object that will provide training batches (Xs and labels)
@@ -216,7 +224,7 @@ class DeepTFSupervised(object):
     # TENSOR FLOW RUN
     ########################
     trainDataBatch= dataManagerTrain.getRandomBatch()
-    x_batchTrain, labels_batchTrain= trainDataBatch
+    x_batchTrain, labels_batchTrain, md_ids = trainDataBatch
     feed_dict_train= {self.X : x_batchTrain, self.Y: labels_batchTrain}
     tflearn.is_training(False, session=self.session)
     i_global,stepLoss= self.session.run( [self.global_step, self.loss], feed_dict= feed_dict_train)
@@ -230,13 +238,27 @@ class DeepTFSupervised(object):
     else:
       return
     time0 = time.time()
+
+    lastPredsDict= {}
+    epochSize= float(dataManagerTrain.getEpochSize())
+
     tflearn.is_training(True, session=self.session)
     for iterNum in range(numberOfRemainingBatches):
       trainDataBatch= dataManagerTrain.getRandomBatch()
-      x_batchTrain, labels_batchTrain = trainDataBatch
+      x_batchTrain, labels_batchTrain, md_ids = trainDataBatch
+      if useAdaptatLabels :
+#        temp= 1+(i_global/epochSize) if i_global/epochSize>5 else 2**10
+#        temp= 1+(i_global/epochSize)
+        temp= 1
+        labels_batchTrain= self.mutateLabels(lastPredsDict, labels_batchTrain, md_ids,temp=temp)
       feed_dict_train= {self.X : x_batchTrain, self.Y: labels_batchTrain }
-      i_global, __, stepLoss,= self.session.run( [self.global_step, self.optimizer, self.loss],
+      i_global, __, stepLoss, y_pred= self.session.run( [self.global_step, self.optimizer, self.loss,
+                                                  self.y_pred],
                                                  feed_dict=feed_dict_train )
+      if useAdaptatLabels:
+        for scores, ndId in zip( y_pred, md_ids):
+          lastPredsDict[ndId]= scores[0]
+
       currentLoss.append( stepLoss)
 
       print("iterNum %d/%d trainLoss: %3.4f"%((i_global), numberOfBatches, stepLoss))
@@ -268,7 +290,7 @@ class DeepTFSupervised(object):
   def testPerformance(self, stepNum, trainDataBatch, testDataManager=None):
     tflearn.is_training(False, session=self.session)      
 
-    batch_x, batch_y= trainDataBatch
+    batch_x, batch_y, md_ids= trainDataBatch
     feed_dict_train= {self.X : batch_x, self.Y: batch_y}
     c_e_train, y_pred_train, merged = self.session.run( [self.loss, self.y_pred, self.merged_summaries], 
                                                  feed_dict = feed_dict_train )
@@ -372,6 +394,9 @@ class DataManager(object):
   def getNBatches(self, Nepochs):
     return  int(ceil(2*self.nTrue*Nepochs/self.batchSize))
 
+  def getEpochSize(self):
+    return 2*self.nTrue
+
   def getBatchSize(self):
     return self.batchSize
 
@@ -434,11 +459,13 @@ class DataManager(object):
 
     I = xmipp.Image()
     n = 0
+    finalIds= []
     for idx in idxListTrue:
       fnImage = self.fnListTrue[idx]
       I.read(fnImage)
       batchStack[n,...]= np.expand_dims(I.getData(),-1)
       batchLabels[n, 1]= 1
+      finalIds.append(idx)
       n+=1
       if n>=splitPoint:
           break
@@ -447,6 +474,7 @@ class DataManager(object):
       I.read(fnImage)
       batchStack[n,...]= np.expand_dims(I.getData(),-1)
       batchLabels[n, 0]= 1
+      finalIds.append(idx)
       n+=1
       if n>=batchSize:
           break
@@ -454,8 +482,8 @@ class DataManager(object):
     shuffInd= np.random.choice(n,n, replace=False)
     batchStack= batchStack[shuffInd, ...]
     batchLabels= batchLabels[shuffInd, ...]
-
-    return self.augmentBatch(batchStack), batchLabels
+    finalIds= [finalIds[i] for i in shuffInd]
+    return self.augmentBatch(batchStack), batchLabels, finalIds
 
   def getDataAsNp(self):
     allData= self.getIteratorPredictBatch()
