@@ -58,6 +58,7 @@
 #define PROCESS_IMAGE 1
 #define PROCESS_WEIGHTS 2
 #define PRELOAD_IMAGE 3
+#define BLOBIFY_IMAGE 4
 
 /**@defgroup FourierReconstruction Fourier reconstruction
    @ingroup ReconsLibrary */
@@ -259,7 +260,8 @@ private:
 			double* ptrIn,
 			float weight,
 			ProgRecFourier * parent,
-			Matrix1D<double>& real_position);
+			Matrix1D<double>& real_position,
+			MultidimArray<double>* fourierWeightsOut);
 };
 //@}
 #endif

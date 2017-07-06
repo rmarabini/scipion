@@ -352,7 +352,8 @@ void ProgRecFourier::processCube(
 		MultidimArray<double>& fourierWeights, double* ptrIn,
 		float weight,
 		ProgRecFourier * parent,
-		Matrix1D<double>& real_position) {
+		Matrix1D<double>& real_position,
+		MultidimArray<double>* fourierWeightsOut) {
 			
 			// std::cout << "calling processCube" << std::endl;
 	// Actually compute
@@ -379,7 +380,7 @@ void ProgRecFourier::processCube(
 					// continue;
 
 				int aux = (int) ((d2 * iDeltaSqrt + 0.5)); //Same as ROUND but avoid comparison
-				float w = 1.f;
+				float w = (NULL == fourierWeightsOut) ? 1.f : VEC_ELEM(blobTableSqrt, aux);
 				int ix = xWrapped(intx);
 				bool conjugate = false;
 				int izp, iyp, ixp;
@@ -406,6 +407,9 @@ void ProgRecFourier::processCube(
 							* ptrOut[0]);
 				} else {
 					float wEffective = w * wCTF;
+					if (NULL != fourierWeightsOut) {
+						wEffective *= DIRECT_A3D_ELEM(fourierWeights, izp,iyp,ixp);
+					}
 					size_t memIdx = fixSize + ixp; //YXSIZE(VoutFourier)*(izp)+((iyp)*XSIZE(VoutFourier))+(ixp);
 
 
@@ -443,7 +447,11 @@ void ProgRecFourier::processCube(
 
 					double* ptrOut = (double*) (&(VoutFourier[memIdx]));
 					ptrOut[0] += wEffective * ptrIn[0];
-					fourierWeights[memIdx] += w;
+					if (NULL == fourierWeightsOut) {
+						fourierWeights[memIdx] += w;
+					} else {
+						(*fourierWeightsOut)[memIdx] += w;
+					}
 					if (conjugate)
 						ptrOut[1] -= wEffective * ptrIn[1];
 					else
@@ -932,11 +940,117 @@ void * ProgRecFourier::processImageThread( void * threadArgs )
 							reprocessFlag, wCTF, VoutFourier, blobTableSqrt,
 							threadParams, fourierWeights, ptrIn, threadParams->weight,
 							parent,
-							real_position);
+							real_position, NULL);
 
 					statusArray[i] = -1;
 				}
 
+			}
+			break;
+		}
+        
+		case BLOBIFY_IMAGE:
+            {
+			std::cout << "blobify image " + SSTR(threadParams->imageIndex) << " from thread " + SSTR(threadParams->myThreadID) << std::endl; //+ " with symmetry " << *threadParams->symmetry << ": ";
+			MultidimArray< std::complex<double> > *paddedFourier = threadParams->paddedFourier;
+			if (threadParams->weight==0.0)
+				break;
+			bool reprocessFlag = threadParams->reprocessFlag;
+			int * statusArray = parent->statusArray;
+
+			// Get the inverse of the sampling rate
+			double iTs=1.0/parent->Ts; // The padding factor is not considered here, but later when the indexes
+									   // are converted to digital frequencies
+
+
+			Matrix2D<double> * A_SL = threadParams->symmetry;
+
+			// Loop over all Fourier coefficients in the padded image
+			Matrix1D<double> freq(3), gcurrent(3), real_position(3), contFreq(3);
+			Matrix1D<int> corner1(3), corner2(3);
+
+			// Some alias and calculations moved from heavy loops
+			float wCTF=1, wModulator=1.0;
+			float blobRadiusSquared = parent->blob.radius * parent->blob.radius;
+			float iDeltaSqrt = parent->iDeltaSqrt;
+			Matrix1D<double> & blobTableSqrt = parent->blobTableSqrt;
+			int xsize_1 = parent->VoutFourier.xdim - 1;
+			int zsize_1 = parent->VoutFourier.zdim - 1;
+			MultidimArray< std::complex<double> > &VinFourier=parent->VoutFourier;
+			MultidimArray<double> &fourierWeights = parent->FourierWeights;
+
+			for (int k = 0; k < VinFourier.zdim; k++) {
+			for (int l = 0; l < VinFourier.ydim; l++) {
+				for (int m = 0; m < VinFourier.xdim; m++) {// for each point
+					float floatPosition[3];
+					floatPosition[0] = m;
+					floatPosition[1] = l;
+					floatPosition[2] = k;
+					
+					// Put a box around that coefficient
+					XX(corner1)=CEIL ((floatPosition[0])-parent->blob.radius);
+					YY(corner1)=CEIL ((floatPosition[1])-parent->blob.radius);
+					ZZ(corner1)=CEIL ((floatPosition[2])-parent->blob.radius);
+					XX(corner2)=FLOOR((floatPosition[0])+parent->blob.radius);
+					YY(corner2)=FLOOR((floatPosition[1])+parent->blob.radius);
+					ZZ(corner2)=FLOOR((floatPosition[2])+parent->blob.radius);
+
+					// Loop within the box
+					double *ptrIn = (double *) &(DIRECT_A3D_ELEM(VinFourier, m,l,k));
+					
+					
+					// Some precalculations
+					for (int intz = corner1[2]; intz <= corner2[2]; ++intz) {
+						float z = 0;
+						z2precalculated(intz) = z * z;
+						if (zWrapped(intz) < 0) {
+							int iz, izneg;
+							fastIntWRAP(iz, intz, 0, zsize_1);
+							zWrapped(intz) = iz;
+							int miz = -iz;
+							fastIntWRAP(izneg, miz, 0, zsize_1);
+							zNegWrapped(intz) = izneg;
+						}
+					}
+					for (int inty = corner1[1]; inty <= corner2[1]; ++inty) {
+						float y = 0;
+						y2precalculated(inty) = y * y;
+						if (yWrapped(inty) < 0) {
+							int iy, iyneg;
+							fastIntWRAP(iy, inty, 0, zsize_1);
+							yWrapped(inty) = iy;
+							int miy = -iy;
+							fastIntWRAP(iyneg, miy, 0, zsize_1);
+							yNegWrapped(inty) = iyneg;
+						}
+					}
+					for (int intx = corner1[0]; intx <= corner2[0]; ++intx) {
+						float x = 0;
+						x2precalculated(intx) = x * x;
+						if (xWrapped(intx) < 0) {
+							int ix, ixneg;
+							fastIntWRAP(ix, intx, 0, zsize_1);
+							xWrapped(intx) = ix;
+							int mix = -ix;
+							fastIntWRAP(ixneg, mix, 0, zsize_1);
+							xNegWrapped(intx) = ixneg;
+						}
+					}
+
+					// Actually compute
+					processCube(0, 0, corner1, corner2, z2precalculated, zWrapped,
+							zNegWrapped, y2precalculated, blobRadiusSquared,
+							yWrapped, yNegWrapped, x2precalculated, iDeltaSqrt,
+							wModulator, xWrapped, xsize_1, xNegWrapped,
+							reprocessFlag, wCTF, parent->VoutFourier_muj, blobTableSqrt,
+							threadParams, fourierWeights, ptrIn, threadParams->weight,
+							parent,
+							real_position,
+							&(parent->FourierWrights_moje));
+
+				}
+
+			}
 			}
 			break;
 		}
@@ -2029,6 +2143,16 @@ void ProgRecFourier::processImages( int firstImageIndex, int lastImageIndex, boo
     }
     while ( processed );
 
+	
+	threadOpCode = BLOBIFY_IMAGE;
+	
+	// Awaking sleeping threads
+        barrier_wait( &barrier );
+        // here each thread is reading a different image and compute fft
+        // Threads are working now, wait for them to finish
+        // processing current projection
+        barrier_wait( &barrier );
+	
     // convert to proper space
 	float upperIndex = (float)conserveRows / (float)volPadSizeX;
 	float step = upperIndex / (float)(conserveRows);
@@ -2077,8 +2201,8 @@ void ProgRecFourier::processImages( int firstImageIndex, int lastImageIndex, boo
 
     // print(VoutFourier, true);
     // print(VoutFourier_muj, true);
-    // VoutFourier = VoutFourier_muj;
-    // FourierWeights = FourierWrights_moje;
+    VoutFourier = VoutFourier_muj;
+    FourierWeights = FourierWrights_moje;
 
 
     if( saveFSC )
