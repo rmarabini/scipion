@@ -353,6 +353,8 @@ void ProgRecFourier::processCube(
 		float weight,
 		ProgRecFourier * parent,
 		Matrix1D<double>& real_position) {
+			
+			// std::cout << "calling processCube" << std::endl;
 	// Actually compute
 	for (int intz = corner1[2]; intz <= corner2[2]; ++intz) {
 		float z2 = z2precalculated(intz);
@@ -360,8 +362,8 @@ void ProgRecFourier::processCube(
 		int izneg = zNegWrapped(intz);
 		for (int inty = corner1[1]; inty <= corner2[1]; ++inty) {
 			float y2z2 = y2precalculated(inty) + z2;
-			if (y2z2 > blobRadiusSquared)
-				continue;
+			// if (y2z2 > blobRadiusSquared)
+				// continue;
 
 			int iy = yWrapped(inty);
 			int iyneg = yNegWrapped(inty);
@@ -373,12 +375,11 @@ void ProgRecFourier::processCube(
 				// Compute distance to the center of the blob
 				// Compute blob value at that distance
 				float d2 = x2precalculated(intx) + y2z2;
-				if (d2 > blobRadiusSquared)
-					continue;
+				// if (d2 > blobRadiusSquared)
+					// continue;
 
 				int aux = (int) ((d2 * iDeltaSqrt + 0.5)); //Same as ROUND but avoid comparison
-				float w = blobTableSqrt[aux] * weight
-						* wModulator;
+				float w = 1.f;
 				int ix = xWrapped(intx);
 				bool conjugate = false;
 				int izp, iyp, ixp;
@@ -447,6 +448,8 @@ void ProgRecFourier::processCube(
 						ptrOut[1] -= wEffective * ptrIn[1];
 					else
 						ptrOut[1] += wEffective * ptrIn[1];
+					
+					// std::cout << "writing" << std::endl;
 				}
 			}
 		}
@@ -774,9 +777,9 @@ void * ProgRecFourier::processImageThread( void * threadArgs )
 					FFT_IDX2DIGFREQ(i, parent->paddedImg.ydim, freq[1]);
 					freq[2] = 0;
 
-					//if (freq[0] * freq[0] + freq[1] * freq[1] > parent->maxResolution2) {
-					//	continue;
-					//}
+					if (freq[0] * freq[0] + freq[1] * freq[1] > parent->maxResolution2) {
+						continue;
+					}
 					wModulator = 1.0;
 					if (hasCTF && !reprocessFlag) {
 						contFreq[0] = freq[0] * iTs;
@@ -852,13 +855,18 @@ void * ProgRecFourier::processImageThread( void * threadArgs )
 //							<< std::endl;
 //					}
 
+					int roundedPosition[3];
+					for (int a = 0; a < 3; a++){
+						roundedPosition[a] = (int)(real_position[a] + 0.5f);
+					}
+					
 					// Put a box around that coefficient
-					corner1[0] = CEIL(real_position[0] - parent->blob.radius);
-					corner1[1] = CEIL(real_position[1] - parent->blob.radius);
-					corner1[2] = CEIL(real_position[2] - parent->blob.radius);
-					corner2[0] = FLOOR(real_position[0] + parent->blob.radius);
-					corner2[1] = FLOOR(real_position[1] + parent->blob.radius);
-					corner2[2] = FLOOR(real_position[2] + parent->blob.radius);
+					corner1[0] = roundedPosition[0];
+					corner1[1] = roundedPosition[1];
+					corner1[2] = roundedPosition[2];
+					corner2[0] = roundedPosition[0];
+					corner2[1] = roundedPosition[1];
+					corner2[2] = roundedPosition[2];
 
 //						std::cout << freq[0]
 //							<< " "
@@ -880,7 +888,7 @@ void * ProgRecFourier::processImageThread( void * threadArgs )
 
 					// Some precalculations
 					for (int intz = corner1[2]; intz <= corner2[2]; ++intz) {
-						float z = intz - real_position[2];
+						float z = 0;
 						z2precalculated(intz) = z * z;
 						if (zWrapped(intz) < 0) {
 							int iz, izneg;
@@ -892,7 +900,7 @@ void * ProgRecFourier::processImageThread( void * threadArgs )
 						}
 					}
 					for (int inty = corner1[1]; inty <= corner2[1]; ++inty) {
-						float y = inty - real_position[1];
+						float y = 0;
 						y2precalculated(inty) = y * y;
 						if (yWrapped(inty) < 0) {
 							int iy, iyneg;
@@ -904,7 +912,7 @@ void * ProgRecFourier::processImageThread( void * threadArgs )
 						}
 					}
 					for (int intx = corner1[0]; intx <= corner2[0]; ++intx) {
-						float x = intx - real_position[0];
+						float x = 0;
 						x2precalculated(intx) = x * x;
 						if (xWrapped(intx) < 0) {
 							int ix, ixneg;
@@ -1184,10 +1192,10 @@ getVoxelValue(std::complex<float>** img, int offsetX, int offsetY,
 	weight = 0.;
 	float radiusSqr = blobRadius * blobRadius;
 	std::complex<float> result = (0, 0);
-	int minX = CEIL(x - blobRadius);
-	int maxX = FLOOR(x + blobRadius);
-	int minY = CEIL(y - blobRadius);
-	int maxY = FLOOR(y + blobRadius);
+	int minX = CEIL(x );
+	int maxX = FLOOR(x);
+	int minY = CEIL(y );
+	int maxY = FLOOR(y);
 #if DEBUG_DUMP >= 2
     std::cout << "center: " << x << " " << y << std::endl;
 #endif
@@ -1729,7 +1737,7 @@ void ProgRecFourier::processImages( int firstImageIndex, int lastImageIndex, boo
                 myPaddedFourier = new std::complex<float>*[paddedFourier->ydim+1];
                 double tempMyPadd[2];
                 std::complex<float> myPadVal;
-				std::cout<<"allocating myPaddedFourier" << std::endl;
+				// std::cout<<"allocating myPaddedFourier" << std::endl;
                 for (size_t i = 0; i <= paddedFourier->ydim; i++) {
                 	myPaddedFourier[i] = new std::complex<float>[paddedFourier->xdim+1];
                 	for (size_t j = 0; j <= paddedFourier->xdim; j++) {
@@ -1747,7 +1755,7 @@ void ProgRecFourier::processImages( int firstImageIndex, int lastImageIndex, boo
                 }
 
 
-                std::cout << "Image dimmensions: " << paddedFourier->xdim << " " << paddedFourier->ydim << std::cout;
+                // std::cout << "Image dimmensions: " << paddedFourier->xdim << " " << paddedFourier->ydim << std::cout;
 
 
 //                std::cout<< "symmetries: " << SSTR(R_repository.size()) << std::endl;
@@ -1950,9 +1958,9 @@ void ProgRecFourier::processImages( int firstImageIndex, int lastImageIndex, boo
 //					}
 
 
-					druhyPokus(outputVolume, outputWeight, conserveRows, myPaddedFourier,
-							volPadSizeX, maxResolution2, blob.radius, A_SL
-					,blobTableSqrt, iDeltaSqrt);
+					// druhyPokus(outputVolume, outputWeight, conserveRows, myPaddedFourier,
+							// volPadSizeX, maxResolution2, blob.radius, A_SL
+					// ,blobTableSqrt, iDeltaSqrt);
 
 
 
@@ -2067,10 +2075,10 @@ void ProgRecFourier::processImages( int firstImageIndex, int lastImageIndex, boo
 		}
    }
 
-    print(VoutFourier, true);
-    print(VoutFourier_muj, true);
-    VoutFourier = VoutFourier_muj;
-    FourierWeights = FourierWrights_moje;
+    // print(VoutFourier, true);
+    // print(VoutFourier_muj, true);
+    // VoutFourier = VoutFourier_muj;
+    // FourierWeights = FourierWrights_moje;
 
 
     if( saveFSC )
