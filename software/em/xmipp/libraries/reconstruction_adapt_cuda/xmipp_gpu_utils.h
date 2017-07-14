@@ -62,6 +62,12 @@ public:
         	data=NULL;
     }
 
+	void initZeros(size_t _Xdim, size_t _Ydim=1, size_t _Zdim=1, size_t _Ndim=1)
+	{
+		resize(_Xdim, _Ydim, _Zdim, _Ndim);
+		memset(data,0,nzyxdim*sizeof(T));
+	}
+
 	void fillImage(size_t n, const MultidimArray<T> &from)
 	{
 		memcpy(data+n*zyxdim, MULTIDIM_ARRAY(from), MULTIDIM_SIZE(from)*sizeof(T));
