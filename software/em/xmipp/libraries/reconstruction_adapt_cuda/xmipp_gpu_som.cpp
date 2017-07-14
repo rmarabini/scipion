@@ -24,13 +24,10 @@
  ***************************************************************************/
 
 #include <data/xmipp_image.h>
-#include <data/mask.h>
 #include <data/metadata_extension.h>
 
 #include "xmipp_gpu_utils.h"
 #include "xmipp_gpu_som.h"
-
-#include <math.h>
 
 // Read arguments ==========================================================
 void ProgGpuSOM::readParams()
@@ -41,6 +38,7 @@ void ProgGpuSOM::readParams()
     Niter = getIntParam("--iter");
     somXdim = getIntParam("--somdim",0);
     somYdim = getIntParam("--somdim",1);
+    normalizeImages = !checkParam("--dontNormalize");
 }
 
 // Show ====================================================================
@@ -52,6 +50,7 @@ void ProgGpuSOM::show()
 	<< "Iterations:                     " << Niter     << std::endl
 	<< "SOM Xdim:                       " << somXdim   << std::endl
 	<< "SOM Ydim:                       " << somYdim   << std::endl
+	<< "Normalize images:               " << normalizeImages << std::endl
     ;
 }
 
@@ -63,12 +62,73 @@ void ProgGpuSOM::defineParams()
     addParamsLine("   [--odir <outdir=\".\"	>]        : Output directory");
 	addParamsLine("   [--iter <N=10>]            : Number of iterations");
 	addParamsLine("   [--somdim <xdim=10> <ydim=10>]  : Size of the SOM map");
+	addParamsLine("   [--dontNormalize]          : Don't normalize input images");
     addUsageLine("Computes a SOM map of size xdim x ydim. A very rough alignment is performed");
+}
+
+// Produce side info ======================================================
+void ProgGpuSOM::readImage(Image<double> &I, size_t objId, bool applyGeo) const
+{
+    if (applyGeo)
+        I.readApplyGeo(SFexp, objId);
+    else
+    {
+        FileName fnImg;
+        SFexp.getValue(MDL_IMAGE, fnImg, objId);
+        I.read(fnImg);
+    }
+    if (normalizeImages)
+    	I().statisticsAdjust(0, 1);
+}
+
+void ProgGpuSOM::produceSideInfo()
+{
+	SFexp.read(fn_exp);
+	FileName fnClasses = fn_odir+"/classes.xmd";
+	int Nimgs = SFexp.size();
+	if (fnClasses.exists())
+	{
+
+	}
+	else
+	{
+		std::cout << "Initializing classes ...\n";
+		init_progress_bar(Nimgs);
+	    Image<double> I;
+	    MultidimArray<double> Irefq;
+	    size_t q=0, idx=0;
+	    size_t somdim = somXdim*somYdim;
+	    size_t xdim, ydim, zdim, ndim;
+	    getImageSize(fn_exp, xdim, ydim, zdim, ndim);
+	    Iref.initZeros(xdim, ydim, 1, somdim);
+	    FOR_ALL_OBJECTS_IN_METADATA(SFexp)
+	    {
+	    	readImage(I, __iter.objId, true);
+	    	float *ptrq=Iref.data+Iref.yxdim*q;
+	    	double *ptrI=&I(0,0);
+	    	FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(I())
+	    	{
+	    		*ptrq += (float)*ptrI;
+	    		ptrq++;
+	    		ptrI++;
+	    	}
+
+	    	q=(q+1)%somdim;
+	    	if (idx%100==0)
+	    		progress_bar(idx);
+	    	idx++;
+	    }
+		progress_bar(Nimgs);
+		Iref.copyToGpu(Iref_gpu);
+//		Iref.write(fn_odir+"/classes.stk");
+	}
+
 
 }
 
 // Compute correlation --------------------------------------------------------
 void ProgGpuSOM::run()
 {
+	produceSideInfo();
 }
 

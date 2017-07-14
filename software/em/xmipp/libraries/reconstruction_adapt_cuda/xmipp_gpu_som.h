@@ -26,13 +26,15 @@
 #define _PROG_GPU_SOM
 
 #include <data/xmipp_program.h>
+#include "xmipp_gpu_utils.h"
 
 class ProgGpuSOM: public XmippProgram
 {
-private:
+public:
 	FileName fn_exp, fn_odir;
 	int somXdim, somYdim;
 	int Niter;
+	bool normalizeImages;
 
 public:
     //Input metadata file
@@ -47,9 +49,18 @@ public:
     /// Define parameters
     void defineParams();
 
+    /** Read image */
+    void readImage(Image<double> &I, size_t objId, bool applyGeo) const;
+
+    /** Produce side info */
+    void produceSideInfo();
+
     /** processImage */
     void run();
 
+public:
+    GpuMultidimArrayAtCpu<float> Iref;
+    GpuMultidimArrayAtGpu<float> Iref_gpu;
 };
 //@}
 #endif
