@@ -30,18 +30,13 @@
 class ProgGpuSOM: public XmippProgram
 {
 private:
-    //Input file
-	FileName fn_ref, fn_exp, fn_out, fnDir;
-
-	bool generate_out;
-
-	int n_keep;
-	bool significance, keepN;
-	double alpha, maxShift;
+	FileName fn_exp, fn_odir;
+	int somXdim, somYdim;
+	int Niter;
 
 public:
     //Input metadata file
-    MetaData SF, SFexp;
+    MetaData SFref, SFexp;
 
     /// Read argument from command line
     void readParams();
