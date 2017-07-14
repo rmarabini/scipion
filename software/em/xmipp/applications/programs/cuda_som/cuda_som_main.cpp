@@ -26,6 +26,6 @@
 #include <reconstruction_adapt_cuda/xmipp_gpu_som.h>
 
 
-RUN_XMIPP_PROGRAM(ProgGpuCorrelation)
+RUN_XMIPP_PROGRAM(ProgGpuSOM)
 
 

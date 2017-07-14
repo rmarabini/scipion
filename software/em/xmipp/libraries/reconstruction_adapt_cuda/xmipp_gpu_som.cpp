@@ -31,7 +31,7 @@
 
 #include <algorithm>
 #include "xmipp_gpu_utils.h"
-#include "xmipp_gpu_correlation.h"
+#include "xmipp_gpu_som.h"
 #include <reconstruction_cuda/cuda_gpu_correlation.h>
 
 #include <math.h>
