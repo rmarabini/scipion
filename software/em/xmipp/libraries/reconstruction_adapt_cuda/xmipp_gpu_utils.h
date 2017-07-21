@@ -26,6 +26,7 @@
 #define _PROG_GPU_UTILS
 
 #include <data/multidim_array.h>
+#include <data/xmipp_image.h>
 #include <reconstruction_cuda/cuda_gpu_correlation.h>
 #include <reconstruction_cuda/cuda_xmipp_utils.h>
 
@@ -73,6 +74,39 @@ public:
 		memcpy(data+n*zyxdim, MULTIDIM_ARRAY(from), MULTIDIM_SIZE(from)*sizeof(T));
 	}
 
+	void fillThisWithImage(size_t n, const MultidimArray<double> &Ifrom)
+	{
+		T *ptrTo=data+n*zyxdim;
+		double *ptrFrom=MULTIDIM_ARRAY(Ifrom);
+		for (size_t i=0; i<zyxdim; i++)
+			*ptrTo++ = (T) *ptrFrom++;
+	}
+
+	void fillImageWithThis(size_t n, MultidimArray<double> &Ito)
+	{
+		T *ptrFrom=data+n*zyxdim;
+		double *ptrTo=MULTIDIM_ARRAY(Ito);
+		for (size_t i=0; i<zyxdim; i++)
+			*ptrTo++ = (double) *ptrFrom++;
+	}
+
+	void addImage(size_t n, const MultidimArray<double> &ItoAdd)
+	{
+		T *ptrTo=data+n*zyxdim;
+		double *ptrFrom=MULTIDIM_ARRAY(ItoAdd);
+		for (size_t i=0; i<zyxdim; i++)
+			*ptrTo++ += (T) *ptrFrom++;
+	}
+
+	double sum()
+	{
+		double retval=0.0;
+		T *ptr=data;
+		for (size_t i=0; i<nzyxdim; i++)
+			retval+=*ptr++;
+		return retval;
+	}
+
 	bool isEmpty()
 	{
 		return data==NULL;
@@ -111,6 +145,17 @@ public:
 	~GpuMultidimArrayAtCpu()
 	{
 		clear();
+	}
+
+	void write(const FileName &fnOut)
+	{
+		Image<double> I;
+		I().resize(Ndim,Zdim,Ydim,Xdim);
+		T *ptrFrom=data;
+		double *ptrTo=MULTIDIM_ARRAY(I());
+		for (size_t i=0; i<nzyxdim; i++)
+			*ptrTo++ = (double) *ptrFrom++;
+		I.write(fnOut);
 	}
 };
 
