@@ -22,6 +22,10 @@ void gpuFree(void* d_data)
 	gpuErrchk(cudaFree(d_data));
 }
 
+void waitForKernelToFinish()
+{
+	gpuErrchk(cudaDeviceSynchronize());
+}
 
 void initializeIdentity(float* d_data, size_t Ndim)
 {

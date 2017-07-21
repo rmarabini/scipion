@@ -13,6 +13,7 @@ void setRotationMatrix(float* d_data, float ang, int n);
 void gpuCopyFromCPUToGPU(void* data, void* d_data, size_t Nbytes);
 void gpuCopyFromGPUToCPU(void* d_data, void* data, size_t Nbytes);
 int gridFromBlock(int tasks, int Nthreads);
+void waitForKernelToFinish();
 
 struct ioTime
 {
@@ -215,6 +216,11 @@ public:
         gpuMalloc((void**) &d_data,nzyxdim*sizeof(T));
 
     }
+
+	void initZeros()
+	{
+		cudaMemset(d_data, 0, nzyxdim*sizeof(T));
+	}
 
 	bool isEmpty()
 	{
