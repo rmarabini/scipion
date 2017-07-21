@@ -24,10 +24,12 @@
  ***************************************************************************/
 
 #include <data/xmipp_image.h>
+#include <data/normalize.h>
 #include <data/metadata_extension.h>
 
 #include "xmipp_gpu_utils.h"
 #include "xmipp_gpu_som.h"
+#include <reconstruction_cuda/cuda_gpu_som.h>
 
 // Read arguments ==========================================================
 void ProgGpuSOM::readParams()
@@ -85,7 +87,9 @@ void ProgGpuSOM::produceSideInfo()
 {
 	SFexp.read(fn_exp);
 	FileName fnClasses = fn_odir+"/classes.xmd";
-	int Nimgs = SFexp.size();
+	size_t Nimgs = SFexp.size();
+    size_t somdim = somXdim*somYdim;
+    Image<double> I;
 	if (fnClasses.exists())
 	{
 
@@ -94,41 +98,66 @@ void ProgGpuSOM::produceSideInfo()
 	{
 		std::cout << "Initializing classes ...\n";
 		init_progress_bar(Nimgs);
-	    Image<double> I;
 	    MultidimArray<double> Irefq;
 	    size_t q=0, idx=0;
-	    size_t somdim = somXdim*somYdim;
 	    size_t xdim, ydim, zdim, ndim;
 	    getImageSize(fn_exp, xdim, ydim, zdim, ndim);
 	    Iref.initZeros(xdim, ydim, 1, somdim);
 	    FOR_ALL_OBJECTS_IN_METADATA(SFexp)
 	    {
 	    	readImage(I, __iter.objId, true);
-	    	float *ptrq=Iref.data+Iref.yxdim*q;
-	    	double *ptrI=&I(0,0);
-	    	FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(I())
-	    	{
-	    		*ptrq += (float)*ptrI;
-	    		ptrq++;
-	    		ptrI++;
-	    	}
-
+	    	normalize_OldXmipp(I());
+	    	Iref.fillThisWithImage(q,I());
 	    	q=(q+1)%somdim;
 	    	if (idx%100==0)
 	    		progress_bar(idx);
 	    	idx++;
 	    }
 		progress_bar(Nimgs);
-		Iref.copyToGpu(Iref_gpu);
-//		Iref.write(fn_odir+"/classes.stk");
 	}
 
+	// Normalize the reference images
+	I().resizeNoCopy(Iref.Ydim,Iref.Xdim);
+    for (size_t q=0; q<somdim; ++q)
+    {
+    	Iref.fillImageWithThis(q,I());
+    	normalize_OldXmipp(I());
+    	Iref.fillThisWithImage(q,I());
+    }
 
+    // Transfer to the GPU
+	Iref.copyToGpu(Iref_gpu);
+	float gpuMemory[3];
+	cuda_check_gpu_memory(gpuMemory);
+
+	Nblock = (size_t) floor(gpuMemory[1]/(8*MULTIDIM_SIZE(I())*sizeof(float)));
+	Nblock = std::min(Nblock,Nimgs);
+
+	// *** Limitar Nblock por el numero de gridsize
+	std::cout << "GPU Experimental block size: " << Nblock << std::endl;
+	Iexp.resize(Iref.Xdim,Iref.Ydim,1,8*Nblock);
 }
 
-// Compute correlation --------------------------------------------------------
+// Generate SOM --------------------------------------------------------
 void ProgGpuSOM::run()
 {
 	produceSideInfo();
+
+	size_t n=0;
+	Image<double> I;
+    FOR_ALL_OBJECTS_IN_METADATA(SFexp)
+    {
+    	readImage(I, __iter.objId, true);
+    	normalize_OldXmipp(I());
+    	Iexp.fillThisWithImage(n,I());
+    	n++;
+    }
+    Iexp.copyToGpu(Iexp_gpu);
+    cuda_generate_8rotations(Iexp_gpu);
+    cuda_calculate_correlations(Iexp_gpu,Iref_gpu,cc_gpu);
+
+
+//    Iexp.copyFromGpu(Iexp_gpu);
+//    Iexp.write("PPPgpu.xmp");
 }
 

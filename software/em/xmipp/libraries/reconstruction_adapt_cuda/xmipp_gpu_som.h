@@ -61,6 +61,10 @@ public:
 public:
     GpuMultidimArrayAtCpu<float> Iref;
     GpuMultidimArrayAtGpu<float> Iref_gpu;
+    GpuMultidimArrayAtCpu<float> Iexp;
+    GpuMultidimArrayAtGpu<float> Iexp_gpu;
+    GpuMultidimArrayAtGpu<float> cc_gpu;
+    size_t Nblock;
 };
 //@}
 #endif
