@@ -35,7 +35,7 @@
 void ProgGpuSOM::readParams()
 {
     fn_exp = getParam("-i");
-    fn_odir = getParam("--odir");
+    fn_out = getParam("-o");
 
     Niter = getIntParam("--iter");
     somXdim = getIntParam("--somdim",0);
@@ -48,7 +48,7 @@ void ProgGpuSOM::show()
 {
     std::cout
 	<< "Input experimental:             " << fn_exp    << std::endl
-	<< "Output directory:               " << fn_odir   << std::endl
+	<< "Output directory:               " << fn_out   << std::endl
 	<< "Iterations:                     " << Niter     << std::endl
 	<< "SOM Xdim:                       " << somXdim   << std::endl
 	<< "SOM Ydim:                       " << somYdim   << std::endl
@@ -61,7 +61,7 @@ void ProgGpuSOM::defineParams()
 {
 
 	addParamsLine("   -i <md_exp>                : Metadata file with input experimental images");
-    addParamsLine("   [--odir <outdir=\".\"	>]        : Output directory");
+    addParamsLine("   [-o <out=\"classes.stk\">]     : Output file");
 	addParamsLine("   [--iter <N=10>]            : Number of iterations");
 	addParamsLine("   [--somdim <xdim=10> <ydim=10>]  : Size of the SOM map");
 	addParamsLine("   [--dontNormalize]          : Don't normalize input images");
@@ -86,13 +86,19 @@ void ProgGpuSOM::readImage(Image<double> &I, size_t objId, bool applyGeo) const
 void ProgGpuSOM::produceSideInfo()
 {
 	SFexp.read(fn_exp);
-	FileName fnClasses = fn_odir+"/classes.xmd";
 	size_t Nimgs = SFexp.size();
     size_t somdim = somXdim*somYdim;
     Image<double> I;
-	if (fnClasses.exists())
+	if (fn_out.exists())
 	{
-
+		I.read(fn_out);
+		MultidimArray<double> Iq;
+	    Iref.initZeros(XSIZE(I()), YSIZE(I()), 1, NSIZE(I()));
+	    for (size_t q=0; q<somdim; ++q)
+	    {
+	    	Iq.aliasImageInStack(I(),q);
+	    	Iref.fillThisWithImage(q,Iq);
+	    }
 	}
 	else
 	{
@@ -117,7 +123,7 @@ void ProgGpuSOM::produceSideInfo()
 	}
 
 	// Normalize the reference images
-	I().resizeNoCopy(Iref.Ydim,Iref.Xdim);
+	I().resizeNoCopy(Iref.ydim,Iref.xdim);
     for (size_t q=0; q<somdim; ++q)
     {
     	Iref.fillImageWithThis(q,I());
@@ -133,16 +139,18 @@ void ProgGpuSOM::produceSideInfo()
 	Nblock = (size_t) floor(gpuMemory[1]/(8*MULTIDIM_SIZE(I())*sizeof(float)));
 	Nblock = std::min(Nblock,Nimgs);
 
-	// *** Limitar Nblock por el numero de gridsize
+	// *** Limit Nblock by the number of gridsize
 	std::cout << "GPU Experimental block size: " << Nblock << std::endl;
-	Iexp.resize(Iref.Xdim,Iref.Ydim,1,8*Nblock);
+	Iexp.resize(Iref.xdim,Iref.ydim,1,8*Nblock);
 }
 
 // Generate SOM --------------------------------------------------------
+//#define DEBUG
 void ProgGpuSOM::run()
 {
 	produceSideInfo();
 
+	// Read the experimental images
 	size_t n=0;
 	Image<double> I;
     FOR_ALL_OBJECTS_IN_METADATA(SFexp)
@@ -154,10 +162,67 @@ void ProgGpuSOM::run()
     }
     Iexp.copyToGpu(Iexp_gpu);
     cuda_generate_8rotations(Iexp_gpu);
-    cuda_calculate_correlations(Iexp_gpu,Iref_gpu,cc_gpu);
+	Iexp.copyFromGpu(Iexp_gpu);
+#ifdef DEBUG
+	Iexp.write("PPPgpu.xmp");
+#endif
 
+	for (int iter=0; iter<Niter; iter++)
+	{
+		std::cout << "Iteration " << iter << std::endl;
+		if (iter>0)
+			Iref.copyToGpu(Iref_gpu);
 
-//    Iexp.copyFromGpu(Iexp_gpu);
-//    Iexp.write("PPPgpu.xmp");
+		// Calculate correlations
+		cuda_calculate_correlations(Iexp_gpu,Iref_gpu,cc_gpu);
+		size_t nexp=cc_gpu.xdim;
+		size_t nrot=cc_gpu.ydim;
+		size_t nref=cc_gpu.zdim;
+		cc.resize(nexp,nrot,nref,1);
+		cc.copyFromGpu(cc_gpu);
+#ifdef DEBUG
+		cc.write("PPPcc.vol");
+#endif
+
+		// For each experimental image calculate the winning node
+		winnerRot.resize(nexp);
+		winnerRot.initConstant(-1);
+		winnerRef=winnerRot;
+		winnerCC.resize(nexp);
+		winnerCC.initConstant(-2.0);
+		FOR_ALL_DIRECT_ELEMENTS_IN_ARRAY3D(cc)
+			if (DIRECT_A3D_ELEM(cc,k,i,j)>DIRECT_A1D_ELEM(winnerCC,j) && DIRECT_A3D_ELEM(cc,k,i,j)>0)
+			{
+				DIRECT_A1D_ELEM(winnerCC,j)=DIRECT_A3D_ELEM(cc,k,i,j);
+				DIRECT_A1D_ELEM(winnerRot,j)=(int)i;
+				DIRECT_A1D_ELEM(winnerRef,j)=(int)k;
+			}
+
+		// Update the winning nodes
+		Iref.initZeros();
+		refWeights.initZeros(nref);
+		size_t xydim=XSIZE(Iref)*YSIZE(Iref);
+		size_t skipOneImageRow = nexp*xydim;
+		FOR_ALL_DIRECT_ELEMENTS_IN_ARRAY1D(winnerRef)
+		{
+			int refIdx=DIRECT_A1D_ELEM(winnerRef,i);
+			float *ptrFrom=MULTIDIM_ARRAY(Iexp)+DIRECT_A1D_ELEM(winnerRot,i)*skipOneImageRow+i*xydim;
+			float *ptrTo=MULTIDIM_ARRAY(Iref)+refIdx*xydim;
+			for (size_t ij=0; ij<xydim; ++ij)
+				*ptrTo++ += *ptrFrom++;
+			DIRECT_A1D_ELEM(refWeights,refIdx)+=DIRECT_A1D_ELEM(winnerCC,i);
+		}
+
+		// Normalize by the weight
+		for (size_t k=0; k<nref; ++k)
+			if (DIRECT_A1D_ELEM(refWeights,k)>0)
+			{
+				float iWeight=1.0f/DIRECT_A1D_ELEM(refWeights,k);
+				float *ptrTo=MULTIDIM_ARRAY(Iref)+k*xydim;
+				for (size_t ij=0; ij<xydim; ++ij)
+					*ptrTo++ *= iWeight;
+			}
+	}
+    Iref.write(fn_out);
 }
 

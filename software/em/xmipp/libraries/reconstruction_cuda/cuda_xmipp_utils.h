@@ -176,18 +176,18 @@ template<typename T>
 class GpuMultidimArrayAtGpu
 {
 public:
-	size_t Xdim, Ydim, Zdim, Ndim, yxdim, zyxdim, nzyxdim;
+	size_t xdim, ydim, zdim, ndim, yxdim, zyxdim, nzyxdim;
     T* d_data;
 
 	GpuMultidimArrayAtGpu()
     {
-		Xdim=Ydim=Zdim=Ndim=yxdim=zyxdim=nzyxdim=0;
+		xdim=ydim=zdim=ndim=yxdim=zyxdim=nzyxdim=0;
 		d_data=NULL;
     }
 
 	GpuMultidimArrayAtGpu(size_t _Xdim, size_t _Ydim=1, size_t _Zdim=1, size_t _Ndim=1)
     {
-		Xdim=Ydim=Zdim=Ndim=yxdim=zyxdim=nzyxdim=0;
+		xdim=ydim=zdim=ndim=yxdim=zyxdim=nzyxdim=0;
 		d_data=NULL;
 		resize(_Xdim, _Ydim, _Zdim, _Ndim);
     }
@@ -196,7 +196,7 @@ public:
 	void resize(const GpuMultidimArrayAtGpu<T1>& array)
 	{
 
-		resize(array.Xdim, array.Ydim, array.Zdim, array.Ndim);
+		resize(array.xdim, array.ydim, array.zdim, array.ndim);
 	}
 
 	void resize(size_t _Xdim, size_t _Ydim=1, size_t _Zdim=1, size_t _Ndim=1)
@@ -206,10 +206,10 @@ public:
 
 		clear();
 
-		Xdim=_Xdim;
-		Ydim=_Ydim;
-		Zdim=_Zdim;
-		Ndim=_Ndim;
+		xdim=_Xdim;
+		ydim=_Ydim;
+		zdim=_Zdim;
+		ndim=_Ndim;
         yxdim=(size_t)_Ydim*_Xdim;
         zyxdim=yxdim*_Zdim;
         nzyxdim=zyxdim*_Ndim;
@@ -231,7 +231,7 @@ public:
 	{
 		if (d_data!=NULL)
 			gpuFree((void*) d_data);
-		Xdim=Ydim=Zdim=Ndim=yxdim=zyxdim=nzyxdim=0;
+		xdim=ydim=zdim=ndim=yxdim=zyxdim=nzyxdim=0;
 		d_data=NULL;
 	}
 
@@ -248,16 +248,16 @@ public:
 	void copyGpuToGpu(GpuMultidimArrayAtGpu<T> &gpuArray)
 	{
 		if (gpuArray.isEmpty())
-			gpuArray.resize(Xdim,Ydim,Zdim,Ndim);
+			gpuArray.resize(xdim,ydim,zdim,ndim);
 
 		gpuCopyFromGPUToGPU(d_data, gpuArray.d_data, nzyxdim*sizeof(T));
 	}
 
 	void calculateGridSize(const XmippDim3 &blockSize, XmippDim3 &gridSize) const
 	{
-		gridSize.x=gridFromBlock(Xdim,blockSize.x);
-		gridSize.y=gridFromBlock(Ydim,blockSize.y);
-		gridSize.z=gridFromBlock(Zdim,blockSize.z);
+		gridSize.x=gridFromBlock(xdim,blockSize.x);
+		gridSize.y=gridFromBlock(ydim,blockSize.y);
+		gridSize.z=gridFromBlock(zdim,blockSize.z);
 	}
 
 	void calculateGridSizeVectorized(const XmippDim3 &blockSize, XmippDim3 &gridSize) const

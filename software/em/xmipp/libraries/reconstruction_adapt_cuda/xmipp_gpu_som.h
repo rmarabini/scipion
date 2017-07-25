@@ -31,7 +31,7 @@
 class ProgGpuSOM: public XmippProgram
 {
 public:
-	FileName fn_exp, fn_odir;
+	FileName fn_exp, fn_out;
 	int somXdim, somYdim;
 	int Niter;
 	bool normalizeImages;
@@ -59,12 +59,11 @@ public:
     void run();
 
 public:
-    GpuMultidimArrayAtCpu<float> Iref;
-    GpuMultidimArrayAtGpu<float> Iref_gpu;
-    GpuMultidimArrayAtCpu<float> Iexp;
-    GpuMultidimArrayAtGpu<float> Iexp_gpu;
-    GpuMultidimArrayAtGpu<float> cc_gpu;
+    GpuMultidimArrayAtCpu<float> Iref, Iexp, cc;
+    GpuMultidimArrayAtGpu<float> Iref_gpu, Iexp_gpu, cc_gpu;
     size_t Nblock;
+    MultidimArray<int> winnerRot, winnerRef;
+    MultidimArray<float> winnerCC, refWeights;
 };
 //@}
 #endif

@@ -57,7 +57,7 @@ void cuda_generate_8rotations(GpuMultidimArrayAtGpu<float> &images)
     gridSize.x = (size_t) ceil(gridSize.x/8.0);
 //    std::cout << "GridSize " << gridSize.x << std::endl;
     kernel_generate_8rotations <<< CONVERT2DIM3(gridSize), CONVERT2DIM3(blockSize) >>>
-    		(images.d_data, images.Xdim, images.Ydim, images.Ndim);
+    		(images.d_data, images.xdim, images.ydim, images.ndim);
     waitForKernelToFinish();
 }
 
@@ -81,16 +81,16 @@ __global__ void kernel_calculate_correlations (float *Iexp, float *Iref, float *
 	float localcc=0.0;
 	for (size_t ij=0; ij<xydim; ++ij)
 		localcc+=(*myIref++)*(*myIexp++);
-	*(cc+idx)=localcc;
+	*(cc+idx)=localcc/xydim;
 }
 
 void cuda_calculate_correlations(GpuMultidimArrayAtGpu<float> &Iexp, GpuMultidimArrayAtGpu<float> &Iref, GpuMultidimArrayAtGpu<float> &cc)
 {
-	cc.resize(Iexp.Ndim/8,8,Iref.Ndim);
+	cc.resize(Iexp.ndim/8,8,Iref.ndim);
     int numTh = 1024;
     XmippDim3 blockSize(numTh, 1, 1), gridSize;
     cc.calculateGridSizeVectorized(blockSize, gridSize);
     kernel_calculate_correlations<<< CONVERT2DIM3(gridSize), CONVERT2DIM3(blockSize) >>>
-    		(Iexp.d_data, Iref.d_data, cc.d_data, Iexp.Xdim, Iexp.Ydim, Iexp.Ndim/8, Iref.Ndim);
+    		(Iexp.d_data, Iref.d_data, cc.d_data, Iexp.xdim, Iexp.ydim, Iexp.ndim/8, Iref.ndim);
     waitForKernelToFinish();
 }

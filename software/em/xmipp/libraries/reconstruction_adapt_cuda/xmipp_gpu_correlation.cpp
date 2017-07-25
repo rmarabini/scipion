@@ -206,10 +206,10 @@ void preprocess_images_experimental(MetaData &SF, FileName &fnImg, int numImages
 void preprocess_images_experimental_transform(GpuCorrelationAux &d_correlationAux, Mask &mask, bool rotation, int step)
 {
 
-	size_t Xdim = d_correlationAux.d_transform_image.Xdim;
-	size_t Ydim = d_correlationAux.d_transform_image.Ydim;
-	size_t Zdim = d_correlationAux.d_transform_image.Zdim;
-	size_t Ndim = d_correlationAux.d_transform_image.Ndim;
+	size_t Xdim = d_correlationAux.d_transform_image.xdim;
+	size_t Ydim = d_correlationAux.d_transform_image.ydim;
+	size_t Zdim = d_correlationAux.d_transform_image.zdim;
+	size_t Ndim = d_correlationAux.d_transform_image.ndim;
 	size_t pad_Xdim=2*Xdim-1;
 	size_t pad_Ydim=2*Ydim-1;
 	size_t radius=(size_t)mask.R1;

@@ -34,12 +34,12 @@ template<typename T>
 class GpuMultidimArrayAtCpu
 {
 public:
-	size_t Xdim, Ydim, Zdim, Ndim, yxdim, zyxdim, nzyxdim;
+	size_t xdim, ydim, zdim, ndim, yxdim, zyxdim, nzyxdim;
     T* data;
 
 	GpuMultidimArrayAtCpu()
     {
-		Xdim=Ydim=Zdim=Ndim=yxdim=zyxdim=nzyxdim=0;
+		xdim=ydim=zdim=ndim=yxdim=zyxdim=nzyxdim=0;
 		data=NULL;
     }
 
@@ -50,10 +50,10 @@ public:
 
 	void resize(size_t _Xdim, size_t _Ydim=1, size_t _Zdim=1, size_t _Ndim=1)
     {
-		Xdim=_Xdim;
-		Ydim=_Ydim;
-		Zdim=_Zdim;
-		Ndim=_Ndim;
+		xdim=_Xdim;
+		ydim=_Ydim;
+		zdim=_Zdim;
+		ndim=_Ndim;
         yxdim=(size_t)_Ydim*_Xdim;
         zyxdim=yxdim*_Zdim;
         nzyxdim=zyxdim*_Ndim;
@@ -66,6 +66,11 @@ public:
 	void initZeros(size_t _Xdim, size_t _Ydim=1, size_t _Zdim=1, size_t _Ndim=1)
 	{
 		resize(_Xdim, _Ydim, _Zdim, _Ndim);
+		initZeros();
+	}
+
+	void initZeros()
+	{
 		memset(data,0,nzyxdim*sizeof(T));
 	}
 
@@ -115,7 +120,7 @@ public:
 	void copyToGpu(GpuMultidimArrayAtGpu<T> &gpuArray)
 	{
 		if (gpuArray.isEmpty())
-			gpuArray.resize(Xdim,Ydim,Zdim,Ndim);
+			gpuArray.resize(xdim,ydim,zdim,ndim);
 
 		gpuCopyFromCPUToGPU(data, gpuArray.d_data, nzyxdim*sizeof(T));
 	}
@@ -128,7 +133,7 @@ public:
 	void copyToGpuMultiple(GpuMultidimArrayAtGpu<T> &gpuArray, int numCopy)
 	{
 		if (gpuArray.isEmpty())
-			gpuArray.resize(Xdim,Ydim,Zdim,numCopy);
+			gpuArray.resize(xdim,ydim,zdim,numCopy);
 
 		int index = 0;
 		for(int i=0; i<numCopy; i++){
@@ -150,7 +155,7 @@ public:
 	void write(const FileName &fnOut)
 	{
 		Image<double> I;
-		I().resize(Ndim,Zdim,Ydim,Xdim);
+		I().resize(ndim,zdim,ydim,xdim);
 		T *ptrFrom=data;
 		double *ptrTo=MULTIDIM_ARRAY(I());
 		for (size_t i=0; i<nzyxdim; i++)
