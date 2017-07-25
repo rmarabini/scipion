@@ -35,6 +35,7 @@ public:
 	int somXdim, somYdim;
 	int Niter;
 	bool normalizeImages;
+	double sideWeight;
 
 public:
     //Input metadata file

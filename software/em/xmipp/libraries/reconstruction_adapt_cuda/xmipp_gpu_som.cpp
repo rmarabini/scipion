@@ -26,6 +26,7 @@
 #include <data/xmipp_image.h>
 #include <data/normalize.h>
 #include <data/metadata_extension.h>
+#include <data/filters.h>
 
 #include "xmipp_gpu_utils.h"
 #include "xmipp_gpu_som.h"
@@ -41,6 +42,7 @@ void ProgGpuSOM::readParams()
     somXdim = getIntParam("--somdim",0);
     somYdim = getIntParam("--somdim",1);
     normalizeImages = !checkParam("--dontNormalize");
+    sideWeight = getDoubleParam("--sideWeight");
 }
 
 // Show ====================================================================
@@ -53,6 +55,7 @@ void ProgGpuSOM::show()
 	<< "SOM Xdim:                       " << somXdim   << std::endl
 	<< "SOM Ydim:                       " << somYdim   << std::endl
 	<< "Normalize images:               " << normalizeImages << std::endl
+	<< "Side weight:                    " << sideWeight << std::endl
     ;
 }
 
@@ -65,6 +68,7 @@ void ProgGpuSOM::defineParams()
 	addParamsLine("   [--iter <N=10>]            : Number of iterations");
 	addParamsLine("   [--somdim <xdim=10> <ydim=10>]  : Size of the SOM map");
 	addParamsLine("   [--dontNormalize]          : Don't normalize input images");
+	addParamsLine("   [--sideWeight <w=0.5>]     : Weight for the som update of neighbours");
     addUsageLine("Computes a SOM map of size xdim x ydim. A very rough alignment is performed");
 }
 
@@ -145,6 +149,16 @@ void ProgGpuSOM::produceSideInfo()
 }
 
 // Generate SOM --------------------------------------------------------
+void addImage(const GpuMultidimArrayAtCpu<float> &Ifrom, size_t qfrom, GpuMultidimArrayAtCpu<float> &Ito, size_t qto, double weight)
+{
+	size_t xydim=XSIZE(Ifrom)*YSIZE(Ifrom);
+
+	float *ptrFrom=MULTIDIM_ARRAY(Ifrom)+qfrom*xydim;
+	float *ptrTo=MULTIDIM_ARRAY(Ito)+qto*xydim;
+	for (size_t ij=0; ij<xydim; ++ij)
+		*ptrTo++ += weight* (*ptrFrom++);
+}
+
 //#define DEBUG
 void ProgGpuSOM::run()
 {
@@ -167,6 +181,11 @@ void ProgGpuSOM::run()
 	Iexp.write("PPPgpu.xmp");
 #endif
 
+    AlignmentAux aux;
+    CorrelationAux aux2;
+    RotationalCorrelationAux aux3;
+    MultidimArray<double> IrefAux(XSIZE(Iref),YSIZE(Iref)), IexpAux(XSIZE(Iref),YSIZE(Iref));
+    Matrix2D<double> M;
 	for (int iter=0; iter<Niter; iter++)
 	{
 		std::cout << "Iteration " << iter << std::endl;
@@ -206,22 +225,50 @@ void ProgGpuSOM::run()
 		FOR_ALL_DIRECT_ELEMENTS_IN_ARRAY1D(winnerRef)
 		{
 			int refIdx=DIRECT_A1D_ELEM(winnerRef,i);
-			float *ptrFrom=MULTIDIM_ARRAY(Iexp)+DIRECT_A1D_ELEM(winnerRot,i)*skipOneImageRow+i*xydim;
-			float *ptrTo=MULTIDIM_ARRAY(Iref)+refIdx*xydim;
-			for (size_t ij=0; ij<xydim; ++ij)
-				*ptrTo++ += *ptrFrom++;
-			DIRECT_A1D_ELEM(refWeights,refIdx)+=DIRECT_A1D_ELEM(winnerCC,i);
+			int expIdx=DIRECT_A1D_ELEM(winnerRot,i)*nexp+i;
+			double w=DIRECT_A1D_ELEM(winnerCC,i);
+
+			// Align
+			Iref.fillImageWithThis(refIdx,IrefAux);
+			Iexp.fillImageWithThis(expIdx,IexpAux);
+			IrefAux.setXmippOrigin();
+			IexpAux.setXmippOrigin();
+			alignImages(IrefAux,IexpAux,M,true,aux,aux2,aux3);
+			Iexp.fillThisWithImage(expIdx,IexpAux);
+
+			// Update
+			int jsom=refIdx%somXdim;
+			int isom=refIdx/somXdim;
+
+#define UPDATE_SOM(ip,jp,wp) \
+	if (ip>=0 && jp>=0 && ip<somYdim && jp<somXdim) \
+			{addImage(Iexp,expIdx,Iref,(ip)*somYdim+jp,wp); DIRECT_A1D_ELEM(refWeights,(ip)*somYdim+jp)+=wp;}
+
+			UPDATE_SOM(isom-1,jsom-1,w*sideWeight*0.707); // 0.707 = 1/sqrt(2)
+			UPDATE_SOM(isom-1,jsom  ,w*sideWeight);
+			UPDATE_SOM(isom-1,jsom+1,w*sideWeight*0.707);
+
+			UPDATE_SOM(isom  ,jsom-1,w*sideWeight);
+			UPDATE_SOM(isom  ,jsom  ,w);
+			UPDATE_SOM(isom  ,jsom+1,w*sideWeight);
+
+			UPDATE_SOM(isom+1,jsom-1,w*sideWeight*0.707);
+			UPDATE_SOM(isom+1,jsom  ,w*sideWeight);
+			UPDATE_SOM(isom+1,jsom+1,w*sideWeight*0.707);
 		}
 
 		// Normalize by the weight
 		for (size_t k=0; k<nref; ++k)
+		{
 			if (DIRECT_A1D_ELEM(refWeights,k)>0)
 			{
-				float iWeight=1.0f/DIRECT_A1D_ELEM(refWeights,k);
-				float *ptrTo=MULTIDIM_ARRAY(Iref)+k*xydim;
-				for (size_t ij=0; ij<xydim; ++ij)
-					*ptrTo++ *= iWeight;
+				Iref.fillImageWithThis(k,IrefAux);
+				IrefAux.setXmippOrigin();
+				IrefAux/=DIRECT_A1D_ELEM(refWeights,k);
+				centerImage(IrefAux,aux2,aux3);
+				Iref.fillThisWithImage(k,IrefAux);
 			}
+		}
 	}
     Iref.write(fn_out);
 }
