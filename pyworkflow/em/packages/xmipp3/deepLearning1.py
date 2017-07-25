@@ -69,15 +69,14 @@ def printAndOverride(msg):
   print("\r%s"%(msg), end="")
     
 class DeepTFSupervised(object):
-  def __init__(self, rootPath, learningRate= 1e-4, batch_size= BATCH_SIZE):
+  def __init__(self, rootPath, learningRate= 1e-4):
     '''
       @param rootPath: str. Root directory where neural net data will be saved.
                             Generally "extra/nnetData/"
                                                       tfchkpoints/
                                                       tflogs/
       @param learningRate: float. Learning rate for net training
-      @param batch_size: integer. The number of elemets that will be fed to the net at each
-                                  step          
+       
     '''
     self.lRate= learningRate
     self.rootPath= rootPath
@@ -87,8 +86,7 @@ class DeepTFSupervised(object):
     self.checkPointsNames= os.path.join(self.checkPointsNames,"screening")
 
     self.logsSaveName= os.path.join(rootPath,"tflogs")
-        
-    self.batch_size= batch_size
+
     self.num_labels=2
     self.num_channels=None
     self.image_size=None
@@ -103,12 +101,13 @@ class DeepTFSupervised(object):
     self.global_step= None
     self.loss= None
     self.optimizer= None
-                                              
-  def createNet(self, xdim, ydim, num_chan):
+
+  def createNet(self, xdim, ydim, num_chan, nData=2**12):
     '''
       @param xdim: int. height of images
       @param ydim: int. width of images
-      @param num_chan: int. number of channels of images      
+      @param num_chan: int. number of channels of images
+      @param nData: number of positive cases expected in data  
     '''
     print ("Creating net. Learning rate %.1e"%self.lRate)
     ##############################################################
@@ -127,7 +126,7 @@ class DeepTFSupervised(object):
     ######################
     self.global_step = tf.Variable(initial_value=0, name='global_step', trainable=False)
     (self.y_pred, self.merged_summaries, self.optimizer,
-     self.loss, self.accuracy)= main_network(self.X,self.Y, num_labels, learningRate= self.lRate, globalStep= self.global_step)
+     self.loss, self.accuracy)= main_network(self.X,self.Y, num_labels, learningRate= self.lRate, globalStep= self.global_step, nData= nData)
   
   def startSessionAndInitialize(self, numberOfThreads=8):
     '''
@@ -202,17 +201,7 @@ class DeepTFSupervised(object):
     self.createNet()
     self.startSessionAndInitialize()
 
-  def mutateLabels(self, prevScoresDict, trueLabels, md_ids, temp):
-    newLabels= np.copy(trueLabels)
-    for i in range(trueLabels.shape[0]):
-      mdId= md_ids[i]
-      if mdId in prevScoresDict:
-#        if random.random() > (1.0- 2.0*abs(prevScoresDict[mdId]-0.5) )/2.0*temp:
-        if random.random() > (1.0- 2.0*abs(prevScoresDict[mdId]-0.5) )*temp:
-          newLabels[i,...]= (trueLabels[i,...] +1) %2
-    return newLabels
-
-  def trainNet(self, numberOfBatches, dataManagerTrain, dataManagerTest=None, useAdaptatLabels=False):
+  def trainNet(self, numberOfBatches, dataManagerTrain, dataManagerTest=None):
     '''
       @param numberOfBatches: int. The number of batches that will be used for training 
       @param dataManagerTrain: DataManager. Object that will provide training batches (Xs and labels)
@@ -238,32 +227,23 @@ class DeepTFSupervised(object):
     else:
       return
     time0 = time.time()
-
-    lastPredsDict= {}
     epochSize= float(dataManagerTrain.getEpochSize())
 
     tflearn.is_training(True, session=self.session)
     for iterNum in range(numberOfRemainingBatches):
       trainDataBatch= dataManagerTrain.getRandomBatch()
       x_batchTrain, labels_batchTrain, md_ids = trainDataBatch
-      if useAdaptatLabels :
-#        temp= 1+(i_global/epochSize) if i_global/epochSize>5 else 2**10
-#        temp= 1+(i_global/epochSize)
-        temp= 1
-        labels_batchTrain= self.mutateLabels(lastPredsDict, labels_batchTrain, md_ids,temp=temp)
+
       feed_dict_train= {self.X : x_batchTrain, self.Y: labels_batchTrain }
       i_global, __, stepLoss, y_pred= self.session.run( [self.global_step, self.optimizer, self.loss,
                                                   self.y_pred],
                                                  feed_dict=feed_dict_train )
-      if useAdaptatLabels:
-        for scores, ndId in zip( y_pred, md_ids):
-          lastPredsDict[ndId]= scores[0]
 
       currentLoss.append( stepLoss)
 
       print("iterNum %d/%d trainLoss: %3.4f"%((i_global), numberOfBatches, stepLoss))
       sys.stdout.flush()      
-      if i_global % EVALUATE_AT ==0:
+      if dataManagerTest and i_global % EVALUATE_AT ==0:
         timeBatches= time.time() -time0
         timeTest=time.time()
         self.testPerformance(i_global,trainDataBatch,dataManagerTest)
@@ -330,29 +310,21 @@ class DeepTFSupervised(object):
       metadataId_list+= metadataIdTuple
     y_pred= np.concatenate(y_pred_list)
     labels= np.concatenate(labels_list)
-    accuracy= self.accuracy_score(labels, y_pred)
-    auc= roc_auc_score(labels, y_pred)
-    y_pred=y_pred[:,1]
-    pos_labels= labels[:,1]
-    print("GLOBAL test accuracy: %f  auc: %f"%(accuracy,auc))
-    posScores= y_pred[pos_labels==1]
-    negScores= y_pred[pos_labels==0]
-    print("pos_mean %f pos_sd %f neg_mean %f neg_perc90 %f neg_perc95 %f"%(np.mean(posScores),np.std(posScores),
-                                                         np.mean(negScores), np.percentile(negScores,90),
-                                                         np.percentile(negScores,95)))
-    print("number of y_pred , labels, metadataIdTuple %d %d %d"%(len(y_pred) , len(labels), len(metadataIdTuple)))                                                         
-##    with open("/home/rsanchez/app/scipion/pyworkflow/em/packages/xmipp3/backupDeepLearning/scores.tab","w") as f:
-##      best_accuracy= 0
-##      thr=0
-##      for score, label in zip(y_pred, pos_labels):
-##        f.write("%f\t%d\n"%(float(score),float(label)))
-##        tmpY=[ 1 if elem>=score else 0 for elem in y_pred]
-##        tmp_accu=accuracy_score(pos_labels, tmpY)
-##        if tmp_accu> best_accuracy:
-##          best_accuracy= tmp_accu
-##          thr= score
-##    print("best thr %f --> accuracy %f"%(thr,best_accuracy))
-    return y_pred , labels, metadataId_list
+    y_pred_oneCol= y_pred[:,1]
+    if dataManger.nFalse>0:
+      accuracy= self.accuracy_score(labels, y_pred)
+      auc= roc_auc_score(labels, y_pred)
+      y_pred= y_pred_oneCol
+      pos_labels= labels[:,1]
+      print("GLOBAL test accuracy: %f  auc: %f"%(accuracy,auc))
+      posScores= y_pred[pos_labels==1]
+      negScores= y_pred[pos_labels==0]
+      print("pos_mean %f pos_sd %f neg_mean %f neg_perc90 %f neg_perc95 %f"%(np.mean(posScores),np.std(posScores),
+                                                           np.mean(negScores), np.percentile(negScores,90),
+                                                           np.percentile(negScores,95)))
+      print("number of y_pred , labels, metadataIdTuple %d %d %d"%(len(y_pred) , len(labels), len(metadataIdTuple)))                                                         
+
+    return y_pred_oneCol, labels, metadataId_list
 
 class DataManager(object):
 
@@ -369,7 +341,7 @@ class DataManager(object):
     self.shape= (xdim,ydim,1)
     self.nTrue= posImagesSetOfParticles.getSize()
     
-    self.batchSize= BATCH_SIZE
+    self.batchSize= min(BATCH_SIZE, self.nTrue)
 
     self.splitPoint= self.batchSize//2
 
@@ -492,8 +464,6 @@ class DataManager(object):
     y= np.concatenate(labels)
     print(x.shape, y.shape)
     print(np.min(x), np.mean(x), np.max(x))
-#    joblib.dump(x, "/home/jsegura/Tesis/DataStack.pckl")
-#    joblib.dump(y, "/home/jsegura/Tesis/labelsStack.pckl")
     return x,y
 
   def getIteratorPredictBatch(self):
@@ -506,7 +476,6 @@ class DataManager(object):
     n = 0
     idAndType=[]
     for objId in mdTrue:
-#      print("True id", id)
       fnImage = mdTrue.getValue(md.MDL_IMAGE, objId)
       I.read(fnImage)
       batchStack[n,...]= np.expand_dims(I.getData(),-1)

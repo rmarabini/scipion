@@ -1,15 +1,16 @@
-import os, sys
-import numpy as np
-import tensorflow as tf
-import tflearn
-from scipy.ndimage.filters import gaussian_filter
 '''
 rsanchez@cnb.csic.es
 
 '''
 
+import os, sys
+import numpy as np
+import tensorflow as tf
+import tflearn
+from scipy.ndimage.filters import gaussian_filter
+
 DTYPE = tf.float32
-MODEL = "Trial"  #Can be ConvNet or ResNet or Trial
+MODEL = "VarSize"  #Can be ConvNet or ResNet or Trial or "VarSize"
 
 def blurInput(batch):
   for i in range(len(batch)):
@@ -56,21 +57,22 @@ def myResNetBlock(network, nPairsOfLayers, nkernels, kernelSize, reductionStep=1
 
 
 import scipy.stats as st
-def gkern(kernlen=21, nsig=3):
+def gkern(kernlen=5, nsig=1):
   """Returns a 2D Gaussian kernel array."""
   interval = (2*nsig+1.)/(kernlen)
   x = np.linspace(-nsig-interval/2., nsig+interval/2., kernlen+1)
   kern1d = np.diff(st.norm.cdf(x))
   kernel_raw = np.sqrt(np.outer(kern1d, kern1d))
   kernel = kernel_raw/kernel_raw.sum()
-  return kernel
+  return kernel.astype(np.float32)
 
-def main_network(x, labels, num_labels, learningRate, globalStep):
+def main_network(x, labels, num_labels, learningRate, globalStep, nData):
   '''
     4D-tensor x,  [imageNumber, height, width, nChanns]
     2D-tensor labels, [imageNumber, 2]
     float learningRate
     tf.Variable globalStep
+    int nData Expected data size (used to select model size)
   '''
 
   x =  tf.image.resize_bicubic(x, size=[128,128])
@@ -79,40 +81,40 @@ def main_network(x, labels, num_labels, learningRate, globalStep):
   L2_CONST= 1e-5
 
   if MODEL=="Trial":
-    K = np.array([[0.003765,0.015019,0.023792,0.015019,0.003765],
-                  [0.015019,0.059912,0.094907,0.059912,0.015019],
-                  [0.023792,0.094907,0.150342,0.094907,0.023792],
-                  [0.015019,0.059912,0.094907,0.059912,0.015019],
-                  [0.003765,0.015019,0.023792,0.015019,0.003765]], dtype='float32')
-
-    # as tensorflow constants with correct shapes
-#    with tf.variable_scope("gaussian_filter") as scope:
-#      w = tf.constant(K.reshape(K.shape[0],K.shape[1], 1, 1))
-#      network = tf.concat( [x, tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding='SAME')], axis=-1 )
-
-    network = tflearn.layers.conv.conv_2d(network, 32, 15, strides=1, activation='relu')
-    network = tflearn.layers.conv.conv_2d(network, 32, 15, strides=1, activation='linear')
-    network = tflearn.layers.normalization.batch_normalization(network)
-    network = tflearn.activations.relu(network)
-    network = tflearn.layers.conv.max_pool_2d(network, kernel_size=7, strides=4)
-
-    network = tflearn.layers.conv.conv_2d(network, 64, 11, strides=1, activation='relu')
-    network = tflearn.layers.conv.conv_2d(network, 64, 11, strides=1, activation='linear')
-    network = tflearn.layers.normalization.batch_normalization(network)
-    network = tflearn.activations.relu(network)
-    network = tflearn.layers.conv.max_pool_2d(network, kernel_size=5, strides=3)
-
-    network = tflearn.layers.conv.conv_2d(network, 128, 9, strides=1, activation='linear')
+    network = tflearn.layers.conv.conv_2d(network, 8, 30, strides=1, activation='relu')
+    network = tflearn.layers.conv.conv_2d(network, 8, 30, strides=1, activation='linear')
     network = tflearn.layers.normalization.batch_normalization(network)
     network = tflearn.activations.relu(network)
     network = tflearn.layers.conv.avg_pool_2d(network, kernel_size=4, strides=2)
 
-    network = tflearn.layers.core.fully_connected( network, 2**10, activation='relu', regularizer='L2', weight_decay= L2_CONST)
+    network = tflearn.layers.core.fully_connected( network, 2**9, activation='relu', regularizer='L2', weight_decay= L2_CONST)
     network = tflearn.layers.core.dropout(network, DROPOUT_KEEP_PROB)
     logits =  tflearn.layers.core.fully_connected( network, num_labels, activation='linear')
     y_pred = tf.nn.softmax(logits)
-    current_lr = tf.train.exponential_decay(learningRate, globalStep, 10000, 0.96, staircase=True)
-#    current_lr = learningRate
+    current_lr = tf.train.exponential_decay(learningRate, globalStep, 500, 0.90, staircase=True)
+    optimizer = tf.train.AdamOptimizer(learning_rate= learningRate)
+  elif MODEL=="VarSize":
+    if nData<1500:
+      modelDepth=1
+    elif 1500<=nData<20000:
+      modelDepth=2
+    else:
+      modelDepth=3
+    print("Model depth: %d"%modelDepth)
+    for i in range(1, modelDepth+1):
+      network = tflearn.layers.conv.conv_2d(network, 2**(2+i), 30//2**i, strides=1, activation='relu',regularizer='L2', weight_decay= L2_CONST)
+      network = tflearn.layers.conv.conv_2d(network, 2**(2+i), 30//2**i, strides=1, activation='linear')
+      network = tflearn.layers.normalization.batch_normalization(network)
+      network = tflearn.activations.relu(network)
+      if i!=modelDepth:
+    	network = tflearn.layers.conv.max_pool_2d(network, kernel_size=7-(2*(i-1)), strides=2)
+
+    network = tflearn.layers.conv.avg_pool_2d(network, kernel_size=4, strides=2)
+    network = tflearn.layers.core.fully_connected( network, 2**9, activation='relu', regularizer='L2', weight_decay= L2_CONST)
+    network = tflearn.layers.core.dropout(network, DROPOUT_KEEP_PROB)
+    logits =  tflearn.layers.core.fully_connected( network, num_labels, activation='linear')
+    y_pred = tf.nn.softmax(logits)
+    current_lr = tf.train.exponential_decay(learningRate, globalStep, 200*modelDepth, 0.90, staircase=True)
     optimizer = tf.train.AdamOptimizer(learning_rate= learningRate)
    
   elif MODEL=="ResNet":
@@ -131,7 +133,7 @@ def main_network(x, labels, num_labels, learningRate, globalStep):
     network = tflearn.layers.core.dropout(network, DROPOUT_KEEP_PROB)
     logits =  tflearn.layers.core.fully_connected( network, num_labels, activation='linear')
     y_pred = tf.nn.softmax(logits)
-    current_lr = tf.train.exponential_decay(learningRate, globalStep, 10000, 0.96, staircase=True)
+    current_lr = tf.train.exponential_decay(learningRate, globalStep, 5000, 0.90, staircase=True)
 #    optimizer = tf.train.AdamOptimizer(learning_rate= current_lr)
     optimizer = tf.train.MomentumOptimizer(learning_rate= current_lr, momentum=0.9, use_nesterov=False)
 
@@ -158,7 +160,7 @@ def main_network(x, labels, num_labels, learningRate, globalStep):
     network = tflearn.layers.core.dropout(network, DROPOUT_KEEP_PROB)
     logits =  tflearn.layers.core.fully_connected( network, num_labels, activation='linear')
     y_pred = tf.nn.softmax(logits)
-    current_lr = tf.train.exponential_decay(learningRate, globalStep, 10000, 0.96, staircase=True)
+    current_lr = tf.train.exponential_decay(learningRate, globalStep, 5000, 0.90, staircase=True)
 #    current_lr = learningRate
     optimizer = tf.train.AdamOptimizer(learning_rate= learningRate)
 
