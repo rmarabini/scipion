@@ -36,6 +36,7 @@ public:
 	int Niter;
 	bool normalizeImages;
 	double sideWeight;
+	bool align;
 
 public:
     //Input metadata file

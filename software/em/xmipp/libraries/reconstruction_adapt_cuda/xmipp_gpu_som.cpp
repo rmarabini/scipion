@@ -43,6 +43,7 @@ void ProgGpuSOM::readParams()
     somYdim = getIntParam("--somdim",1);
     normalizeImages = !checkParam("--dontNormalize");
     sideWeight = getDoubleParam("--sideWeight");
+    align = checkParam("--align");
 }
 
 // Show ====================================================================
@@ -56,6 +57,7 @@ void ProgGpuSOM::show()
 	<< "SOM Ydim:                       " << somYdim   << std::endl
 	<< "Normalize images:               " << normalizeImages << std::endl
 	<< "Side weight:                    " << sideWeight << std::endl
+	<< "Align:                          " << align << std::endl
     ;
 }
 
@@ -69,6 +71,7 @@ void ProgGpuSOM::defineParams()
 	addParamsLine("   [--somdim <xdim=10> <ydim=10>]  : Size of the SOM map");
 	addParamsLine("   [--dontNormalize]          : Don't normalize input images");
 	addParamsLine("   [--sideWeight <w=0.5>]     : Weight for the som update of neighbours");
+	addParamsLine("   [--align]                  : Align images to classes");
     addUsageLine("Computes a SOM map of size xdim x ydim. A very rough alignment is performed");
 }
 
@@ -229,12 +232,15 @@ void ProgGpuSOM::run()
 			double w=DIRECT_A1D_ELEM(winnerCC,i);
 
 			// Align
-			Iref.fillImageWithThis(refIdx,IrefAux);
-			Iexp.fillImageWithThis(expIdx,IexpAux);
-			IrefAux.setXmippOrigin();
-			IexpAux.setXmippOrigin();
-			alignImages(IrefAux,IexpAux,M,true,aux,aux2,aux3);
-			Iexp.fillThisWithImage(expIdx,IexpAux);
+			if (align)
+			{
+				Iref.fillImageWithThis(refIdx,IrefAux);
+				Iexp.fillImageWithThis(expIdx,IexpAux);
+				IrefAux.setXmippOrigin();
+				IexpAux.setXmippOrigin();
+				alignImages(IrefAux,IexpAux,M,true,aux,aux2,aux3);
+				Iexp.fillThisWithImage(expIdx,IexpAux);
+			}
 
 			// Update
 			int jsom=refIdx%somXdim;
@@ -265,7 +271,8 @@ void ProgGpuSOM::run()
 				Iref.fillImageWithThis(k,IrefAux);
 				IrefAux.setXmippOrigin();
 				IrefAux/=DIRECT_A1D_ELEM(refWeights,k);
-				centerImage(IrefAux,aux2,aux3);
+				if (align)
+					centerImage(IrefAux,aux2,aux3);
 				Iref.fillThisWithImage(k,IrefAux);
 			}
 		}
