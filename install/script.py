@@ -372,6 +372,11 @@ else:
     tensorflowVars = 'export TF_NEED_CUDA=0'
     tensorflowFlags = ''
 
+joblib = env.addModule(
+    'joblib',
+    tar='joblib-0.11.tar.gz',
+    default=False)
+
 tensorflow = env.addLibrary(
     'tensorflow',
     tar='tensorflow-1.1.tgz', # -mavx -msse4.2 -msse4.1 -msse3-k
@@ -383,7 +388,7 @@ tensorflow = env.addLibrary(
                '%(scpSoftware)s/bin/python %(scpSoftware)s/lib/python2.7/site-packages/pip install %(scpSoftware)s/tmp/tensorflow_pkg/tensorflow-1.1*.whl'%\
                locals(),
                'software/lib/python2.7/site-packages/tensorflow')],
-    deps=[python,bazel,wheel,pip],
+    deps=[python,bazel,wheel,pip,joblib],
     default=False)
 
 # libxml2 and libxslt are checked instead of compiled because
@@ -414,7 +419,6 @@ sklearn = env.addModule(
     tar='scikit-learn-0.17.tar.gz',
     default=False,
     deps=[scipy, numpy, cython])
-
 
 
 #  ************************************************************************
