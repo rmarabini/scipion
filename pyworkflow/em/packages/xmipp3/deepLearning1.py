@@ -29,50 +29,56 @@ from __future__ import print_function
 from six.moves import range
 import numpy as np
 import sys, os
-import tensorflow as tf
+
 import numpy as np
+import scipy
+import random
 from math import ceil
 
 import time
 from os.path import expanduser
 from pyworkflow.utils import Environ
-from pyworkflow.em.packages.xmipp3.networkDef import main_network
 from sklearn.metrics import roc_auc_score, accuracy_score
 import xmipp
 import pyworkflow.em.metadata as md
-import tflearn
+import joblib
 
-def updateEnviron():
+DEBUG=False
+if DEBUG: print("Debug MODE")
+
+def updateEnviron(gpuNum=None):
   """ Create the needed environment for TensorFlow programs. """
   environ = Environ(os.environ)
-  if  'CUDA' in os.environ and not os.environ['CUDA']=="False":
+  if not gpuNum is None:
     environ.update({'LD_LIBRARY_PATH': os.environ['CUDA_LIB']}, position=Environ.BEGIN)
     environ.update({'LD_LIBRARY_PATH': os.environ['CUDA_HOME']+"/extras/CUPTI/lib64"}, position=Environ.BEGIN)
-updateEnviron()
 
+    os.environ['CUDA_VISIBLE_DEVICES']=str(gpuNum)  #THIS IS FOR USING JUST GPU:# must be changed to select desired gpu
 
+import tensorflow as tf
+import tflearn
+from pyworkflow.em.packages.xmipp3.networkDef import main_network
 
-BATCH_SIZE= 256
+BATCH_SIZE= 128
 
 EVALUATE_AT= 10
-CHECK_POINT_AT= 50
+CHECK_POINT_AT= 100
 
 
 def printAndOverride(msg):
   print("\r%s"%(msg), end="")
     
 class DeepTFSupervised(object):
-  def __init__(self, rootPath, learningRate= 1e-4, batch_size= BATCH_SIZE):
+  def __init__(self, rootPath):
     '''
       @param rootPath: str. Root directory where neural net data will be saved.
                             Generally "extra/nnetData/"
                                                       tfchkpoints/
                                                       tflogs/
       @param learningRate: float. Learning rate for net training
-      @param batch_size: integer. The number of elemets that will be fed to the net at each
-                                  step          
+       
     '''
-    self.lRate= learningRate
+    self.lRate= None
     self.rootPath= rootPath
 
     self.checkPointsNames= os.path.join(rootPath,"tfchkpoints")
@@ -80,8 +86,7 @@ class DeepTFSupervised(object):
     self.checkPointsNames= os.path.join(self.checkPointsNames,"screening")
 
     self.logsSaveName= os.path.join(rootPath,"tflogs")
-        
-    self.batch_size= batch_size
+
     self.num_labels=2
     self.num_channels=None
     self.image_size=None
@@ -96,14 +101,15 @@ class DeepTFSupervised(object):
     self.global_step= None
     self.loss= None
     self.optimizer= None
-                                              
-  def createNet(self, xdim, ydim, num_chan):
+
+  def createNet(self, xdim, ydim, num_chan, nData=2**12):
     '''
       @param xdim: int. height of images
       @param ydim: int. width of images
-      @param num_chan: int. number of channels of images      
+      @param num_chan: int. number of channels of images
+      @param nData: number of positive cases expected in data. Not needed
     '''
-    print ("Creating net. Learning rate %.1e"%self.lRate)
+    print ("Creating net.")
     ##############################################################
     # INTIALIZE INPUT PLACEHOLDERS
     ##############################################################
@@ -114,13 +120,13 @@ class DeepTFSupervised(object):
     tflearn.config.init_training_mode()
     self.X= tf.placeholder( tf.float32, shape=(None, self.image_size[0], self.image_size[1], num_chan), name="X")
     self.Y= tf.placeholder(tf.float32, shape=(None, num_labels), name="Y")
-    
+    self.lRate= tf.placeholder(tf.float32, name="lerningRate")
     ######################
     # NEURAL NET CREATION
     ######################
     self.global_step = tf.Variable(initial_value=0, name='global_step', trainable=False)
     (self.y_pred, self.merged_summaries, self.optimizer,
-     self.loss, self.accuracy)= main_network(self.X,self.Y, num_labels, learningRate= self.lRate, globalStep= self.global_step)
+     self.loss, self.accuracy)= main_network(self.X,self.Y, num_labels, learningRate= self.lRate, globalStep= self.global_step, nData= nData)
   
   def startSessionAndInitialize(self, numberOfThreads=8):
     '''
@@ -134,7 +140,8 @@ class DeepTFSupervised(object):
     if not os.path.exists(save_dir):
       os.makedirs(save_dir)
 
-    self.saver = tf.train.Saver()  
+    self.saver = tf.train.Saver()
+    print("numberOfThreads",numberOfThreads)
     if numberOfThreads is None:
       self.session = tf.Session()
     else:
@@ -194,8 +201,7 @@ class DeepTFSupervised(object):
     self.createNet()
     self.startSessionAndInitialize()
 
-
-  def trainNet(self, numberOfBatches, dataManagerTrain, dataManagerTest=None):
+  def trainNet(self, numberOfBatches, dataManagerTrain, learningRate, dataManagerTest=None, auto_stop=False):
     '''
       @param numberOfBatches: int. The number of batches that will be used for training 
       @param dataManagerTrain: DataManager. Object that will provide training batches (Xs and labels)
@@ -206,12 +212,24 @@ class DeepTFSupervised(object):
     ########################
     # TENSOR FLOW RUN
     ########################
+    print("Learning rate %.1e"% learningRate)
+    learningrate_0= learningRate
+    print("auto_stop:", auto_stop)
+    batchsPerEpoch= numberOfBatches//dataManagerTrain.getBatchSize()
+    hasImproved=False
+    numEpochsNoImprov=0
+    epochImprovement=0
+
+
     trainDataBatch= dataManagerTrain.getRandomBatch()
-    x_batchTrain, labels_batchTrain= trainDataBatch
-    feed_dict_train= {self.X : x_batchTrain, self.Y: labels_batchTrain}
+    x_batchTrain, labels_batchTrain, md_ids = trainDataBatch
+    feed_dict_train= {self.X : x_batchTrain, self.Y: labels_batchTrain, self.lRate: learningRate}
     tflearn.is_training(False, session=self.session)
     i_global,stepLoss= self.session.run( [self.global_step, self.loss], feed_dict= feed_dict_train)
     numberOfRemainingBatches= max(0, numberOfBatches- i_global)
+    bestStepLoss= 2^30
+    currentLoss=[]
+    modelWasSaved=False
     if numberOfBatches >0:
       print("Training net for %d batches of size %d"%(numberOfRemainingBatches, dataManagerTrain.getBatchSize()))
       print("Initial loss %f"%stepLoss)
@@ -219,30 +237,64 @@ class DeepTFSupervised(object):
     else:
       return
     time0 = time.time()
+    epochSize= float(dataManagerTrain.getEpochSize())
+
     tflearn.is_training(True, session=self.session)
     for iterNum in range(numberOfRemainingBatches):
       trainDataBatch= dataManagerTrain.getRandomBatch()
-      x_batchTrain, labels_batchTrain = trainDataBatch
-      feed_dict_train= {self.X : x_batchTrain, self.Y: labels_batchTrain }
-      i_global, __, stepLoss,= self.session.run( [self.global_step, self.optimizer, self.loss],
+      x_batchTrain, labels_batchTrain, md_ids = trainDataBatch
+
+      feed_dict_train= {self.X : x_batchTrain, self.Y: labels_batchTrain, self.lRate: learningRate }
+      i_global, __, stepLoss, y_pred= self.session.run( [self.global_step, self.optimizer, self.loss,
+                                                  self.y_pred],
                                                  feed_dict=feed_dict_train )
-      
+
+      currentLoss.append( stepLoss)
 
       print("iterNum %d/%d trainLoss: %3.4f"%((i_global), numberOfBatches, stepLoss))
       sys.stdout.flush()      
-      if i_global % EVALUATE_AT ==0:
+      if dataManagerTest and i_global % EVALUATE_AT ==0:
         timeBatches= time.time() -time0
         timeTest=time.time()
         self.testPerformance(i_global,trainDataBatch,dataManagerTest)
         print("%d batches time: %f s. time for test %f s"%(EVALUATE_AT, timeBatches, time.time() -timeTest))
         time0 = time.time()
         sys.stdout.flush()
+          
       if (i_global + 1 ) % CHECK_POINT_AT==0:
-        self.saver.save(self.session, save_path= self.checkPointsNames, global_step= self.global_step) 
-        print("\nSaved checkpoint.")   
+        stepLossMean= np.mean(currentLoss)
+        currentLoss=[]
+        improvement= bestStepLoss-stepLossMean
+        print("Training improvement since last checkpoint %.5f"%(improvement))
+        if improvement>0:
+          epochImprovement= improvement
+          modelWasSaved=True
+          hasImproved= True
+          bestStepLoss= stepLossMean
+          self.saver.save(self.session, save_path= self.checkPointsNames, global_step= self.global_step) 
+          print("\nSaved checkpoint.")
+
+      if auto_stop and (i_global+1)% batchsPerEpoch==0:
+        print("Epoch %d finished. Learning rate %.1e. Epoch improvement: %f"%(iterNum//batchsPerEpoch, learningRate, epochImprovement))
+        epochImprovement=0
+        if not hasImproved:
+          numEpochsNoImprov+=1
+          if numEpochsNoImprov==2:
+            learningRate*= 0.1
+            print("reducing learning rate to %.1e"%learningRate)
+            numEpochsNoImprov=0
+          if learningRate < 0.01*learningrate_0:
+            print("CONVERGENCY AUTO-DETECTED")
+            break
+        else:
+          numEpochsNoImprov=0
+          hasImproved= False
 
     self.testPerformance(i_global,trainDataBatch, dataManagerTest)
-    
+    if not modelWasSaved:
+      self.saver.save(self.session, save_path= self.checkPointsNames, global_step= self.global_step)
+      print("\nSaved checkpoint.")
+
   def accuracy_score(self, labels, predictions ):
     return (100.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1))
             / predictions.shape[0])    
@@ -250,7 +302,7 @@ class DeepTFSupervised(object):
   def testPerformance(self, stepNum, trainDataBatch, testDataManager=None):
     tflearn.is_training(False, session=self.session)      
 
-    batch_x, batch_y= trainDataBatch
+    batch_x, batch_y, md_ids= trainDataBatch
     feed_dict_train= {self.X : batch_x, self.Y: batch_y}
     c_e_train, y_pred_train, merged = self.session.run( [self.loss, self.y_pred, self.merged_summaries], 
                                                  feed_dict = feed_dict_train )
@@ -290,29 +342,21 @@ class DeepTFSupervised(object):
       metadataId_list+= metadataIdTuple
     y_pred= np.concatenate(y_pred_list)
     labels= np.concatenate(labels_list)
-    accuracy= self.accuracy_score(labels, y_pred)
-    auc= roc_auc_score(labels, y_pred)
-    y_pred=y_pred[:,1]
-    pos_labels= labels[:,1]
-    print("GLOBAL test accuracy: %f  auc: %f"%(accuracy,auc))
-    posScores= y_pred[pos_labels==1]
-    negScores= y_pred[pos_labels==0]
-    print("pos_mean %f pos_sd %f neg_mean %f neg_perc90 %f neg_perc95 %f"%(np.mean(posScores),np.std(posScores),
-                                                         np.mean(negScores), np.percentile(negScores,90),
-                                                         np.percentile(negScores,95)))
-    print("number of y_pred , labels, metadataIdTuple %d %d %d"%(len(y_pred) , len(labels), len(metadataIdTuple)))                                                         
-##    with open("/home/rsanchez/app/scipion/pyworkflow/em/packages/xmipp3/backupDeepLearning/scores.tab","w") as f:
-##      best_accuracy= 0
-##      thr=0
-##      for score, label in zip(y_pred, pos_labels):
-##        f.write("%f\t%d\n"%(float(score),float(label)))
-##        tmpY=[ 1 if elem>=score else 0 for elem in y_pred]
-##        tmp_accu=accuracy_score(pos_labels, tmpY)
-##        if tmp_accu> best_accuracy:
-##          best_accuracy= tmp_accu
-##          thr= score
-##    print("best thr %f --> accuracy %f"%(thr,best_accuracy))
-    return y_pred , labels, metadataId_list
+    y_pred_oneCol= y_pred[:,1]
+    if dataManger.nFalse>0:
+      accuracy= self.accuracy_score(labels, y_pred)
+      auc= roc_auc_score(labels, y_pred)
+      y_pred= y_pred_oneCol
+      pos_labels= labels[:,1]
+      print("GLOBAL test accuracy: %f  auc: %f"%(accuracy,auc))
+      posScores= y_pred[pos_labels==1]
+      negScores= y_pred[pos_labels==0]
+      print("pos_mean %f pos_sd %f neg_mean %f neg_perc90 %f neg_perc95 %f"%(np.mean(posScores),np.std(posScores),
+                                                           np.mean(negScores), np.percentile(negScores,90),
+                                                           np.percentile(negScores,95)))
+      print("number of y_pred , labels, metadataIdTuple %d %d %d"%(len(y_pred) , len(labels), len(metadataIdTuple)))                                                         
+
+    return y_pred_oneCol, labels, metadataId_list
 
 class DataManager(object):
 
@@ -323,12 +367,13 @@ class DataManager(object):
     
     self.mdTrue  = md.MetaData(posImagesXMDFname)
     self.fnListTrue =self.mdTrue.getColumnValues(md.MDL_IMAGE)
+    
 
     xdim, ydim, _   = posImagesSetOfParticles.getDim()
     self.shape= (xdim,ydim,1)
     self.nTrue= posImagesSetOfParticles.getSize()
     
-    self.batchSize= BATCH_SIZE
+    self.batchSize= min(BATCH_SIZE, self.nTrue)
 
     self.splitPoint= self.batchSize//2
 
@@ -343,15 +388,66 @@ class DataManager(object):
     else:
       self.getRandomBatch= self.NOgetRandomBatchWorker
     
+    if DEBUG:
+      self.nTrue=  2**9
+      self.nFalse= 2**9
+
   def getMetadata(self) :
     return  self.mdTrue, self.mdFalse
 
   def getNBatches(self, Nepochs):
     return  int(ceil(2*self.nTrue*Nepochs/self.batchSize))
 
+  def getEpochSize(self):
+    return 2*self.nTrue
+
   def getBatchSize(self):
     return self.batchSize
+
+  def _random_flip_leftright(self, batch):
+    for i in range(len(batch)):
+      if bool(random.getrandbits(1)):
+        batch[i] = np.fliplr(batch[i])
+    return batch
+
+  def _random_flip_updown(self, batch):
+    for i in range(len(batch)):
+      if bool(random.getrandbits(1)):
+        batch[i] = np.flipud(batch[i])
+    return batch
+
+  def _random_90degrees_rotation(self, batch, rotations=[0, 1, 2, 3]):
+    for i in range(len(batch)):
+      num_rotations = random.choice(rotations)
+      batch[i] = np.rot90(batch[i], num_rotations)
+    return batch
+
+  def _random_rotation(self, batch, max_angle):
+    for i in range(len(batch)):
+      if bool(random.getrandbits(1)):
+        # Random angle
+        angle = random.uniform(-max_angle, max_angle)
+        batch[i] = scipy.ndimage.interpolation.rotate(batch[i], angle,reshape=False, mode="reflect")
+    return batch
+
+  def _random_blur(self, batch, sigma_max):
+    for i in range(len(batch)):
+      if bool(random.getrandbits(1)):
+        # Random sigma
+        sigma = random.uniform(0., sigma_max)
+        batch[i] =scipy.ndimage.filters.gaussian_filter(batch[i], sigma)
+    return batch
   
+  def augmentBatch(self, batch):
+    if bool(random.getrandbits(1)):
+      batch= self._random_flip_leftright(batch)
+      batch= self._random_flip_updown(batch)
+    if bool(random.getrandbits(1)):
+      batch= self._random_90degrees_rotation(batch)
+    if bool(random.getrandbits(1)):
+      batch= self._random_rotation(batch, 10.0)
+    return batch
+
   def NOgetRandomBatchWorker(self):
     raise ValueError("needs positive and negative images to compute random batch. Just pos provided")
     
@@ -361,16 +457,19 @@ class DataManager(object):
     splitPoint = self.splitPoint
     batchStack   = self.batchStack
     batchLabels  = np.zeros((batchSize, 2))
-    idxListTrue = np.random.choice(len(self.fnListTrue),splitPoint,False)
-    idxListFalse = np.random.choice(len(self.fnListFalse),splitPoint,False)
+
+    idxListTrue =  np.random.choice( self.nTrue,  splitPoint, False)
+    idxListFalse = np.random.choice( self.nFalse, splitPoint, False)
 
     I = xmipp.Image()
     n = 0
+    finalIds= []
     for idx in idxListTrue:
       fnImage = self.fnListTrue[idx]
       I.read(fnImage)
       batchStack[n,...]= np.expand_dims(I.getData(),-1)
       batchLabels[n, 1]= 1
+      finalIds.append(idx)
       n+=1
       if n>=splitPoint:
           break
@@ -379,6 +478,7 @@ class DataManager(object):
       I.read(fnImage)
       batchStack[n,...]= np.expand_dims(I.getData(),-1)
       batchLabels[n, 0]= 1
+      finalIds.append(idx)
       n+=1
       if n>=batchSize:
           break
@@ -386,8 +486,17 @@ class DataManager(object):
     shuffInd= np.random.choice(n,n, replace=False)
     batchStack= batchStack[shuffInd, ...]
     batchLabels= batchLabels[shuffInd, ...]
+    finalIds= [finalIds[i] for i in shuffInd]
+    return self.augmentBatch(batchStack), batchLabels, finalIds
 
-    return batchStack, batchLabels
+  def getDataAsNp(self):
+    allData= self.getIteratorPredictBatch()
+    x, labels, __ = zip(* allData)
+    x= np.concatenate(x)
+    y= np.concatenate(labels)
+    print(x.shape, y.shape)
+    print(np.min(x), np.mean(x), np.max(x))
+    return x,y
 
   def getIteratorPredictBatch(self):
     batchSize = self.batchSize
@@ -399,7 +508,6 @@ class DataManager(object):
     n = 0
     idAndType=[]
     for objId in mdTrue:
-#      print("True id", id)
       fnImage = mdTrue.getValue(md.MDL_IMAGE, objId)
       I.read(fnImage)
       batchStack[n,...]= np.expand_dims(I.getData(),-1)

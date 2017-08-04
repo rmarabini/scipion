@@ -1,157 +1,168 @@
+'''
+rsanchez@cnb.csic.es
+
+'''
+
 import os, sys
 import numpy as np
 import tensorflow as tf
 import tflearn
-'''
-Inception-like deep net
-
-'''
-DROPOUT_KEEP_PROB=0.5
-
-EPSILON=1e-8 # For adam optimizer
+from scipy.ndimage.filters import gaussian_filter
 
 DTYPE = tf.float32
+MODEL = "VarSize"  #Can be ConvNet or ResNet or Trial or "VarSize"
 
-def parametric_relu(_x, name="prelu"):
-  with tf.variable_scope('prelu'+str(name) ) as scope:
-    alphas = tf.get_variable('alpha', _x.get_shape()[-1],
-                         initializer=tf.constant_initializer(0.0),
-                          dtype=tf.float32)
-    pos = tf.nn.relu(_x)
-    neg = alphas * (_x - abs(_x)) * 0.5
+def blurInput(batch):
+  for i in range(len(batch)):
+    batch[i] = gaussian_filter(batch[i], sigma=0.5)
+  return batch
 
-  return pos + neg
-  
-relu_function= tf.nn.relu
-##relu_function= parametric_relu
-    
-def _weight_variable(name, shape):
-  return tf.get_variable(name, shape, DTYPE, initializer=tf.contrib.layers.xavier_initializer() )
+def add_blur(batch):
+  newBatch= np.zeros( (batch.shape[:-1], batch.shape[-1]+1) )
+  print( newBatch.shape)
+  for i in range(len(batch)):
+    newBatch[i] = batch[i, ...,:-1]
+    newBatch[i,...,-1] = gaussian_filter(batch[i], sigma=0.5)
+  return newBatch
 
-def _bias_variable(name, shape):
-  return tf.get_variable(name, shape, DTYPE, tf.constant_initializer(0.0, dtype=DTYPE))
+def myResNetBlock(network, nPairsOfLayers, nkernels, kernelSize, reductionStep=1):
+  with tf.variable_scope("myResNetBlock_%d_%d_Reduc_%d"%(nkernels, kernelSize, reductionStep) ) as scope:
+    input_layer= network
+
+    if reductionStep>1:
+      network = tflearn.layers.conv.conv_2d(network, nkernels, kernelSize, strides= reductionStep, activation='relu')
+      network = tflearn.layers.normalization.batch_normalization(network)
+      network = tflearn.activations.relu( network )
+      network = tflearn.layers.conv.conv_2d(network, nkernels, kernelSize, strides=1, activation='linear')
+      network = tflearn.layers.normalization.batch_normalization(network)
+
+      input_layer = tflearn.layers.conv.conv_2d(input_layer, nkernels, 1, strides=  reductionStep)
+
+      input_layer = tflearn.layers.normalization.batch_normalization( input_layer)
+      network = tflearn.activations.relu( network + input_layer )
+      input_layer= network
+      nPairsOfLayers-= 1
+      assert nPairsOfLayers >=0
+
+    for i in range(nPairsOfLayers):
+#      print(input_layer, network)
+      network = tflearn.layers.conv.conv_2d(network, nkernels, kernelSize, strides=1, activation='linear')
+      network = tflearn.layers.normalization.batch_normalization(network)
+      network = tflearn.activations.relu( network)
+      network = tflearn.layers.conv.conv_2d(network, nkernels, kernelSize, strides=1, activation='linear')
+      network = tflearn.layers.normalization.batch_normalization(network)
+      network = tflearn.activations.relu( network + input_layer)
+      input_layer= network
+  return network
 
 
-  
-def createLastLayer( prev_layer_flat, n_labels):
-  with tf.variable_scope('last_softmax_layer' ) as scope:
-    dim = np.prod(prev_layer_flat.get_shape().as_list()[1:])
-    weights = _weight_variable('weights', [dim, n_labels])
-    biases = _bias_variable('biases', [n_labels])
-    logits = tf.matmul(prev_layer_flat, weights) + biases
-    y_pred = tf.nn.softmax(logits)
-  return logits, y_pred
-   
-def conv2d_s1(prev_layer, W):
-  with tf.variable_scope('conv2d') as scope:
-    return tf.nn.conv2d(prev_layer,W,strides=[1,1,1,1],padding='SAME')
- 
-def max_pool_3x3_s1(prev_layer):
-  with tf.variable_scope('max_pool3x3' ) as scope:
-    return tf.nn.max_pool(prev_layer,ksize=[1,3,3,1], strides=[1,1,1,1],padding='SAME')
+import scipy.stats as st
+def gkern(kernlen=5, nsig=1):
+  """Returns a 2D Gaussian kernel array."""
+  interval = (2*nsig+1.)/(kernlen)
+  x = np.linspace(-nsig-interval/2., nsig+interval/2., kernlen+1)
+  kern1d = np.diff(st.norm.cdf(x))
+  kernel_raw = np.sqrt(np.outer(kern1d, kern1d))
+  kernel = kernel_raw/kernel_raw.sum()
+  return kernel.astype(np.float32)
 
-def avg_pool_5x5_s1(prev_layer):
-  with tf.variable_scope('avg_pool5x5' ) as scope:
-    return tf.nn.avg_pool(prev_layer,ksize=[1,5,5,1], strides=[1,2,2,1],padding='SAME')
-
-
-def createOneConvLayer(layerNum, prev_layer_out, outChanNum, kernerSize=3, poolingStep=1):
-
-  in_filters= prev_layer_out.get_shape().as_list()[-1]
-  with tf.variable_scope('conv'+str(layerNum) ) as scope:
-    kernel = _weight_variable('weights', [kernerSize, kernerSize, in_filters, outChanNum])
-    conv = tf.nn.conv2d(prev_layer_out, kernel, [1, 1, 1, 1], padding='SAME')
-    biases = _bias_variable('biases', [outChanNum])
-    bias = tf.nn.bias_add(conv, biases)
-    conv_out = relu_function(bias, name="relu")
-    if poolingStep>1:
-      with tf.variable_scope('maxpool') as scope:
-        conv_out = tf.nn.max_pool( conv_out, ksize=[1, kernerSize, kernerSize, 1], 
-                                     strides=[1, poolingStep, poolingStep, 1], padding='SAME')
-    return conv_out, kernel
-        
-def createInceptionModule(layerNum, prev_layer, outChanNum):
-  with tf.variable_scope('inceptionModule_'+str(layerNum) ) as scope:
-    prev_layer_shapes= prev_layer.get_shape().as_list()
-    
-    with tf.variable_scope('conv_1x1' ) as scope:
-      W_conv_1x1_1= _weight_variable("conv_1x1_1weight", shape= [1,1, prev_layer_shapes[-1], outChanNum] )
-      b_conv_1x1_1= _bias_variable("conv_1x1_1bias", shape= [outChanNum] )
-      conv_1x1_1 = conv2d_s1(prev_layer,W_conv_1x1_1) + b_conv_1x1_1
-      
-    with tf.variable_scope('conv_3x3' ) as scope:
-      with tf.variable_scope('conv_1x1' ) as scope:
-        W_conv_1x1_2= _weight_variable("conv_1x1_2weight", shape= [1,1, prev_layer_shapes[-1], outChanNum//2] )
-        b_conv_1x1_2= _bias_variable("conv_1x1_2bias", shape= [outChanNum//2] )
-        conv_1x1_2 = relu_function(conv2d_s1(prev_layer,W_conv_1x1_2) + b_conv_1x1_2)
-        
-      with tf.variable_scope('conv_3x3' ) as scope:
-        W_conv_3x3= _weight_variable("conv_3x3_weight", shape= [3,3, outChanNum//2, outChanNum] )
-        b_conv_3x3= _bias_variable("conv_3x3_bias", shape= [outChanNum] )  
-        conv_3x3 = conv2d_s1(conv_1x1_2, W_conv_3x3)+ b_conv_3x3
-      
-    with tf.variable_scope('conv_5x5' ) as scope:
-      with tf.variable_scope('conv_1x1' ) as scope:    
-        W_conv_1x1_3= _weight_variable("conv_1x1_3weight", shape= [1,1, prev_layer_shapes[-1], outChanNum//2] )
-        b_conv_1x1_3= _bias_variable("conv_1x1_3bias", shape= [outChanNum//2] ) 
-        conv_1x1_3 = relu_function(conv2d_s1(prev_layer, W_conv_1x1_3)+b_conv_1x1_3)
-        
-      with tf.variable_scope('conv_5x5' ) as scope:      
-        W_conv_5x5= _weight_variable("conv_5x5_weight", shape= [5,5, outChanNum//2, outChanNum] )
-        b_conv_5x5= _bias_variable("conv_5x5_bias", shape= [outChanNum] )  
-        conv_5x5 = conv2d_s1(conv_1x1_3, W_conv_5x5)+ b_conv_5x5
-
-    with tf.variable_scope('max_pool_3x3' ) as scope:
-      with tf.variable_scope('max_pool_3x3' ) as scope:    
-        maxpool1 = max_pool_3x3_s1(prev_layer)
-      with tf.variable_scope('conv_1x1' ) as scope:          
-        W_conv_1x1_4= _weight_variable("conv_1x1_4weight", shape= [1,1, prev_layer_shapes[-1], outChanNum] )
-        b_conv_1x1_4= _bias_variable("conv_1x1_4bias", shape= [outChanNum] )
-        conv_1x1_4 = conv2d_s1(maxpool1, W_conv_1x1_4)+b_conv_1x1_4
-      
-    conv_out= relu_function(tf.concat( values=[conv_1x1_1, conv_3x3, conv_5x5, conv_1x1_4], axis=3 ) )
-  return conv_out
-
-def main_network(x, labels, num_labels, learningRate, globalStep):
+def main_network(x, labels, num_labels, learningRate, globalStep, nData):
   '''
     4D-tensor x,  [imageNumber, height, width, nChanns]
     2D-tensor labels, [imageNumber, 2]
     float learningRate
     tf.Variable globalStep
+    int nData Expected data size (used to select model size)
   '''
 
-  img_aug= tflearn.data_augmentation.ImageAugmentation()
-  img_aug.add_random_flip_leftright()
-  img_aug.add_random_flip_updown()
+  x =  tf.image.resize_bicubic(x, size=[128,128])
+  network =  x
+  DROPOUT_KEEP_PROB= 0.5
+  L2_CONST= 1e-5
 
-  prev_layer = tflearn.layers.core.input_data(placeholder=x, data_augmentation=img_aug)
+  if MODEL=="Trial":
+    network = tflearn.layers.conv.conv_2d(network, 8, 30, strides=1, activation='relu')
+    network = tflearn.layers.conv.conv_2d(network, 8, 30, strides=1, activation='linear')
+    network = tflearn.layers.normalization.batch_normalization(network)
+    network = tflearn.activations.relu(network)
+    network = tflearn.layers.conv.avg_pool_2d(network, kernel_size=4, strides=2)
 
-#  NUM_FILTERS=[32, 48, 48,  64, 80, 96]
-#  KERNEL_SIZE=[5,   1,  3,  -1, -1, -1]  # -1 for inception module. Overfits for ribosome data
-#  MAX_POOL=   [2,   1,  2,   1,  2,  1]
-
-  NUM_FILTERS=[32, 48, 48, 80, 96]
-  KERNEL_SIZE=[5,   1,  3, -1, -1]  # -1 for inception module
-  MAX_POOL=   [2,   1,  2,  2,  1]
-  
-  for i in range(len(NUM_FILTERS)):
-    if KERNEL_SIZE[i]>0:
-      prev_layer = tflearn.conv_2d(prev_layer, NUM_FILTERS[i], KERNEL_SIZE[i],activation="relu", regularizer= None)
+    network = tflearn.layers.core.fully_connected( network, 2**9, activation='relu', regularizer='L2', weight_decay= L2_CONST)
+    network = tflearn.layers.core.dropout(network, DROPOUT_KEEP_PROB)
+    logits =  tflearn.layers.core.fully_connected( network, num_labels, activation='linear')
+    y_pred = tf.nn.softmax(logits)
+    current_lr = tf.train.exponential_decay(learningRate, globalStep, 500, 0.90, staircase=True)
+    optimizer = tf.train.AdamOptimizer(learning_rate= learningRate)
+  elif MODEL=="VarSize":
+    if nData<1500:
+      modelDepth=1
+    elif 1500<=nData<20000:
+      modelDepth=2
     else:
-      prev_layer= createInceptionModule(i, prev_layer, NUM_FILTERS[i])
-      
-    if MAX_POOL[i]>1:
-      prev_layer = tflearn.layers.conv.max_pool_2d(prev_layer, kernel_size=3,  strides= MAX_POOL[i])
-      prev_layer = tflearn.layers.normalization.local_response_normalization(prev_layer)      
-        
-  prev_layer_flat = tflearn.global_avg_pool(prev_layer)
-  
-  prev_layer_flat= tflearn.fully_connected(prev_layer_flat, 1024, activation='relu', regularizer='L2', weight_decay=1e-4)
-  prev_layer_flat= tflearn.layers.core.dropout(prev_layer_flat, keep_prob=DROPOUT_KEEP_PROB) 
-  logits = tflearn.fully_connected( prev_layer_flat, num_labels)
-  y_pred = tf.nn.softmax(logits)
-  
-  optimizer = tf.train.AdamOptimizer(learning_rate= learningRate, epsilon= EPSILON)
+      modelDepth=3
+    print("Model depth: %d"%modelDepth)
+    for i in range(1, modelDepth+1):
+      network = tflearn.layers.conv.conv_2d(network, 2**(2+i), 30//2**i, strides=1, activation='relu',regularizer='L2', weight_decay= L2_CONST)
+      network = tflearn.layers.conv.conv_2d(network, 2**(2+i), 30//2**i, strides=1, activation='linear')
+      network = tflearn.layers.normalization.batch_normalization(network)
+      network = tflearn.activations.relu(network)
+      if i!=modelDepth:
+    	network = tflearn.layers.conv.max_pool_2d(network, kernel_size=7-(2*(i-1)), strides=2)
+
+    network = tflearn.layers.conv.avg_pool_2d(network, kernel_size=4, strides=2)
+    network = tflearn.layers.core.fully_connected( network, 2**9, activation='relu', regularizer='L2', weight_decay= L2_CONST)
+    network = tflearn.layers.core.dropout(network, DROPOUT_KEEP_PROB)
+    logits =  tflearn.layers.core.fully_connected( network, num_labels, activation='linear')
+    y_pred = tf.nn.softmax(logits)
+    current_lr = tf.train.exponential_decay(learningRate, globalStep, 200*modelDepth, 0.90, staircase=True)
+    optimizer = tf.train.AdamOptimizer(learning_rate= learningRate)
+   
+  elif MODEL=="ResNet":
+    network= myResNetBlock(network, 1, 32, 15, reductionStep=2)
+    network= myResNetBlock(network, 2, 32, 15, reductionStep=1)
+    network= myResNetBlock(network, 1, 64, 11, reductionStep=2)
+    network= myResNetBlock(network, 2, 64, 11, reductionStep=1)
+    network= myResNetBlock(network, 1, 128, 9, reductionStep=2)
+    network= myResNetBlock(network, 2, 128, 9, reductionStep=1)
+    network= myResNetBlock(network, 1, 256, 7, reductionStep=2)
+    network= myResNetBlock(network, 2, 256, 7, reductionStep=1)
+
+#    network = tflearn.layers.conv.global_avg_pool(network)
+
+    network = tflearn.layers.core.fully_connected( network, 2**10, activation='relu', regularizer='L2', weight_decay= L2_CONST)
+    network = tflearn.layers.core.dropout(network, DROPOUT_KEEP_PROB)
+    logits =  tflearn.layers.core.fully_connected( network, num_labels, activation='linear')
+    y_pred = tf.nn.softmax(logits)
+    current_lr = tf.train.exponential_decay(learningRate, globalStep, 5000, 0.90, staircase=True)
+#    optimizer = tf.train.AdamOptimizer(learning_rate= current_lr)
+    optimizer = tf.train.MomentumOptimizer(learning_rate= current_lr, momentum=0.9, use_nesterov=False)
+
+  elif MODEL=="ConvNet":
+
+    network = tflearn.layers.conv.conv_2d(network, 32, 15, strides=1, activation='relu')
+    network = tflearn.layers.conv.conv_2d(network, 32, 15, strides=1, activation='linear')
+    network = tflearn.layers.normalization.batch_normalization(network)
+    network = tflearn.activations.relu(network)
+    network = tflearn.layers.conv.max_pool_2d(network, kernel_size=7, strides=4)
+
+    network = tflearn.layers.conv.conv_2d(network, 64, 11, strides=1, activation='relu')
+    network = tflearn.layers.conv.conv_2d(network, 64, 11, strides=1, activation='linear')
+    network = tflearn.layers.normalization.batch_normalization(network)
+    network = tflearn.activations.relu(network)
+    network = tflearn.layers.conv.max_pool_2d(network, kernel_size=5, strides=3)
+
+    network = tflearn.layers.conv.conv_2d(network, 128, 9, strides=1, activation='linear')
+    network = tflearn.layers.normalization.batch_normalization(network)
+    network = tflearn.activations.relu(network)
+    network = tflearn.layers.conv.avg_pool_2d(network, kernel_size=4, strides=2)
+
+    network = tflearn.layers.core.fully_connected( network, 2**10, activation='relu', regularizer='L2', weight_decay= L2_CONST)
+    network = tflearn.layers.core.dropout(network, DROPOUT_KEEP_PROB)
+    logits =  tflearn.layers.core.fully_connected( network, num_labels, activation='linear')
+    y_pred = tf.nn.softmax(logits)
+    current_lr = tf.train.exponential_decay(learningRate, globalStep, 5000, 0.90, staircase=True)
+#    current_lr = learningRate
+    optimizer = tf.train.AdamOptimizer(learning_rate= learningRate)
 
 
   reg_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
@@ -167,14 +178,16 @@ def main_network(x, labels, num_labels, learningRate, globalStep):
       
     tf.summary.scalar( 'cross_entropy', cross_entropy )
     tf.summary.scalar( 'accuracy', accuracy )
-#    tf.summary.image("1_images", x, max_outputs= 3)
+#    tf.summary.histogram('histogram', prev_layer)
+#    tf.summary.image( '1_images', prev_layer, max_outputs= 3)
+
 #    tf.summary.image("3_kernel_0",  tf.transpose (w_0, [3, 0, 1, 2]), max_outputs= NUM_FILTERS[0]) 
 #    for kerNum in range( NUM_FILTERS[0]):
 #      tf.summary.image("2_activations_0", tf.expand_dims(prev_layer0[:,:,:,kerNum], 3), max_outputs= 3)
 #    for kerNum in range( NUM_FILTERS[1]):
 #      tf.summary.image("3_activations_0", tf.expand_dims(prev_layer1[:,:,:,kerNum], 3), max_outputs= 3)            
 #    for kerNum in range( NUM_FILTERS[2]):
-#      tf.summary.image("3_activations_0", tf.expand_dims(prev_layer2[:,:,:,kerNum], 3), max_outputs= 3)           
+#      tf.summary.image("3_activations_0", tf.expand_dims(prev_layer2[:,:,:,kerNum], 3), max_outputs= 3)
     mergedSummaries= tf.summary.merge_all()
 
   return y_pred, mergedSummaries, optimizer, cross_entropy, accuracy
