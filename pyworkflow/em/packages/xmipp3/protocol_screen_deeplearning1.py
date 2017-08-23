@@ -62,12 +62,13 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                       pointerClass='SetOfParticles',
                       help='Select the set of putative particles particles to classify.')
 
-        form.addParam('auto_stopping',params.BooleanParam, default=False,
+        form.addParam('auto_stopping',params.BooleanParam, default=True,
                       label='Auto stop training when convergency is detected?',
                       help='If you set to *Yes*, the program will automatically stop training'
-                      'if there is no improvement for consecutive 2 epochs learning rate will be decreased'
-					  'by a factor 10. If learningrate_t < 0.01*learningrate_0 training will stop. Warning: '
-                      'Sometimes convergency seems to be reached but after time improvement can still happen')
+                      'if there is no improvement for consecutive 2 epochs, learning rate will be decreased'
+					  'by a factor 10. If learningRate_t < 0.01*learningrate_0 training will stop. Warning: '
+                      'Sometimes convergency seems to be reached, but after time, improvement can still happen. '
+                      'Not recommended for very small data sets (<100 true particles)')
 
         if 'CUDA' in os.environ and not os.environ['CUDA']=="False":
 
@@ -79,10 +80,13 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
         else:
             form.addParallelSection(threads=8, mpi=0)
 
-        form.addParam('Nepochs', params.FloatParam, label="Number of epochs", default=10.0, expertLevel=params.LEVEL_ADVANCED,
+        form.addParam('nEpochs', params.FloatParam, label="Number of epochs", default=10.0, expertLevel=params.LEVEL_ADVANCED,
                       help='Number of epochs for neural network training.')  
         form.addParam('learningRate', params.FloatParam, label="Learning rate", default=1e-3, expertLevel=params.LEVEL_ADVANCED,
                       help='Learning rate for neural network training')
+        form.addParam('nModels', params.IntParam, label="Number of models for ensemble", default=3, expertLevel=params.LEVEL_ADVANCED,
+                      help='Number of models to fit in order to build an ensamble. Tipical values are 3 to 20. The more the better'
+                      'until a point where no gain is obtained')  
 
         form.addSection(label='testingData')
         form.addParam('doTesting', params.BooleanParam, default=False,
@@ -90,11 +94,11 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                       help='If you set to *Yes*, you should select a testing positive set '
                       'and a testing negative set')
         form.addParam('testPosSetOfParticles', params.PointerParam, condition='doTesting',
-											label="Set of positive test particles", 
+                      label="Set of positive test particles", 
                       pointerClass='SetOfParticles',
                       help='Select the set of ground true positive particles.')
         form.addParam('testNegSetOfParticles', params.PointerParam, condition='doTesting',
-										  label="Set of negative test particles", 
+                      label="Set of negative test particles", 
                       pointerClass='SetOfParticles',
                       help='Select the set of ground false positive particles.')
 
@@ -103,11 +107,11 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
     def _insertAllSteps(self):
         self._insertFunctionStep('convertInputStep', self.inPosSetOfParticles.get(), self.inNegSetOfParticles.get(),
 				                     self.predictSetOfParticles.get(), 
-                                 		     self.testPosSetOfParticles.get(), self.testNegSetOfParticles.get()) 
+				                     self.testPosSetOfParticles.get(), self.testNegSetOfParticles.get()) 
         self._insertFunctionStep('train',self.inPosSetOfParticles.get(), self.inNegSetOfParticles.get(), self.testPosSetOfParticles.get(),
-                                 self.testNegSetOfParticles.get(), self.learningRate.get()) 
+				                     self.testNegSetOfParticles.get(), self.learningRate.get()) 
         self._insertFunctionStep('predict',self.testPosSetOfParticles.get(),self.testNegSetOfParticles.get(),
-			                          self.predictSetOfParticles.get(), self.inPosSetOfParticles.get(), self.inNegSetOfParticles.get())
+				                     self.predictSetOfParticles.get(), self.inPosSetOfParticles.get(), self.inNegSetOfParticles.get())
         self._insertFunctionStep('createOutputStep')
         
     #--------------------------- STEPS functions --------------------------------------------   
@@ -151,22 +155,26 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
 							    negImagesSetOfParticles= testNegSetOfParticles)
         else:
 			testDataManager= None
-        nEpochs= self.Nepochs.get()
+        nEpochs= self.nEpochs.get()
         numberOfBatches = trainDataManager.getNBatches(nEpochs)
-        nnet = DeepTFSupervised(rootPath=self._getExtraPath("nnetData"))        
-        nnet.createNet( trainDataManager.shape[0], trainDataManager.shape[1], trainDataManager.shape[2], trainDataManager.nTrue)
-        nnet.startSessionAndInitialize(numberOfThreads)
+        numModels= self.nModels.get()
+        assert numModels>=1, "Error, nModels>=1"
+        for i in range(numModels):
+            print("Training model %d/%d"%((i+1), numModels))
+            nnet = DeepTFSupervised(rootPath=self._getExtraPath("nnetData"), modelNum=i)        
+            nnet.createNet( trainDataManager.shape[0], trainDataManager.shape[1], trainDataManager.shape[2], trainDataManager.nTrue)
+            nnet.startSessionAndInitialize(numberOfThreads)
+            nnet.trainNet(numberOfBatches, trainDataManager, learningRate, testDataManager, self.auto_stopping.get())
+            nnet.close(saveModel= False) #Models will be automatically saved during training, so True no needed
+    #        self.predict( testPosSetOfParticles, testNegSetOfParticles, inPosSetOfParticles, inNegSetOfParticles)
+    #        raise ValueError("Debug mode")
+            del nnet
 
-        nnet.trainNet(numberOfBatches, trainDataManager, learningRate, testDataManager, self.auto_stopping.get())
-        nnet.close(saveModel= False) #Models will be automatically saved during training, so True no needed
-        
-#        self.predict( testPosSetOfParticles, testNegSetOfParticles, inPosSetOfParticles, inNegSetOfParticles)
-#        raise ValueError("Debug mode")
 
-        del nnet
-        
     def predict(self, testPosSetOfParticles, testNegSetOfParticles, predictSetOfParticles, inPosSetOfParticles, inNegSetOfParticles):
         from pyworkflow.em.packages.xmipp3.deepLearning1 import  DeepTFSupervised, DataManager, updateEnviron
+        import numpy as np
+        from sklearn.metrics import accuracy_score, roc_auc_score
 
         if self.gpuToUse:
             updateEnviron( self.gpuToUse.get() )
@@ -183,20 +191,37 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                                        posImagesSetOfParticles= predictSetOfParticles,
                                        negImagesXMDFname= None,
                                        negImagesSetOfParticles= None)
+        numModels= self.nModels.get()
 
-        nnet = DeepTFSupervised(rootPath=self._getExtraPath("nnetData"))
-        nnet.createNet( trainDataManager.shape[0], trainDataManager.shape[1], trainDataManager.shape[2], trainDataManager.nTrue)
-        nnet.startSessionAndInitialize(numberOfThreads)
-        y_pred , labels, typeAndIdList = nnet.predictNet(predictDataManager)
-        
-        metadataPos, metadataNeg= predictDataManager.getMetadata()            
+        resultsDictPos={}
+        resultsDictNeg={}
+        for i in range(numModels):
+            print("Predicting with model %d/%d"%((i+1), numModels))
 
-        for score, label, (mdIsPosType, mdId) in zip(y_pred , labels, typeAndIdList):
-          if mdIsPosType==True:
-             metadataPos.setValue(md.MDL_ZSCORE_DEEPLEARNING1, float(score), mdId)
-          else:
-             metadataNeg.setValue(md.MDL_ZSCORE_DEEPLEARNING1, float(score), mdId)
-            
+            nnet = DeepTFSupervised(rootPath=self._getExtraPath("nnetData"), modelNum=i)
+            nnet.createNet( trainDataManager.shape[0], trainDataManager.shape[1], trainDataManager.shape[2], trainDataManager.nTrue)
+            nnet.startSessionAndInitialize(numberOfThreads)
+            y_pred, labels, typeAndIdList = nnet.predictNet(predictDataManager)
+            nnet.close(saveModel= False)
+
+            for score, label, (mdIsPosType, mdId) in zip(y_pred , labels, typeAndIdList):
+              if mdIsPosType==True:
+                 try:
+                     resultsDictPos[mdId]+= float(score)/float(numModels)
+                 except KeyError:
+                     resultsDictPos[mdId]=0.0
+              else:
+                 try:
+                     resultsDictNeg[mdId]+= float(score)/float(numModels)
+                 except KeyError:
+                     resultsDictNeg[mdId]=0.0
+        metadataPos, metadataNeg= predictDataManager.getMetadata()
+        for mdId in resultsDictPos:
+            metadataPos.setValue(md.MDL_ZSCORE_DEEPLEARNING1, resultsDictPos[mdId], mdId)
+
+        for mdId in resultsDictNeg:
+            metadataNeg.setValue(md.MDL_ZSCORE_DEEPLEARNING1, resultsDictNeg[mdId], mdId)
+
         metadataPos.write(self._getPath("particles.xmd"))
 
         if not testPosSetOfParticles is None and not testNegSetOfParticles is None:
@@ -204,11 +229,37 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                                 posImagesSetOfParticles= testPosSetOfParticles,
                                 negImagesXMDFname= self._getExtraPath("testFalseParticlesSet.xmd"),
                                 negImagesSetOfParticles= testNegSetOfParticles)
+
           nnet.close(saveModel= False)
-          nnet = DeepTFSupervised(rootPath=self._getExtraPath("nnetData"))
-          nnet.createNet( trainDataManager.shape[0], trainDataManager.shape[1], trainDataManager.shape[2], trainDataManager.nTrue)
-          nnet.startSessionAndInitialize(numberOfThreads)
-          nnet.predictNet(testDataManager)
+          scores_list=[]
+          labels_list=[]
+          cum_acc_list=[]
+          cum_auc_list=[]
+          for i in range(numModels):
+            print("Predicting test data with model %d/%d"%((i+1), numModels))
+
+            nnet = DeepTFSupervised(rootPath=self._getExtraPath("nnetData"), modelNum=i)
+            nnet.createNet( trainDataManager.shape[0], trainDataManager.shape[1], trainDataManager.shape[2], trainDataManager.nTrue)
+            nnet.startSessionAndInitialize(numberOfThreads)
+            y_pred, labels, typeAndIdList = nnet.predictNet(testDataManager)
+            scores_list.append(y_pred)
+            labels= [ 0 if label[0]==1.0 else 1 for label in labels]
+            labels_list.append(labels)
+            curr_auc= roc_auc_score(labels, y_pred)
+            curr_acc= accuracy_score(labels, [1 if y>0.5 else 0 for y in y_pred])
+            cum_acc_list.append(curr_acc)
+            cum_auc_list.append(curr_auc)
+            print("Model %d test accuracy: %f  auc: %f"%(i, curr_acc, curr_auc))
+            nnet.close(saveModel= False)
+
+          labels= np.concatenate( labels_list)
+          scores= np.concatenate( scores_list)
+          auc_val= roc_auc_score(labels, scores)
+          scores[ scores>0.5]=1
+          scores[ scores<=0.5]=0
+          accuracy_score(labels, scores)
+          print(">>>>>>>>>>>>\nEnsemble test accuracy: %f  auc: %f"%(accuracy_score(labels, scores) , auc_val))
+          print("Mean single model test accuracy: %f  auc: %f"%(np.mean(cum_acc_list) , np.mean(cum_auc_list)))
 
     def createOutputStep(self):
         imgSet = self.predictSetOfParticles.get()

@@ -69,7 +69,7 @@ def printAndOverride(msg):
   print("\r%s"%(msg), end="")
     
 class DeepTFSupervised(object):
-  def __init__(self, rootPath):
+  def __init__(self, rootPath, modelNum=0):
     '''
       @param rootPath: str. Root directory where neural net data will be saved.
                             Generally "extra/nnetData/"
@@ -81,11 +81,10 @@ class DeepTFSupervised(object):
     self.lRate= None
     self.rootPath= rootPath
 
-    self.checkPointsNames= os.path.join(rootPath,"tfchkpoints")
-
+    self.checkPointsNames= os.path.join(rootPath,"tfchkpoints_%d"%modelNum)
     self.checkPointsNames= os.path.join(self.checkPointsNames,"screening")
 
-    self.logsSaveName= os.path.join(rootPath,"tflogs")
+    self.logsSaveName= os.path.join(rootPath,"tflogs_%d"%modelNum)
 
     self.num_labels=2
     self.num_channels=None
@@ -120,13 +119,13 @@ class DeepTFSupervised(object):
     tflearn.config.init_training_mode()
     self.X= tf.placeholder( tf.float32, shape=(None, self.image_size[0], self.image_size[1], num_chan), name="X")
     self.Y= tf.placeholder(tf.float32, shape=(None, num_labels), name="Y")
-    self.lRate= tf.placeholder(tf.float32, name="lerningRate")
+    self.lRate= tf.placeholder(tf.float32, name="learningRate")
     ######################
     # NEURAL NET CREATION
     ######################
     self.global_step = tf.Variable(initial_value=0, name='global_step', trainable=False)
     (self.y_pred, self.merged_summaries, self.optimizer,
-     self.loss, self.accuracy)= main_network(self.X,self.Y, num_labels, learningRate= self.lRate, globalStep= self.global_step, nData= nData)
+     self.loss, self.accuracy)= main_network(self.X,self.Y, num_labels, self.lRate, globalStep= self.global_step, nData= nData)
   
   def startSessionAndInitialize(self, numberOfThreads=8):
     '''
@@ -212,14 +211,23 @@ class DeepTFSupervised(object):
     ########################
     # TENSOR FLOW RUN
     ########################
+    numberOfBatches= max( numberOfBatches, CHECK_POINT_AT+1)
     print("Learning rate %.1e"% learningRate)
-    learningrate_0= learningRate
+    learningRate_0= learningRate
+    learningRate_At_Convergency= 0.01* learningRate
     print("auto_stop:", auto_stop)
-    batchsPerEpoch= numberOfBatches//dataManagerTrain.getBatchSize()
+    batchsPerEpoch= dataManagerTrain.getEpochSize()// dataManagerTrain.getBatchSize() +1
+    saving_checkpoint_at= min(CHECK_POINT_AT, batchsPerEpoch)
     hasImproved=False
     numEpochsNoImprov=0
-    epochImprovement=0
-
+    epochImprovement= 0
+    numEpochsNoImprov_Limit= 2 
+    if batchsPerEpoch < 5:
+      numEpochsNoImprov_Limit= 10
+    elif batchsPerEpoch< 10:
+      numEpochsNoImprov_Limit= 5
+    elif  batchsPerEpoch< 20:
+      numEpochsNoImprov_Limit= 4
 
     trainDataBatch= dataManagerTrain.getRandomBatch()
     x_batchTrain, labels_batchTrain, md_ids = trainDataBatch
@@ -236,9 +244,8 @@ class DeepTFSupervised(object):
       self.testPerformance(i_global,trainDataBatch,dataManagerTest)
     else:
       return
-    time0 = time.time()
-    epochSize= float(dataManagerTrain.getEpochSize())
 
+    time0 = time.time()
     tflearn.is_training(True, session=self.session)
     for iterNum in range(numberOfRemainingBatches):
       trainDataBatch= dataManagerTrain.getRandomBatch()
@@ -261,8 +268,8 @@ class DeepTFSupervised(object):
         time0 = time.time()
         sys.stdout.flush()
           
-      if (i_global + 1 ) % CHECK_POINT_AT==0:
-        stepLossMean= np.mean(currentLoss)
+      if (i_global + 1 ) % saving_checkpoint_at==0:
+        stepLossMean= np.min(currentLoss)
         currentLoss=[]
         improvement= bestStepLoss-stepLossMean
         print("Training improvement since last checkpoint %.5f"%(improvement))
@@ -279,11 +286,11 @@ class DeepTFSupervised(object):
         epochImprovement=0
         if not hasImproved:
           numEpochsNoImprov+=1
-          if numEpochsNoImprov==2:
+          if numEpochsNoImprov== numEpochsNoImprov_Limit:
             learningRate*= 0.1
             print("reducing learning rate to %.1e"%learningRate)
             numEpochsNoImprov=0
-          if learningRate < 0.01*learningrate_0:
+          if learningRate < learningRate_At_Convergency:
             print("CONVERGENCY AUTO-DETECTED")
             break
         else:
@@ -343,18 +350,17 @@ class DeepTFSupervised(object):
     y_pred= np.concatenate(y_pred_list)
     labels= np.concatenate(labels_list)
     y_pred_oneCol= y_pred[:,1]
-    if dataManger.nFalse>0:
-      accuracy= self.accuracy_score(labels, y_pred)
-      auc= roc_auc_score(labels, y_pred)
-      y_pred= y_pred_oneCol
-      pos_labels= labels[:,1]
-      print("GLOBAL test accuracy: %f  auc: %f"%(accuracy,auc))
-      posScores= y_pred[pos_labels==1]
-      negScores= y_pred[pos_labels==0]
-      print("pos_mean %f pos_sd %f neg_mean %f neg_perc90 %f neg_perc95 %f"%(np.mean(posScores),np.std(posScores),
-                                                           np.mean(negScores), np.percentile(negScores,90),
-                                                           np.percentile(negScores,95)))
-      print("number of y_pred , labels, metadataIdTuple %d %d %d"%(len(y_pred) , len(labels), len(metadataIdTuple)))                                                         
+#    if dataManger.nFalse>0:
+#      accuracy= self.accuracy_score(labels, y_pred)
+#      auc= roc_auc_score(labels, y_pred)
+#      y_pred= y_pred_oneCol
+#      pos_labels= labels[:,1]
+#      print("test accuracy: %f  auc: %f"%(accuracy,auc))
+#      posScores= y_pred[pos_labels==1]
+#      negScores= y_pred[pos_labels==0]
+#      print("pos_mean %f pos_sd %f neg_mean %f neg_perc90 %f neg_perc95 %f"%(np.mean(posScores),np.std(posScores),
+#                                                           np.mean(negScores), np.percentile(negScores,90),
+#                                                           np.percentile(negScores,95)))                                                      
 
     return y_pred_oneCol, labels, metadataId_list
 
@@ -395,8 +401,8 @@ class DataManager(object):
   def getMetadata(self) :
     return  self.mdTrue, self.mdFalse
 
-  def getNBatches(self, Nepochs):
-    return  int(ceil(2*self.nTrue*Nepochs/self.batchSize))
+  def getNBatches(self, nEpochs):
+    return  int(ceil(2*self.nTrue*nEpochs/self.batchSize))
 
   def getEpochSize(self):
     return 2*self.nTrue
