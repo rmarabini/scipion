@@ -135,8 +135,8 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
             copyDir(previousRun._getExtraPath('nnetData'),self._getExtraPath('nnetData'))
 
       
-        from pyworkflow.em.packages.xmipp3.deepLearning1 import  DeepTFSupervised, DataManager, updateEnviron
-
+        from pyworkflow.em.packages.xmipp3.deepLearning1 import  DeepTFSupervised, DataManager, updateEnviron, tf_intarnalError
+        
         if self.gpuToUse:
             updateEnviron( self.gpuToUse.get() )
             numberOfThreads=None
@@ -161,9 +161,15 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
         assert numModels>=1, "Error, nModels>=1"
         for i in range(numModels):
             print("Training model %d/%d"%((i+1), numModels))
-            nnet = DeepTFSupervised(rootPath=self._getExtraPath("nnetData"), modelNum=i)        
-            nnet.createNet( trainDataManager.shape[0], trainDataManager.shape[1], trainDataManager.shape[2], trainDataManager.nTrue)
-            nnet.startSessionAndInitialize(numberOfThreads)
+            nnet = DeepTFSupervised(rootPath=self._getExtraPath("nnetData"), modelNum=i)
+            try: 
+                nnet.createNet( trainDataManager.shape[0], trainDataManager.shape[1], trainDataManager.shape[2], trainDataManager.nTrue)
+                nnet.startSessionAndInitialize(numberOfThreads)
+            except tf_intarnalError as e:
+                if e._error_code==13:
+                    raise Exception("Out of gpu Memory. gpu # %d"%(self.gpuToUse.get()))
+                else:
+                    raise e
             nnet.trainNet(numberOfBatches, trainDataManager, learningRate, testDataManager, self.auto_stopping.get())
             nnet.close(saveModel= False) #Models will be automatically saved during training, so True no needed
     #        self.predict( testPosSetOfParticles, testNegSetOfParticles, inPosSetOfParticles, inNegSetOfParticles)
@@ -237,28 +243,30 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
           cum_auc_list=[]
           for i in range(numModels):
             print("Predicting test data with model %d/%d"%((i+1), numModels))
-
+            labels_list.append([])
+            scores_list.append([])
             nnet = DeepTFSupervised(rootPath=self._getExtraPath("nnetData"), modelNum=i)
             nnet.createNet( trainDataManager.shape[0], trainDataManager.shape[1], trainDataManager.shape[2], trainDataManager.nTrue)
             nnet.startSessionAndInitialize(numberOfThreads)
             y_pred, labels, typeAndIdList = nnet.predictNet(testDataManager)
-            scores_list.append(y_pred)
+            scores_list[-1].append(y_pred)
             labels= [ 0 if label[0]==1.0 else 1 for label in labels]
-            labels_list.append(labels)
+            labels_list[-1].append(labels)
             curr_auc= roc_auc_score(labels, y_pred)
             curr_acc= accuracy_score(labels, [1 if y>0.5 else 0 for y in y_pred])
             cum_acc_list.append(curr_acc)
             cum_auc_list.append(curr_auc)
             print("Model %d test accuracy: %f  auc: %f"%(i, curr_acc, curr_auc))
             nnet.close(saveModel= False)
+          labels= np.mean( labels_list, axis=0)[0,:]
+          assert np.all( (labels==1) | (labels==0)), "Error, labels mismatch"
 
-          labels= np.concatenate( labels_list)
-          scores= np.concatenate( scores_list)
+          scores= np.mean(scores_list, axis=0)[0,:]
           auc_val= roc_auc_score(labels, scores)
           scores[ scores>0.5]=1
           scores[ scores<=0.5]=0
           accuracy_score(labels, scores)
-          print(">>>>>>>>>>>>\nEnsemble test accuracy: %f  auc: %f"%(accuracy_score(labels, scores) , auc_val))
+          print(">>>>>>>>>>>>\nEnsemble test accuracy            : %f  auc: %f"%(accuracy_score(labels, scores) , auc_val))
           print("Mean single model test accuracy: %f  auc: %f"%(np.mean(cum_acc_list) , np.mean(cum_auc_list)))
 
     def createOutputStep(self):

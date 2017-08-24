@@ -58,6 +58,7 @@ def updateEnviron(gpuNum=None):
 import tensorflow as tf
 import tflearn
 from pyworkflow.em.packages.xmipp3.networkDef import main_network
+tf_intarnalError= tf.errors.InternalError
 
 BATCH_SIZE= 128
 
@@ -65,8 +66,6 @@ EVALUATE_AT= 10
 CHECK_POINT_AT= 100
 
 
-def printAndOverride(msg):
-  print("\r%s"%(msg), end="")
     
 class DeepTFSupervised(object):
   def __init__(self, rootPath, modelNum=0):
@@ -350,18 +349,6 @@ class DeepTFSupervised(object):
     y_pred= np.concatenate(y_pred_list)
     labels= np.concatenate(labels_list)
     y_pred_oneCol= y_pred[:,1]
-#    if dataManger.nFalse>0:
-#      accuracy= self.accuracy_score(labels, y_pred)
-#      auc= roc_auc_score(labels, y_pred)
-#      y_pred= y_pred_oneCol
-#      pos_labels= labels[:,1]
-#      print("test accuracy: %f  auc: %f"%(accuracy,auc))
-#      posScores= y_pred[pos_labels==1]
-#      negScores= y_pred[pos_labels==0]
-#      print("pos_mean %f pos_sd %f neg_mean %f neg_perc90 %f neg_perc95 %f"%(np.mean(posScores),np.std(posScores),
-#                                                           np.mean(negScores), np.percentile(negScores,90),
-#                                                           np.percentile(negScores,95)))                                                      
-
     return y_pred_oneCol, labels, metadataId_list
 
 class DataManager(object):
