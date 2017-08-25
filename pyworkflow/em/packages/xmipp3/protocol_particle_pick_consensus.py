@@ -71,6 +71,9 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                       help="How many times need a particle to be selected to be considered as a consensus particle. "\
                            "Set to -1 to indicate that it needs to be selected by all algorithms. Set to 1 to indicate that "\
                            "it suffices that only 1 algorithm selects the particle")
+        form.addParam('consensusMode',params.EnumParam, label='Consensus mode', choices=['Picked by at least','Picked exactly'], default=0,
+                      help="Let's sat the consensus is 1. Picked exactly means that a particle is chosen if it has been picked exactly by only 1 "
+                           "algorithm. Picked by at least means that a particle is chosen if it has been picked at least by 1 algorithm.")
 
         form.addParallelSection(threads=4, mpi=0)
         
@@ -153,7 +156,11 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             consensus = len(self.inputCoordinates)
         else:
             consensus = self.consensus.get()
-        consensusCoords = allCoords[votes>=consensus,:]
+        if self.consensusMode==0:
+            consensusCoords = allCoords[votes>=consensus,:]
+        else:
+            consensusCoords = allCoords[votes==consensus,:]
+            
         jaccardIdx = float(len(consensusCoords))/(float(len(allCoords))/len(self.inputCoordinates))
         # COSS: Possible problem with concurrent writes
         with open(self._getExtraPath('jaccard.txt'), "a") as fhJaccard:
