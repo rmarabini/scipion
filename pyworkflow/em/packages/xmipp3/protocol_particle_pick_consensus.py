@@ -67,7 +67,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                       help='Select the set of coordinates to compare')
         form.addParam('consensusRadius',params.IntParam, default=10, label="Radius",
                       help="All coordinates within this radius (in pixels) are presumed to correspond to the same particle")
-        form.addParam('consensus',params.IntParam, default=-1, label="Consensus", expertLevel=LEVEL_ADVANCED,
+        form.addParam('consensus',params.IntParam, default=-1, label="Consensus", 
                       help="How many times need a particle to be selected to be considered as a consensus particle. "\
                            "Set to -1 to indicate that it needs to be selected by all algorithms. Set to 1 to indicate that "\
                            "it suffices that only 1 algorithm selects the particle")
