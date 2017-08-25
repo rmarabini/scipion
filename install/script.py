@@ -445,6 +445,9 @@ env.addPackage('ctffind4', version='4.0.15',
 env.addPackage('ctffind4', version='4.1.5',
                tar='ctffind_V4.1.5.tgz')
 
+env.addPackage('ctffind4', version='4.1.8',
+               tar='ctffind_V4.1.8.tgz')
+
 env.addPackage('summovie', version='1.0.2',
                tar='summovie_1.0.2.tgz')
 
@@ -523,6 +526,9 @@ env.addPackage('motioncor2', version='16.10.19',
 env.addPackage('motioncor2', version='17.01.30',
                tar='motioncor2_01302017.tgz')
 
+env.addPackage('motioncor2', version='1.0.0',
+               tar='motioncor2_1.0.0.tgz')
+
 env.addPackage('simple', version='2.1',
                tar='simple2.tgz')
 
@@ -561,5 +567,9 @@ env.addPackage('Gautomatch', version='0.53',
 
 env.addPackage('mag_distortion', version='1.0.1',
                tar='mag_distortion-1.0.1.tgz')
+
+env.addPackage('ethan', version='1.2',
+               tar='ethan-1.2.tgz',
+               commands=[('make', 'ethan')])
 
 env.execute()
