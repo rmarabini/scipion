@@ -371,6 +371,13 @@ csb = env.addModule(
     deps=[scipy, numpy],
     default=False)
 
+cg = env.addModule(
+    'cg',
+    tar='cg-0.1.tgz',
+    targets=['cg-0.1*'],
+    deps=[csb],
+    default=False)
+
 #  ************************************************************************
 #  *                                                                      *
 #  *                       External (EM) Packages                         *
