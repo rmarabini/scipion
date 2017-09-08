@@ -149,7 +149,7 @@ python = env.addLibrary(
     'python',
     tar='Python-2.7.8.tgz',
     targets=[env.getLib('python2.7'), env.getBin('python')],
-    flags=['--enable-shared'],
+    flags=['--enable-shared --with-ssl'],
     deps=[sqlite, tk, zlib])
 
 pcre = env.addLibrary(
@@ -335,6 +335,9 @@ lxml = env.addModule(
 # libxml2 and libxslt are checked instead of compiled because
 # they are so hard to compile right.
 
+pip = env.addTarget('pip')
+pip.addCommand('python scripts/get-pip.py', targets='software/lib/python2.7/site-packages/pip', default=False, final=True)
+
 ipython = env.addModule(
     'ipython',
     tar='ipython-2.1.0.tar.gz',
@@ -361,7 +364,12 @@ sklearn = env.addModule(
     default=False,
     deps=[scipy, numpy, cython])
 
-
+csb = env.addModule(
+    'csb',
+    tar='csb-1.2.5.tgz',
+    targets=['csb-1.2.5*'],
+    deps=[scipy, numpy],
+    default=False)
 
 #  ************************************************************************
 #  *                                                                      *
