@@ -79,10 +79,19 @@ class XmippProtSplitvolume(ProtClassify3D):
             vol = Volume()
             vol.setLocation(1, self._getExtraPath("split_v%d.vol"%(i+1)))
             volumesSet.append(vol)
-        
+
         self._defineOutputs(outputVolumes=volumesSet)
         self._defineSourceRelation(inputParticles, volumesSet)
         
+        vol = Volume()
+        vol.setLocation(1, self._getExtraPath("split_pc1.vol"))
+
+        volumesSet2 = self._createSetOfVolumes()
+        volumesSet2.append(vol)
+
+        self._defineOutputs(outputVolumes=volumesSet2)
+        self._defineSourceRelation(inputParticles, volumesSet2)
+
     def generateSplittedVolumes(self):
         inputParticles = self.directionalClasses.get()
         Xdim = inputParticles.getDimensions()[0]

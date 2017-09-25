@@ -70,7 +70,6 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
     #--------------------------- INSERT steps functions ------------------------
     def _processMovie(self, movie):
         """ Create movie only if the alignment is less than the thresshold. """
-        
         movieId = movie.getObjId()
         alignment = movie.getAlignment()
 

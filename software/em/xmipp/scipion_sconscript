@@ -625,6 +625,7 @@ for p in ['angular_break_symmetry',
           'volume_reslice',
           'volume_segment',
           'volume_structure_factor',
+          'volume_texture',
           'volume_to_pseudoatoms',
           'volume_to_web',
 
