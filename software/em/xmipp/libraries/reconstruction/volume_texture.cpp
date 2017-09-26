@@ -31,7 +31,7 @@ void ProgVolumeTexture::defineParams()
     // Parameters
     addParamsLine(" -i <volume> : Input volume");
     addParamsLine(" -r <volume> : Reference volume");
-    addParamsLine(" [--patchSize <n=5>] : Patch size for the dictionary");
+    addParamsLine(" [--patchSize <n=5>] : Patch size for the correlations");
     mask.defineParams(this,INT_MASK);
 }
 
@@ -93,6 +93,10 @@ void ProgVolumeTexture::run()
 		            patchListR.push_back(patch);
 				}
 
+
+	// std::cout << "Vector length = " << patchList.size() << std::endl
+	// 		  << "Patch  width  = " << patchList[1].zdim << std::endl ;
+
 	FourierTransformer transformer;	
 	MultidimArray< std::complex<double> > fftIn, fftInShift, fftRef;
 	MultidimArray< double> ccorr, acorr;
@@ -101,8 +105,8 @@ void ProgVolumeTexture::run()
 		for (int j=0; j<patchList.size() ; j++)
 		{
 			transformer.FourierTransform(patchList[i],fftIn);
-			transformer.FourierTransform(patchList[i-j],fftInShift);
-			transformer.FourierTransform(patchListR[i-j],fftRef);
+			transformer.FourierTransform(patchList[i+j],fftInShift);
+			transformer.FourierTransform(patchListR[i+j],fftRef);
 			fast_correlation_vector(fftIn,fftInShift,acorr,transformer);
 			fast_correlation_vector(fftIn,fftRef,ccorr,transformer);
 			cumccorr += ccorr.sum();
