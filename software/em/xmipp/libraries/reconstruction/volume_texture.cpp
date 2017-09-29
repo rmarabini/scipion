@@ -76,45 +76,62 @@ void ProgVolumeTexture::run()
 
 	std::vector< MultidimArray<double> > patchList;
 	std::vector< MultidimArray<double> > patchListR;
-	int count=0,count2=0;
-    for (int k=patchSize_2; k<(int)ZSIZE(mV)-patchSize_2; ++k)
-        for (int i=patchSize_2; i<(int)YSIZE(mV)-patchSize_2; ++i)
-            for (int j=patchSize_2; j<(int)XSIZE(mV)-patchSize_2; ++j)
+	int patchListLength=0;
+    for (int k=patchSize_2; k<(int)ZSIZE(mV)-patchSize_2; k+=patchSize)
+        for (int i=patchSize_2; i<(int)YSIZE(mV)-patchSize_2; i+=patchSize)
+            for (int j=patchSize_2; j<(int)XSIZE(mV)-patchSize_2; j+=patchSize)
             	if (mmask(k,i,j)!=0)
 		        {
 		        	mV.window(patch,
 		            		k-patchSize_2,i-patchSize_2,j-patchSize_2,
-		            	 	k+patchSize_2,i+patchSize_2,j+patchSize_2);
+		            	 	k+patchSize_2-1,i+patchSize_2-1,j+patchSize_2-1);
 		            patchList.push_back(patch);
 
 		            mR.window(patch,
 		            		k-patchSize_2,i-patchSize_2,j-patchSize_2,
-		            	 	k+patchSize_2,i+patchSize_2,j+patchSize_2);
+		            	 	k+patchSize_2-1,i+patchSize_2-1,j+patchSize_2-1);
 		            patchListR.push_back(patch);
+
+		            patchListLength++;
 				}
 
 
-	// std::cout << "Vector length = " << patchList.size() << std::endl
-	// 		  << "Patch  width  = " << patchList[1].zdim << std::endl ;
+	std::cout << "Vector length = " << patchListLength  << std::endl
+			  << "Patch  xdim  = " << patchList[0].xdim << std::endl
+			  << "Patch  ydim  = " << patchList[0].ydim << std::endl
+			  << "Patch  zdim  = " << patchList[0].zdim << std::endl
+			 ;
 
-	FourierTransformer transformer;	
-	MultidimArray< std::complex<double> > fftIn, fftInShift, fftRef;
-	MultidimArray< double> ccorr, acorr;
-	double cumccorr=0, cumacorr=0;
-	for (int i=0; i<patchList.size() ; i++)
-		for (int j=0; j<patchList.size() ; j++)
+	CorrelationAux aux;
+
+	MultidimArray< double> textureCorr, noiseCorr;
+	textureCorr.resize(patchSize,patchSize,patchSize);
+    textureCorr.setXmippOrigin();
+	noiseCorr.resize(patchSize,patchSize,patchSize);
+    noiseCorr.setXmippOrigin();
+
+    std::cout << "noiseCorr size = " <<  noiseCorr.xdim << "x" 
+     		  << noiseCorr.ydim << "x" << noiseCorr.zdim << std::endl
+			  << "textureCorr size = " <<  textureCorr.xdim << "x" 
+     		  << textureCorr.ydim << "x" << textureCorr.zdim << std::endl  ;
+
+    int n;
+	double cumTextureCorr=0, cumNoiseCorr=0;
+	for (int i=0; i<patchListLength ; i++)
+		for (int j=0; j<patchListLength ; j++)
 		{
-			transformer.FourierTransform(patchList[i],fftIn);
-			transformer.FourierTransform(patchList[i+j],fftInShift);
-			transformer.FourierTransform(patchListR[i+j],fftRef);
-			fast_correlation_vector(fftIn,fftInShift,acorr,transformer);
-			fast_correlation_vector(fftIn,fftRef,ccorr,transformer);
-			cumccorr += ccorr.sum();
-			cumacorr += acorr.sum();
+			n = i+j;
+			if(n>=patchListLength) n-=patchListLength;
+			correlation_matrix(patchList[i],patchList[n],noiseCorr,aux,false);
+			correlation_matrix(patchList[i],patchListR[n],textureCorr,aux,false);
+			cumTextureCorr += textureCorr.sum();
+			cumNoiseCorr += noiseCorr.sum();
 		}
-
-	std::cout << "Cummulative CrossCorrelation" << cumccorr << std::endl
-			  << "Cummulative AutoCorrelation" << cumacorr << std::endl ;
+	
+	std::cout << "Cumulative TextureCorrelation        -> " << cumTextureCorr << std::endl
+			  << "Cumulative NoiseCorrelation          -> " << cumNoiseCorr << std::endl 
+			  << "Cumulative Texture/Noise Correlation -> " << cumTextureCorr/cumNoiseCorr
+			  << std::endl ;
 
 }
 #undef DEBUG

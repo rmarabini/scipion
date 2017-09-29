@@ -45,26 +45,34 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _defineParams(self, form):
         form.addSection(label='Input')
         
-        form.addParam('directionalClasses', PointerParam, label="Directional classes", important=True, 
-                      pointerClass='SetOfAverages', pointerCondition='hasAlignmentProj',
-                      help='Select a set of particles with angles. Preferrably the output of a run of directional classes')
+        form.addParam('directionalClasses', PointerParam, important=True,
+                      label="Directional classes", pointerClass='SetOfAverages',
+                      pointerCondition='hasAlignmentProj',
+                      help='Select a set of particles with angles. Preferrably\n'
+                           'the output of a run of directional classes')
         form.addParam('symmetryGroup', StringParam, default='c1',
                       label="Symmetry group", 
                       help='See [[Xmipp Symmetry][http://www2.mrc-lmb.cam.ac.uk/Xmipp/index.php/Conventions_%26_File_formats#Symmetry]] page '
                            'for a description of the symmetry format accepted by Xmipp') 
-        form.addParam('mask', PointerParam, label="Mask", pointerClass='VolumeMask', allowsNull=True,
-                      help='The mask values must be binary: 0 (remove these voxels) and 1 (let them pass).')
-        form.addParam('Nrec', IntParam, label="Number of reconstructions", default=5000, expertLevel=LEVEL_ADVANCED, 
-                      help="Number of random reconstructions to perform");
-        form.addParam('Nsamples', IntParam, label="Number of images/reconstruction", default=15, expertLevel=LEVEL_ADVANCED, 
-                      help="Number of images per reconstruction. Consider that reconstructions with symmetry c1 will be perfomed");
-        form.addParam('alpha', FloatParam, label="Confidence level", default=0.05, expertLevel=LEVEL_ADVANCED, 
-                      help="This parameter is alpha. Two volumes, one at alpha/2 and another one at 1-alpha/2, will be generated");
+        form.addParam('mask', PointerParam, label="Mask", allowsNull=True,
+                      pointerClass='VolumeMask', help='The mask values must be binary:\n'
+                                   '0 (remove these voxels) and 1 (let them pass).')
+        form.addParam('Nrec', IntParam, label="Number of reconstructions",
+                      default=5000, expertLevel=LEVEL_ADVANCED,
+                      help="Number of random reconstructions to perform")
+        form.addParam('Nsamples', IntParam, label="Number of images/reconstruction",
+                      default=15, expertLevel=LEVEL_ADVANCED,
+                      help='Number of images per reconstruction. Consider that \n'
+                           'reconstructions with symmetry c1 will be perfomed')
+        form.addParam('alpha', FloatParam, label="Confidence level", default=0.05,
+                      expertLevel=LEVEL_ADVANCED, help='This parameter is alpha.\n'
+                      'Two volumes, one at alpha/2 and another at 1-alpha/2, will be generated')
     
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         self._insertFunctionStep('convertInputStep',self.directionalClasses.getObjId())
         self._insertFunctionStep('generateSplittedVolumes')
+        self._insertFunctionStep('findTextureInPc1')
         self._insertFunctionStep('createOutput')
 
     #--------------------------- STEPS functions ---------------------------------------------------
@@ -73,6 +81,7 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def createOutput(self):
         inputParticles = self.directionalClasses.get()
+
         volumesSet = self._createSetOfVolumes()
         volumesSet.setSamplingRate(inputParticles.getSamplingRate())
         for i in range(2):
@@ -83,14 +92,14 @@ class XmippProtSplitvolume(ProtClassify3D):
         self._defineOutputs(outputVolumes=volumesSet)
         self._defineSourceRelation(inputParticles, volumesSet)
         
-        vol = Volume()
-        vol.setLocation(1, self._getExtraPath("split_pc1.vol"))
-
         volumesSet2 = self._createSetOfVolumes()
-        volumesSet2.append(vol)
+        volumesSet2.setSamplingRate(inputParticles.getSamplingRate())
+        vol2 = Volume()
+        vol2.setLocation(2, self._getExtraPath("split_pc1.vol"))
+        volumesSet2.append(vol2)
 
-        self._defineOutputs(outputVolumes=volumesSet2)
-        self._defineSourceRelation(inputParticles, volumesSet2)
+        self._defineOutputs(outputPc1Volume=volumesSet2)
+
 
     def generateSplittedVolumes(self):
         inputParticles = self.directionalClasses.get()
@@ -109,3 +118,18 @@ class XmippProtSplitvolume(ProtClassify3D):
         if fnMask!="":
             args+=" --mask binary_file %s"%fnMask
         self.runJob("xmipp_classify_first_split",args)
+
+
+    def findTextureInPc1(self):
+        pc1VolumeFn = self._getExtraPath("split_pc1.vol")
+        refVolumeFn = self._getExtraPath("split_v1.vol")
+
+        args = ' -i %s -r %s' %(pc1VolumeFn, refVolumeFn)
+
+        if self.mask.hasValue():
+            fnMask = self._getExtraPath("mask.vol")
+            args += ' --mask %s' %fnMask
+
+        self.runJob("xmipp_volume_texture", args)
+
+        

@@ -107,10 +107,9 @@ class XmippProtVolumeTexture(ProtClassify3D):
             # self.runJob('xmipp_image_resize',"-i %s --dim %d"%(fnMask,Xdim),numberOfMpi=1)
             # self.runJob('xmipp_transform_threshold',"-i %s --select below 0.5 --substitute binarize"%fnMask,numberOfMpi=1)
 
-        args="-i %s -r %s --patchSize 10"%\
-             (self._getInputVolFn(),self._getRefVolFn())
+        args="-i %s -r %s"%(self._getInputVolFn(),self._getRefVolFn())
         if fnMask!="":
-            args+=" --mask %s"%fnMask
+            args+=" --mask binary_file %s"%fnMask
         self.runJob("xmipp_volume_texture",args)
 
 
