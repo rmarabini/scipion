@@ -240,7 +240,7 @@ class DeepTFSupervised(object):
     if numberOfBatches >0:
       print("Training net for %d batches of size %d"%(numberOfRemainingBatches, dataManagerTrain.getBatchSize()))
       print("Initial loss %f"%stepLoss)
-      self.testPerformance(i_global,trainDataBatch,dataManagerTest)
+      self.testPerformance(i_global, trainDataBatch,dataManagerTest)
     else:
       return
 
@@ -253,7 +253,7 @@ class DeepTFSupervised(object):
       feed_dict_train= {self.X : x_batchTrain, self.Y: labels_batchTrain, self.lRate: learningRate }
       i_global, __, stepLoss, y_pred= self.session.run( [self.global_step, self.optimizer, self.loss,
                                                   self.y_pred],
-                                                 feed_dict=feed_dict_train )
+                                                  feed_dict=feed_dict_train )
 
       currentLoss.append( stepLoss)
 
@@ -280,8 +280,8 @@ class DeepTFSupervised(object):
           self.saver.save(self.session, save_path= self.checkPointsNames, global_step= self.global_step) 
           print("\nSaved checkpoint.")
 
-      if auto_stop and (i_global+1)% batchsPerEpoch==0:
-        print("Epoch %d finished. Learning rate %.1e. Epoch improvement: %f"%(iterNum//batchsPerEpoch, learningRate, epochImprovement))
+      if auto_stop and ((i_global+1)% batchsPerEpoch)==0:
+        print("Epoch %d finished. Learning rate %.1e. Epoch improvement: %f"%(i_global//batchsPerEpoch, learningRate, epochImprovement))
         epochImprovement=0
         if not hasImproved:
           numEpochsNoImprov+=1
@@ -353,30 +353,24 @@ class DeepTFSupervised(object):
 
 class DataManager(object):
 
-  def __init__(self, posImagesXMDFname, posImagesSetOfParticles,  negImagesXMDFname=None, negImagesSetOfParticles=None):
-
-    self.mdFalse=None
+  def __init__(self, posSetDict, negSetDict=None):
+    '''
+        posSetDict, negSetDict: { fname: [(SetOfParticles, weight:int)]
+    '''
+    self.mdListFalse=None
     self.nFalse=0 #Number of negative particles in dataManager
-    
-    self.mdTrue  = md.MetaData(posImagesXMDFname)
-    self.fnListTrue =self.mdTrue.getColumnValues(md.MDL_IMAGE)
-    
 
-    xdim, ydim, _   = posImagesSetOfParticles.getDim()
-    self.shape= (xdim,ydim,1)
-    self.nTrue= posImagesSetOfParticles.getSize()
-    
+    self.mdListTrue, self.fnListOfListTrue, self.weightListTrue, self.nTrue, self.shape= self.colectMetadata(posSetDict)
+    self.weightListTrue= [ elem/float(sum(self.weightListTrue)) for elem in  self.weightListTrue]
     self.batchSize= min(BATCH_SIZE, self.nTrue)
-
     self.splitPoint= self.batchSize//2
 
-    self.batchStack = np.zeros((self.batchSize, xdim,ydim,1))
-    if not ( negImagesXMDFname is None or negImagesSetOfParticles is None):
-      self.mdFalse  = md.MetaData(negImagesXMDFname)
-      self.fnListFalse  = self.mdFalse.getColumnValues(md.MDL_IMAGE)
-      xdim_1, ydim_1, _ = negImagesSetOfParticles.getDim()
-      self.nFalse= negImagesSetOfParticles.getSize()
-      assert xdim==xdim_1 and ydim==ydim_1
+    self.batchStack = np.zeros((self.batchSize,)+self.shape)
+
+    if not negSetDict is None:
+      self.mdListFalse, self.fnListOfListFalse, self.weightListFalse, self.nFalse, shapeFalse=  self.colectMetadata(negSetDict)
+      self.weightListFalse= [ elem/float(sum(self.weightListFalse)) for elem in  self.weightListFalse]
+      assert shapeFalse== self.shape, "Negative images and positive images have differnt shape"
       self.getRandomBatch= self.getRandomBatchWorker
     else:
       self.getRandomBatch= self.NOgetRandomBatchWorker
@@ -385,8 +379,39 @@ class DataManager(object):
       self.nTrue=  2**9
       self.nFalse= 2**9
 
-  def getMetadata(self) :
-    return  self.mdTrue, self.mdFalse
+  def colectMetadata(self, dictData):
+    mdList=[]
+    fnamesList=[]
+    weightsList= []
+    nParticles=0
+    shapeParticles=(None, None, 1)
+    for fnameXMDF in sorted(dictData):
+      setOfParticlesObject, weight= dictData[fnameXMDF]
+      mdObject  = md.MetaData(fnameXMDF)
+      imgFnames = mdObject.getColumnValues(md.MDL_IMAGE)
+      mdList+= [mdObject]
+      fnamesList+= [imgFnames]
+      xdim, ydim, _   = setOfParticlesObject.getDim()
+      tmpShape= (xdim,ydim,1)
+      tmpNumParticles= setOfParticlesObject.getSize()
+#      print(len(imgFnames), tmpNumParticles)
+      if shapeParticles!= (None, None, 1):
+        assert tmpShape== shapeParticles, "Error, particles of different shapes mixed"
+      else:
+        shapeParticles= tmpShape
+      weightsList+= [ weight ]
+      nParticles+= tmpNumParticles
+    print(sorted(dictData))
+    return mdList, fnamesList, weightsList, nParticles, shapeParticles
+
+  def getMetadata(self, setNumber=None) :
+
+    if setNumber is None:
+      return [mdTrue for mdTrue in self.mdListTrue], [mdFalse for mdFalse in self.mdListFalse] if self.mdListFalse else None
+    else:
+      mdTrue= self.mdListTrue[setNumber]
+      mdFalse= self.mdListFalse[setNumber]
+      return  mdTrue, mdFalse
 
   def getNBatches(self, nEpochs):
     return  int(ceil(2*self.nTrue*nEpochs/self.batchSize))
@@ -451,14 +476,27 @@ class DataManager(object):
     batchStack   = self.batchStack
     batchLabels  = np.zeros((batchSize, 2))
 
-    idxListTrue =  np.random.choice( self.nTrue,  splitPoint, False)
-    idxListFalse = np.random.choice( self.nFalse, splitPoint, False)
+    dataSetNumTrue=  np.random.choice(len(self.mdListTrue), p= self.weightListTrue)
+    dataSetNumFalse= np.random.choice(len(self.mdListFalse), p=self.weightListFalse)
+    print("DataSets in batch %d/%d"%(dataSetNumTrue, dataSetNumFalse))
+
+    metadataTrue= self.mdListTrue[dataSetNumTrue]
+    metadataFalse= self.mdListFalse[dataSetNumFalse]
+
+    fnamesTrue= self.fnListOfListTrue[dataSetNumTrue]
+    fnamesFalse= self.fnListOfListFalse[dataSetNumFalse]
+
+    nTrue= len(fnamesTrue)
+    nFalse= len(fnamesFalse)
+
+    idxListTrue =  np.random.choice( nTrue,  splitPoint, False)
+    idxListFalse = np.random.choice( nFalse, splitPoint, False)
 
     I = xmipp.Image()
     n = 0
     finalIds= []
     for idx in idxListTrue:
-      fnImage = self.fnListTrue[idx]
+      fnImage = fnamesTrue[idx]
       I.read(fnImage)
       batchStack[n,...]= np.expand_dims(I.getData(),-1)
       batchLabels[n, 1]= 1
@@ -467,7 +505,7 @@ class DataManager(object):
       if n>=splitPoint:
           break
     for idx in idxListFalse:
-      fnImage = self.fnListFalse[idx]
+      fnImage = fnamesFalse[idx]
       I.read(fnImage)
       batchStack[n,...]= np.expand_dims(I.getData(),-1)
       batchLabels[n, 0]= 1
@@ -496,36 +534,40 @@ class DataManager(object):
     xdim,ydim,nChann= self.shape
     batchStack = np.zeros((self.batchSize, xdim,ydim,nChann))
     batchLabels  = np.zeros((batchSize, 2))
-    mdTrue  = self.mdTrue
     I = xmipp.Image()
     n = 0
     idAndType=[]
-    for objId in mdTrue:
-      fnImage = mdTrue.getValue(md.MDL_IMAGE, objId)
-      I.read(fnImage)
-      batchStack[n,...]= np.expand_dims(I.getData(),-1)
-      batchLabels[n, 1]= 1
-      idAndType.append((True,objId))
-      n+=1
-      if n>=batchSize:
-        yield batchStack, batchLabels,  idAndType
-        n=0
-        batchLabels  = np.zeros((batchSize, 2))
-        idAndType= []
-    if not self.mdFalse is None:
-      mdFalse= self.mdFalse
-      for objId in mdFalse:
-        fnImage = mdFalse.getValue(md.MDL_IMAGE, objId)
+    for dataSetNum in range(len(self.mdListTrue)):
+      mdTrue= self.mdListTrue[dataSetNum]
+      for objId in mdTrue:
+#        print(objId)
+        fnImage = mdTrue.getValue(md.MDL_IMAGE, objId)
         I.read(fnImage)
         batchStack[n,...]= np.expand_dims(I.getData(),-1)
-        batchLabels[n, 0]= 1
-        idAndType.append((False,objId))
+        batchLabels[n, 1]= 1
+        idAndType.append((True,objId, dataSetNum))
         n+=1
         if n>=batchSize:
-          yield batchStack, batchLabels,  idAndType
+          yield batchStack, batchLabels, idAndType
           n=0
-          idAndType= []
           batchLabels  = np.zeros((batchSize, 2))
+          idAndType= []
+    if not self.mdListFalse is None:
+      for dataSetNum in range(len(self.mdListFalse)):
+        mdFalse= self.mdListFalse[dataSetNum]
+        fnamesFalse= self.fnListOfListFalse[dataSetNum]
+        for objId in mdFalse:
+          fnImage = mdFalse.getValue(md.MDL_IMAGE, objId)
+          I.read(fnImage)
+          batchStack[n,...]= np.expand_dims(I.getData(),-1)
+          batchLabels[n, 0]= 1
+          idAndType.append((False,objId,dataSetNum))
+          n+=1
+          if n>=batchSize:
+            yield batchStack, batchLabels,  idAndType
+            n=0
+            idAndType= []
+            batchLabels  = np.zeros((batchSize, 2))
     if n>0:
       yield batchStack[:n,...], batchLabels[:n,...], idAndType[:n]
 
@@ -538,29 +580,30 @@ class DataManager(object):
     n = 0
 
     currNBatches=0
-    for fnImageTrue, fnImageFalse in zip(self.fnListTrue, self.fnListFalse):
-      I.read(fnImageTrue)
-      batchStack[n,...]= np.expand_dims(I.getData(),-1)
-      batchLabels[n, 1]= 1
-      n+=1
-      if n>=batchSize:
-        yield batchStack, batchLabels
-        n=0
-        batchLabels  = np.zeros((batchSize, 2))
-        currNBatches+=1
-        if currNBatches>=nBatches:
-          break
-      I.read(fnImageFalse)
-      batchStack[n,...]= np.expand_dims(I.getData(),-1)
-      batchLabels[n, 0]= 1
-      n+=1
-      if n>=batchSize:
-        yield batchStack, batchLabels
-        n=0
-        batchLabels  = np.zeros((batchSize, 2))
-        currNBatches+=1
-        if currNBatches>=nBatches:
-          break
-    if n>0:
-      yield batchStack[:n,...], batchLabels[:n,...]
+    for fnListTrue, fnListFalse in zip(self.fnListOfListTrue, self.fnListOfListFalse):
+      for fnImageTrue, fnImageFalse in zip(fnListTrue, fnListFalse):
+        I.read(fnImageTrue)
+        batchStack[n,...]= np.expand_dims(I.getData(),-1)
+        batchLabels[n, 1]= 1
+        n+=1
+        if n>=batchSize:
+          yield batchStack, batchLabels
+          n=0
+          batchLabels  = np.zeros((batchSize, 2))
+          currNBatches+=1
+          if currNBatches>=nBatches:
+            break
+        I.read(fnImageFalse)
+        batchStack[n,...]= np.expand_dims(I.getData(),-1)
+        batchLabels[n, 0]= 1
+        n+=1
+        if n>=batchSize:
+          yield batchStack, batchLabels
+          n=0
+          batchLabels  = np.zeros((batchSize, 2))
+          currNBatches+=1
+          if currNBatches>=nBatches:
+            break
+      if n>0:
+        yield batchStack[:n,...], batchLabels[:n,...]
 
