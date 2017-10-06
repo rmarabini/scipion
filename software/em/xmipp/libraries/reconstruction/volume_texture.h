@@ -35,13 +35,16 @@
 class ProgVolumeTexture: public XmippProgram
 {
 public:
-	/** Input volume */
+    /** Input volume */
     FileName fnIn;
 
     /** Reference volume */
     FileName fnRef;
 
-    /** Patch is of size size x size x size */
+    /** Root path for output */
+    FileName fnRoot;
+
+    /** Patch is of size: size x size x size */
     int patchSize;
 
     /** Mask */

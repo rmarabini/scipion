@@ -1,6 +1,7 @@
 /***************************************************************************
  *
  * Authors:     Carlos Oscar S. Sorzano (coss@cnb.csic.es)
+ *				David Maluenda (dmaluenda@cnb.csic.es)
  *
  * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
  *
@@ -31,18 +32,21 @@ void ProgVolumeTexture::defineParams()
     // Parameters
     addParamsLine(" -i <volume> : Input volume");
     addParamsLine(" -r <volume> : Reference volume");
-    addParamsLine(" [--patchSize <n=5>] : Patch size for the correlations");
-    mask.defineParams(this,INT_MASK);
+    addParamsLine(" [--patchSize <n=8>] : Patch size for the correlations");
+    /*addParamsLine(" --oroot <fnroot> : Rootname for the output");*/
+    /*mask.defineParams(this,INT_MASK);*/
 }
 
 void ProgVolumeTexture::readParams()
 {
-	fnIn=getParam("-i");
-	fnRef=getParam("-r");
-	patchSize=getIntParam("--patchSize");
-    mask.allowed_data_types = INT_MASK;
+	fnIn = getParam("-i");
+	fnRef = getParam("-r");
+	/*fnRoot = getParam("--oroot");*/
+	patchSize = getIntParam("--patchSize");
+    /*mask.allowed_data_types = INT_MASK;
     if (checkParam("--mask"))
-        mask.readParams(this);
+    	mask.readParams(this);*/
+
 }
 
 void ProgVolumeTexture::show()
@@ -51,6 +55,7 @@ void ProgVolumeTexture::show()
 		std::cout
 		<< "Input volume:     " << fnIn   << std::endl
 		<< "Reference volume: " << fnRef  << std::endl
+		/*<< "Root output:	  " << fnRoot << std::endl*/
 		<< "Patch size:       " << patchSize << std::endl
 		;
 }
@@ -71,8 +76,11 @@ void ProgVolumeTexture::run()
     R.read(fnRef);
     MultidimArray<double> &mR=R();
 
-    mask.generate_mask(mV);
-	const MultidimArray<int> &mmask = mask.get_binary_mask();
+    std::cout << "Volume size = " <<  mV.xdim << "x" << mV.ydim
+    		  << "x" << mV.zdim   << std::endl  ;
+
+    /*mask.generate_mask(mV);
+	const MultidimArray<int> &mmask = mask.get_binary_mask();*/
 
 	std::vector< MultidimArray<double> > patchList;
 	std::vector< MultidimArray<double> > patchListR;
@@ -80,7 +88,7 @@ void ProgVolumeTexture::run()
     for (int k=patchSize_2; k<(int)ZSIZE(mV)-patchSize_2; k+=patchSize)
         for (int i=patchSize_2; i<(int)YSIZE(mV)-patchSize_2; i+=patchSize)
             for (int j=patchSize_2; j<(int)XSIZE(mV)-patchSize_2; j+=patchSize)
-            	if (mmask(k,i,j)!=0)
+            	/*if (mmask(k,i,j)!=0)*/
 		        {
 		        	mV.window(patch,
 		            		k-patchSize_2,i-patchSize_2,j-patchSize_2,
@@ -97,41 +105,68 @@ void ProgVolumeTexture::run()
 
 
 	std::cout << "Vector length = " << patchListLength  << std::endl
-			  << "Patch  xdim  = " << patchList[0].xdim << std::endl
-			  << "Patch  ydim  = " << patchList[0].ydim << std::endl
-			  << "Patch  zdim  = " << patchList[0].zdim << std::endl
-			 ;
+			  << "Patch  size  = " << patchList[0].xdim
+			  << "x" << patchList[0].ydim << "x" << patchList[0].zdim 
+			  << std::endl ;
 
 	CorrelationAux aux;
 
-	MultidimArray< double> textureCorr, noiseCorr;
+	MultidimArray< double> textureCorr, noiseCorr, reffCorr;
 	textureCorr.resize(patchSize,patchSize,patchSize);
     textureCorr.setXmippOrigin();
 	noiseCorr.resize(patchSize,patchSize,patchSize);
     noiseCorr.setXmippOrigin();
+    reffCorr.resize(patchSize,patchSize,patchSize);
+    reffCorr.setXmippOrigin();
 
     std::cout << "noiseCorr size = " <<  noiseCorr.xdim << "x" 
      		  << noiseCorr.ydim << "x" << noiseCorr.zdim << std::endl
 			  << "textureCorr size = " <<  textureCorr.xdim << "x" 
      		  << textureCorr.ydim << "x" << textureCorr.zdim << std::endl  ;
 
-    int n;
-	double cumTextureCorr=0, cumNoiseCorr=0;
+    int jj;
+	double cumTextureCorr=0, cumNoiseCorr=0, autoCorrNoise=0, autoCorrTexture=0,
+		   crossCorrNoise=0, crossCorrTexture=0;
 	for (int i=0; i<patchListLength ; i++)
 		for (int j=0; j<patchListLength ; j++)
 		{
-			n = i+j;
-			if(n>=patchListLength) n-=patchListLength;
-			correlation_matrix(patchList[i],patchList[n],noiseCorr,aux,false);
-			correlation_matrix(patchList[i],patchListR[n],textureCorr,aux,false);
-			cumTextureCorr += textureCorr.sum();
-			cumNoiseCorr += noiseCorr.sum();
+			// jj is the j counter in a ciclic version (jj = jj + N)
+			jj = i+j;
+			if(jj>=patchListLength) jj-=patchListLength;
+
+			correlation_matrix(patchList[i],patchList[jj],noiseCorr,aux,false);
+			correlation_matrix(patchList[i],patchListR[jj],textureCorr,aux,false);
+			correlation_matrix(patchListR[i],patchListR[jj],reffCorr,aux,false);
+			cumTextureCorr += textureCorr.sum2();
+			cumNoiseCorr += noiseCorr.sum2();
+			if(i==jj)
+			{
+				autoCorrNoise += noiseCorr.sum2();
+				autoCorrTexture += textureCorr.sum2();
+			}else{
+				crossCorrNoise += noiseCorr.sum2()/patchListLength;
+				crossCorrTexture += textureCorr.sum2()/patchListLength;
+			}
 		}
 	
-	std::cout << "Cumulative TextureCorrelation        -> " << cumTextureCorr << std::endl
-			  << "Cumulative NoiseCorrelation          -> " << cumNoiseCorr << std::endl 
-			  << "Cumulative Texture/Noise Correlation -> " << cumTextureCorr/cumNoiseCorr
-			  << std::endl ;
+
+	std::cout 
+		<< "GlobalCrossCorrelation    -> " << cumTextureCorr << std::endl
+		<< "GlobalAutoCorrelation     -> " << cumNoiseCorr << std::endl 
+		<< "Texture/Noise GlobalCorr. -> " << cumTextureCorr/cumNoiseCorr 
+		<< std::endl << "	Noise:" << std::endl
+		<< "InnerCroosCorrelation     -> " << crossCorrNoise << std::endl
+		<< "InnerAutoCorrelation      -> " << autoCorrNoise << std::endl 
+		<< "Cross/Auto InnerCorr.     -> " << crossCorrNoise/autoCorrNoise 
+		<< std::endl << "	Texture:"<< std::endl
+		<< "InnerCroosCorrelation     -> " << crossCorrTexture << std::endl
+		<< "InnerAutoCorrelation      -> " << autoCorrTexture << std::endl 
+		<< "Cross/Auto InnerCorr.     -> " << crossCorrTexture/autoCorrTexture 
+		<< std::endl << "  -->  Texture/Noise InnerCorr: "
+		<< (crossCorrTexture/autoCorrTexture)/(crossCorrNoise/autoCorrNoise)
+		<< std::endl ;
+
+
 
 }
 #undef DEBUG

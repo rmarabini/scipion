@@ -33,6 +33,7 @@ from pyworkflow.em.protocol import ProtClassify3D
 from pyworkflow.em.data import Volume
 from pyworkflow.em.convert import ImageHandler
 from convert import writeSetOfParticles
+import math
 
 class XmippProtSplitvolume(ProtClassify3D):
     """Split volume in two"""
@@ -48,58 +49,61 @@ class XmippProtSplitvolume(ProtClassify3D):
         form.addParam('directionalClasses', PointerParam, important=True,
                       label="Directional classes", pointerClass='SetOfAverages',
                       pointerCondition='hasAlignmentProj',
-                      help='Select a set of particles with angles. Preferrably\n'
+                      help='Select a set of particles with angles. Preferrably'
                            'the output of a run of directional classes')
         form.addParam('symmetryGroup', StringParam, default='c1',
                       label="Symmetry group", 
                       help='See [[Xmipp Symmetry][http://www2.mrc-lmb.cam.ac.uk/Xmipp/index.php/Conventions_%26_File_formats#Symmetry]] page '
                            'for a description of the symmetry format accepted by Xmipp') 
-        form.addParam('mask', PointerParam, label="Mask", allowsNull=True,
-                      pointerClass='VolumeMask', help='The mask values must be binary:\n'
-                                   '0 (remove these voxels) and 1 (let them pass).')
+        form.addParam('mask', PointerParam, label="Mask", 
+                      pointerClass='VolumeMask', allowsNull=True,
+                      help='The mask values must be binary: 0 (remove these voxels)'
+                           'and 1 (let them pass).')
         form.addParam('Nrec', IntParam, label="Number of reconstructions",
-                      default=5000, expertLevel=LEVEL_ADVANCED,
-                      help="Number of random reconstructions to perform")
-        form.addParam('Nsamples', IntParam, label="Number of images/reconstruction",
-                      default=15, expertLevel=LEVEL_ADVANCED,
-                      help='Number of images per reconstruction. Consider that \n'
-                           'reconstructions with symmetry c1 will be perfomed')
-        form.addParam('alpha', FloatParam, label="Confidence level", default=0.05,
-                      expertLevel=LEVEL_ADVANCED, help='This parameter is alpha.\n'
-                      'Two volumes, one at alpha/2 and another at 1-alpha/2, will be generated')
+                      default=5000, expertLevel=LEVEL_ADVANCED, 
+                      help="Number of random reconstructions to perform");
+        form.addParam('Nsamples', IntParam, label="Number of images/reconstruction", 
+                      default=15, expertLevel=LEVEL_ADVANCED, 
+                      help="Number of images per reconstruction. Consider that"
+                           "reconstructions with symmetry c1 will be perfomed");
+        form.addParam('alpha', FloatParam, label="Confidence level", default=0.05, 
+                      expertLevel=LEVEL_ADVANCED, 
+                      help="This parameter is alpha. Two volumes, one at alpha/2"
+                           "and another one at 1-alpha/2, will be generated");
     
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        self._insertFunctionStep('convertInputStep',self.directionalClasses.getObjId())
+        self._insertFunctionStep('convertInputStep',
+                                  self.directionalClasses.getObjId())
         self._insertFunctionStep('generateSplittedVolumes')
-        self._insertFunctionStep('findTextureInPc1')
+        self._insertFunctionStep('checkTestureInPc1')
         self._insertFunctionStep('createOutput')
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def convertInputStep(self, inputParticlesId):
-        writeSetOfParticles(self.directionalClasses.get(),self._getExtraPath("directionalClasses.xmd"))
+        writeSetOfParticles(self.directionalClasses.get(),
+                            self._getExtraPath("directionalClasses.xmd"))
 
     def createOutput(self):
         inputParticles = self.directionalClasses.get()
-
-        volumesSet = self._createSetOfVolumes()
+        volumesSet = self._createSetOfVolumes('Vols')
         volumesSet.setSamplingRate(inputParticles.getSamplingRate())
         for i in range(2):
             vol = Volume()
             vol.setLocation(1, self._getExtraPath("split_v%d.vol"%(i+1)))
             volumesSet.append(vol)
-
+        
         self._defineOutputs(outputVolumes=volumesSet)
         self._defineSourceRelation(inputParticles, volumesSet)
+
+        volumesSetPc1 = self._createSetOfVolumes('Pc1')
+        volumesSetPc1.setSamplingRate(inputParticles.getSamplingRate())
+        volPc1 = Volume()
+        volPc1.setLocation(1, self._getExtraPath("split_pc1.vol"))
+        volumesSetPc1.append(volPc1)
         
-        volumesSet2 = self._createSetOfVolumes()
-        volumesSet2.setSamplingRate(inputParticles.getSamplingRate())
-        vol2 = Volume()
-        vol2.setLocation(2, self._getExtraPath("split_pc1.vol"))
-        volumesSet2.append(vol2)
-
-        self._defineOutputs(outputPc1Volume=volumesSet2)
-
+        self._defineOutputs(outputPc1Volumes=volumesSetPc1)
+        # self._defineSourceRelation(inputParticles, volumesSetPc1)
 
     def generateSplittedVolumes(self):
         inputParticles = self.directionalClasses.get()
@@ -109,27 +113,50 @@ class XmippProtSplitvolume(ProtClassify3D):
             fnMask = self._getExtraPath("mask.vol")
             img=ImageHandler()
             img.convert(self.mask.get(), fnMask)
-            self.runJob('xmipp_image_resize',"-i %s --dim %d"%(fnMask,Xdim),numberOfMpi=1)
-            self.runJob('xmipp_transform_threshold',"-i %s --select below 0.5 --substitute binarize"%fnMask,numberOfMpi=1)
+            self.runJob('xmipp_image_resize',"-i %s --dim %d"%(fnMask,Xdim),
+                        numberOfMpi=1)
+            self.runJob('xmipp_transform_threshold',
+                        "-i %s --select below 0.5 --substitute binarize"%fnMask,
+                        numberOfMpi=1)
 
         args="-i %s --oroot %s --Nrec %d --Nsamples %d --sym %s --alpha %f"%\
-             (self._getExtraPath("directionalClasses.xmd"),self._getExtraPath("split"),self.Nrec.get(),self.Nsamples.get(),
+             (self._getExtraPath("directionalClasses.xmd"),
+              self._getExtraPath("split"),self.Nrec.get(),self.Nsamples.get(),
               self.symmetryGroup.get(), self.alpha.get())
         if fnMask!="":
             args+=" --mask binary_file %s"%fnMask
         self.runJob("xmipp_classify_first_split",args)
 
 
-    def findTextureInPc1(self):
-        pc1VolumeFn = self._getExtraPath("split_pc1.vol")
-        refVolumeFn = self._getExtraPath("split_v1.vol")
+    def checkTestureInPc1(self):
+        pc1Fn = self._getExtraPath("split_pc1.vol")
+        refFn = self._getExtraPath("split_v1.vol")
+        outFn = self._getExtraPath()
 
-        args = ' -i %s -r %s' %(pc1VolumeFn, refVolumeFn)
+        inputParticles = self.directionalClasses.get()
+        Xdim = inputParticles.getDimensions()[0]
+        if math.sqrt(Xdim).is_integer():
+            patchSize = math.sqrt(Xdim)
+        else:
+            patchSize = round(Xdim/8)
 
+        fnMask = ""
         if self.mask.hasValue():
             fnMask = self._getExtraPath("mask.vol")
-            args += ' --mask %s' %fnMask
+            img=ImageHandler()
+            img.convert(self.mask.get(), fnMask)
+            self.runJob('xmipp_image_resize',"-i %s --dim %d"%(fnMask,Xdim),
+                        numberOfMpi=1)
+            self.runJob('xmipp_transform_threshold',
+                        "-i %s --select below 0.5 --substitute binarize"%fnMask,
+                        numberOfMpi=1)
 
-        self.runJob("xmipp_volume_texture", args)
+        args="-i %s -r %s --patchSize %d --oroot %s" % (pc1Fn, refFn, patchSize,
+                                                        outFn)
 
+        if fnMask!="":
+            args+=" --mask binary_file %s"%fnMask
         
+        print("xmipp_volume_texture" + args)
+        # self.runJob("xmipp_volume_texture",args)
+

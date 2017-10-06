@@ -33,6 +33,7 @@ from pyworkflow.em.protocol import ProtClassify3D
 from pyworkflow.em.data import Volume
 from pyworkflow.em.convert import ImageHandler
 from convert import writeSetOfParticles
+import math
 
 class XmippProtVolumeTexture(ProtClassify3D):
     """Split volume in two"""
@@ -72,9 +73,6 @@ class XmippProtVolumeTexture(ProtClassify3D):
         img.convert(referenceVolume, self._getRefVolFn())
 
 
-
-
-
     # def createOutput(self):
     #     inputParticles = self.directionalClasses.get()
     #     volumesSet = self._createSetOfVolumes()
@@ -97,19 +95,39 @@ class XmippProtVolumeTexture(ProtClassify3D):
     #     self._defineSourceRelation(inputParticles, volumesSet2)
 
     def findTexture(self):
-        # inputParticles = self.directionalClasses.get()
-        # Xdim = inputParticles.getDimensions()[0]
+        inVolume = self.inputVolume.get()
+        print(inVolume)
+        Xdim = inVolume.getDim()[0]
+        print(Xdim)
         fnMask = ""
+
         if self.mask.hasValue():
             fnMask = self._getExtraPath("mask.vol")
             img=ImageHandler()
             img.convert(self.mask.get(), fnMask)
-            # self.runJob('xmipp_image_resize',"-i %s --dim %d"%(fnMask,Xdim),numberOfMpi=1)
-            # self.runJob('xmipp_transform_threshold',"-i %s --select below 0.5 --substitute binarize"%fnMask,numberOfMpi=1)
+            self.runJob('xmipp_image_resize',"-i %s --dim %d"%(fnMask,Xdim),
+                        numberOfMpi=1)
+            self.runJob('xmipp_transform_threshold',
+                        "-i %s --select below 0.5 --substitute binarize"%fnMask,
+                        numberOfMpi=1)
 
-        args="-i %s -r %s"%(self._getInputVolFn(),self._getRefVolFn())
-        if fnMask!="":
-            args+=" --mask binary_file %s"%fnMask
+        if Xdim != self.referenceVolume.get().getDim()[0]:
+            self.runJob('xmipp_image_resize', "-i %s --dim %d" % 
+                        (self._getRefVolFn(), Xdim), numberOfMpi=1)
+
+        args = "-i %s -r %s"%(self._getInputVolFn(),self._getRefVolFn())
+
+        # if fnMask != "":
+        #     args += " --mask binary_file %s"%fnMask
+
+        if math.sqrt(Xdim).is_integer():
+            patchSize = math.sqrt(Xdim)
+        else:
+            patchSize = round(Xdim/8)
+
+        args += " -patchSize %d" % patchSize
+
+        print("xmipp_volume_texture" + args)
         self.runJob("xmipp_volume_texture",args)
 
 
