@@ -366,8 +366,9 @@ void ProgExtractFeatures::extractRamp(const MultidimArray<double> &I,
 {
 	if (XSIZE(rampMask)==0)
 	{
-		BinaryCircularMask(rampMask,XSIZE(I)/2,OUTSIDE_MASK);
+		rampMask.resize(I);
 		rampMask.setXmippOrigin();
+		BinaryCircularMask(rampMask,XSIZE(I)/2,OUTSIDE_MASK);
 		NmaskPoints=rampMask.sum();
 		fitPoints=new FitPoint[NmaskPoints];
 	}
@@ -401,6 +402,9 @@ void ProgExtractFeatures::run()
 	CorrelationAux aux;
 	std::vector<double> fv;
 
+	if (verbose>0)
+		init_progress_bar(SF.size());
+	size_t idx=0;
 	FOR_ALL_OBJECTS_IN_METADATA(SF)
     {
     	SF.getValue(MDL_IMAGE, fnImg, __iter.objId);
@@ -445,7 +449,12 @@ void ProgExtractFeatures::run()
             SF.setValue(MDL_SCORE_BY_RAMP, fv, __iter.objId);
             fv.clear();
         }
-}
+        idx++;
+        if (idx%100==0 && verbose>0)
+        	progress_bar(idx);
+    }
+	if (verbose>0)
+		progress_bar(SF.size());
 
 	if (fnOut == "") fnOut = fnSel;
 
