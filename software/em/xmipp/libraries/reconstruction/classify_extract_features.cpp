@@ -367,6 +367,7 @@ void ProgExtractFeatures::extractRamp(const MultidimArray<double> &I,
 	if (XSIZE(rampMask)==0)
 	{
 		BinaryCircularMask(rampMask,XSIZE(I)/2,OUTSIDE_MASK);
+		rampMask.setXmippOrigin();
 		NmaskPoints=rampMask.sum();
 		fitPoints=new FitPoint[NmaskPoints];
 	}
