@@ -31,6 +31,16 @@
 #include <vector>
 #include <string>
 
+ProgExtractFeatures::ProgExtractFeatures(): XmippProgram()
+{
+	fitPoints=NULL;
+}
+
+ProgExtractFeatures::~ProgExtractFeatures()
+{
+	if (fitPoints!=NULL)
+		delete []fitPoints;
+}
 
 // Read arguments ==========================================================
 void ProgExtractFeatures::readParams()
@@ -42,6 +52,7 @@ void ProgExtractFeatures::readParams()
     useEntropy = checkParam("--entropy");
     useVariance = checkParam("--variance");
     useZernike = checkParam("--zernike");
+    useRamp = checkParam("--ramp");
 }
 
 // Show ====================================================================
@@ -57,6 +68,7 @@ void ProgExtractFeatures::show()
     << "Extract entropy features:  " << useEntropy   << std::endl
     << "Extract variance features: " << useVariance  << std::endl
     << "Extract Zernike moments:   " << useZernike   << std::endl
+    << "Extract ramp coefficients: " << useRamp      << std::endl
     ;
 }
 
@@ -71,6 +83,7 @@ void ProgExtractFeatures::defineParams()
     addParamsLine("  [--entropy]                   : Extract entropy features");
     addParamsLine("  [--variance]                  : Extract variance features");
     addParamsLine("  [--zernike]                   : Extract Zernike moments");
+    addParamsLine("  [--ramp]                      : Extract Ramp coefficients");
 }
 
 
@@ -348,6 +361,34 @@ void ProgExtractFeatures::extractZernike(const MultidimArray<double> &I,
     }
 }
 
+void ProgExtractFeatures::extractRamp(const MultidimArray<double> &I,
+                                            std::vector<double> &fv)
+{
+	if (XSIZE(rampMask)==0)
+	{
+		BinaryCircularMask(rampMask,XSIZE(I)/2,OUTSIDE_MASK);
+		NmaskPoints=rampMask.sum();
+		fitPoints=new FitPoint[NmaskPoints];
+	}
+	size_t idx=0;
+    FOR_ALL_ELEMENTS_IN_ARRAY2D(I)
+    {
+        if (A2D_ELEM(rampMask, i, j))
+        {
+        	FitPoint &p=fitPoints[idx++];
+            p.x = j;
+            p.y = i;
+            p.z = A2D_ELEM(I, i, j);
+            p.w = 1.;
+        }
+    }
+
+    double pA, pB, pC;
+	least_squares_plane_fit(fitPoints, NmaskPoints, pA, pB, pC);
+	fv.push_back(pA);
+	fv.push_back(pB);
+	fv.push_back(pC);
+}
 
 void ProgExtractFeatures::run()
 {
@@ -396,7 +437,14 @@ void ProgExtractFeatures::run()
             SF.setValue(MDL_SCORE_BY_ZERNIKE, fv, __iter.objId);
             fv.clear();
         }
-    }
+
+        if (useRamp)
+        {
+            extractRamp(I(), fv);
+            SF.setValue(MDL_SCORE_BY_RAMP, fv, __iter.objId);
+            fv.clear();
+        }
+}
 
 	if (fnOut == "") fnOut = fnSel;
 
