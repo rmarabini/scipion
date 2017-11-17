@@ -174,13 +174,13 @@ class XmippProtCL2D(ProtClassify2D):
                       help='To see the analysis you need to browse the '
                            'execution directory and go into the different '
                            'levels')
-        form.addParallelSection(threads=0, mpi=4)
+        form.addParallelSection(threads=0, mpi=4) 
 
     #--------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
         """ Mainly prepare the command line for call cl2d program"""
 
-        # Convert input images if necessary
+        # Convert input images if necessary 
         self._defineFileNames()
 
         if self.initialClasses.get():
