@@ -87,7 +87,7 @@ class XmippProtValidateNonTilt(ProtAnalysis3D):
     
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):        
-        deps = [] # store volumes steps id to use as dependencies for last step
+        deps = [] # store volumes steps id to use as dependencies for last step 
         self.partSet = self.inputParticles.get()
         
         convertId = self._insertFunctionStep('convertInputStep', self.partSet.getObjId())
