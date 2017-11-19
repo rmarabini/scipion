@@ -181,6 +181,13 @@ void MetaData::copyMetadata(const MetaData &md, bool copyObjects)
     }
 }
 
+void MetaData::asVMetaData(VMetaData &vmdOut)
+{
+	vmdOut.clear();
+	FOR_ALL_ROWS_IN_METADATA(*this)
+		vmdOut.push_back(*(__iter.getRow()));
+}
+
 bool MetaData::setValue(const MDObject &mdValueIn, size_t id)
 {
     if (id == BAD_OBJID)
