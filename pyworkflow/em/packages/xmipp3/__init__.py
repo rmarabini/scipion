@@ -115,6 +115,7 @@ from protocol_validate_overfitting import XmippProtValidateOverfitting
 # from protocol_validate_tilt import XmippProtValidateTilt
 from protocol_volume_strain import XmippProtVolumeStrain
 from protocol_volume_homogenizer import XmippProtVolumeHomogenizer
+from protocol_volume_occupancy import XmippProtVolumeOccupancy
 from protocol_write_testC import XmippProtWriteTestC
 from protocol_write_testP import XmippProtWriteTestP
 # Wizards

@@ -35,6 +35,9 @@ from pyworkflow.utils import cleanPath
 from xmipp3 import getMatlabEnviron
 
 import pyworkflow.protocol as pwprot
+from pyworkflow.em.packages.xmipp3.convert import (getImageLocation)
+import xmipp
+from pyworkflow.utils import getExt
 
 
 # import xmipp
@@ -51,104 +54,68 @@ class XmippProtVolumeOccupancy(ProtAnalysis3D):
     def _defineParams(self, form):
         form.addSection(label='Input')
         
-        form.addParam('Reference Volume', PointerParam, label="referenceMap", important=True,
+        form.addParam('refMap', PointerParam, label="Reference Map", important=True,
                       pointerClass='Volume',
                       help='Reference map used to calculate the occupancies. Usually comes from a PDB')
         
         form.addParam('inputMasks', pwprot.params.MultiPointerParam, 
                                             label="Input Masks", important=True,
-                                            pointerClass='EMSet', minNumObjects=2, maxNumObjects=1,
+                                            pointerClass='SetOfVolumes,VolumeMask', minNumObjects=2, maxNumObjects=1,
                                             help='Select two or more masks aligned with the reference map to calculate the occupancies.'
                                                  'inside this regions for the input maps')
 
-        form.addParam('inputVolumes', pwprot.params.MultiPointerParam, 
+        form.addParam('inputMaps', pwprot.params.MultiPointerParam, 
                                             label="Input Volumes", important=True,
-                                            pointerClass='SetOfVolumes', minNumObjects=2, maxNumObjects=1,
+                                            pointerClass='SetOfVolumes,Volume', minNumObjects=2, maxNumObjects=1,
                                             help='Input maps in which we want to calculate the occupancies')
         
-        form.addParam('inputVolumeF', PointerParam, label="Final state", important=True,
-                      pointerClass='Volume',
-                      help='Initial state of the structure, it will be deformed to fit into the final state')
-        form.addParam('inputMask', PointerParam, label="Mask for the final state", important=True,
-                      pointerClass='VolumeMask',
-                      help='Binary mask that defines where the strains and rotations will be calculated')
-        form.addParam('symmetryGroup', StringParam, default="c1",
-                      label='Symmetry group', 
-                      help='See http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format'
-                        'If no symmetry is present, give c1')
     
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        fnVol0 = self.inputVolume0.get().getFileName()
-        fnVolF = self.inputVolumeF.get().getFileName()
-        fnMask = self.inputMask.get().getFileName()
-        self._insertFunctionStep("calculateStrain",fnVol0,fnVolF,fnMask)
-        self._insertFunctionStep("prepareOutput")
-        self._insertFunctionStep("createChimeraScript")
-    
+             
+        self._insertFunctionStep("readDataInMemory")
+        self._insertFunctionStep("compareVoxelDensities")
+        
     #--------------------------- STEPS functions ---------------------------------------------------
-    def calculateStrain(self, fnVol0, fnVolF, fnMask):
-        fnRoot=self._getExtraPath('result')
-        mirtDir = os.path.join(os.environ['XMIPP_HOME'], 'external', 'mirt')
-        # -wait -nodesktop
-        args='''-r "diary('%s'); xmipp_calculate_strain('%s','%s','%s','%s'); exit"'''%(fnRoot+"_matlab.log",fnVolF,fnVol0,fnMask,fnRoot)
-        self.runJob("matlab", args, env=getMatlabEnviron(mirtDir))
     
-    def prepareOutput(self):
-        volDim = self.inputVolume0.get().getDim()[0]
-        fnRoot=self._getExtraPath('result')
-        self.runJob("xmipp_image_convert", "-i %s_initial.raw#%d,%d,%d,0,float -o %s_initial.vol"%
-                    (fnRoot,volDim,volDim,volDim,fnRoot))
-        self.runJob("xmipp_transform_mirror","-i %s_initial.vol --flipX"%fnRoot)
-        self.runJob("xmipp_image_convert", "-i %s_final.raw#%d,%d,%d,0,float -o %s_final.vol"%
-                    (fnRoot,volDim,volDim,volDim,fnRoot))
-        self.runJob("xmipp_transform_mirror","-i %s_final.vol --flipX"%fnRoot)
-        self.runJob("xmipp_image_convert", "-i %s_initialDeformedToFinal.raw#%d,%d,%d,0,float -o %s_initialDeformedToFinal.vol"%
-                    (fnRoot,volDim,volDim,volDim,fnRoot))
-        self.runJob("xmipp_transform_mirror","-i %s_initialDeformedToFinal.vol --flipX"%fnRoot)
-        self.runJob("xmipp_image_convert", "-i %s_strain.raw#%d,%d,%d,0,float -o %s_strain.vol"%
-                    (fnRoot,volDim,volDim,volDim,fnRoot))
-        self.runJob("xmipp_transform_mirror","-i %s_strain.vol --flipX"%fnRoot)
-        self.runJob("xmipp_image_convert", "-i %s_localrot.raw#%d,%d,%d,0,float -o %s_localrot.vol"%
-                    (fnRoot,volDim,volDim,volDim,fnRoot))
-        self.runJob("xmipp_transform_mirror","-i %s_localrot.vol --flipX"%fnRoot)
-        self.runJob("rm","-f "+self._getExtraPath('result_*.raw'))
-        if self.symmetryGroup!="c1":
-            self.runJob("xmipp_transform_symmetrize","-i %s --sym %s"%(fnRoot+"_strain.vol",self.symmetryGroup.get()))
-            self.runJob("xmipp_transform_symmetrize","-i %s --sym %s"%(fnRoot+"_localrot.vol",self.symmetryGroup.get()))
+    def changeExtension(self, vol):
+        extVol = getExt(vol)
+        if (extVol == '.mrc') or (extVol == '.map'):
+            vol = vol + ':mrc'
+        return vol
     
-    def createChimeraScript(self):
-        fnRoot = "extra/result"
-        scriptFile = self._getPath('result') + '_strain_chimera.cmd'
-        fhCmd = open(scriptFile, 'w')
-        fhCmd.write("open %s\n" % (fnRoot+"_final.vol"))
-        fhCmd.write("open %s\n" % (fnRoot+"_strain.vol"))
-        fhCmd.write("vol #1 hide\n")
-        fhCmd.write("scolor #0 volume #1 cmap rainbow reverseColors True\n")
-        fhCmd.close()
+    def readDataInMemory(self):
+        refVolumeLoc = self.changeExtension(getImageLocation(self.refMap.get()))
+        print refVolumeLoc
+        
+        #print self.inputMasks[1].get()
+        #print self.inputMasks[0].get()
+        #print len(self.inputMasks)
 
-        scriptFile = self._getPath('result') + '_localrot_chimera.cmd'
-        fhCmd = open(scriptFile, 'w')
-        fhCmd.write("open %s\n" % (fnRoot+"_final.vol"))
-        fhCmd.write("open %s\n" % (fnRoot+"_localrot.vol"))
-        fhCmd.write("vol #1 hide\n")
-        fhCmd.write("scolor #0 volume #1 cmap rainbow reverseColors True\n")
-        fhCmd.close()
 
-        scriptFile = self._getPath('result') + '_morph_chimera.cmd'
-        fhCmd = open(scriptFile, 'w')
-        fhCmd.write("open %s\n" % (fnRoot+"_initial.vol"))
-        fhCmd.write("open %s\n" % (fnRoot+"_final.vol"))
-        fhCmd.write("vol #0 hide\n")
-        fhCmd.write("vol #1 hide\n")
-        fhCmd.write("vop morph #0,1 frames 50\n")
-        fhCmd.close()
+        self.reVol =  xmipp.Image(refVolumeLoc)
+        print(self.reVol)
 
+    def compareVoxelDensities(self):
+        dims = self.reVol.getDimensions()
+        print dims
+        n = 0
+        for i in range(0,dims[0]):
+            for j in range(0,dims[1]):
+                for k in range(0,dims[2]):
+                    pass
+                    #a = self.reVol.getPixel(n,i,j,k)
+                         
+        
+        
+    
     #--------------------------- INFO functions --------------------------------------------
     def _validate(self):
         errors = []
-        xdim0 = self.inputVolume0.get().getDim()[0]
+        
+        '''xdim0 = self.inputVolume0.get().getDim()[0]
         xdimF = self.inputVolumeF.get().getDim()[0]
         if xdim0 != xdimF:
-            errors.append("Make sure that the two volumes have the same size")
+            errors.append("Make sure that the two volumes have the same size")'''
+
         return errors    
