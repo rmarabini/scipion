@@ -30,6 +30,7 @@ from constants import *
 from pyworkflow.em import *
 from pyworkflow.em.wizard import *
 from protocol_classify3d import ProtRelionClassify3D
+from protocol_hierarchical_classify3d import ProtRelionHierarchicalClassify3D
 from protocol_refine3d import ProtRelionRefine3D
 from protocol_classify2d import ProtRelionClassify2D
 from protocol_preprocess import ProtRelionPreprocessParticles
@@ -76,6 +77,7 @@ class RelionPartMaskDiameterWizard(RelionBackRadiusWizard):
     _targets = [(ProtRelionClassify2D, ['maskDiameterA']),
                 (ProtRelionRefine3D, ['maskDiameterA']),
                 (ProtRelionClassify3D, ['maskDiameterA']),
+                (ProtRelionHierarchicalClassify3D, ['maskDiameterA']),
                 (ProtRelionClassify2D, ['maskDiameterA']),
                 (ProtRelionInitialModel, ['maskDiameterA'])]
     _unit = UNIT_ANGSTROM
@@ -115,6 +117,7 @@ class RelionSortMaskWizard(RelionPartMaskDiameterWizard):
 
 class RelionVolFilterWizard(FilterVolumesWizard):
     _targets = [(ProtRelionClassify3D, ['initialLowPassFilterA']),
+                (ProtRelionHierarchicalClassify3D, ['initialLowPassFilterA']),
                 (ProtRelionRefine3D, ['initialLowPassFilterA']),
                 (ProtRelionCreateMask3D, ['initialLowPassFilterA'])]
     
