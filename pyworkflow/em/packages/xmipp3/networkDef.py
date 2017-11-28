@@ -66,9 +66,10 @@ def gkern(kernlen=5, nsig=1):
   kernel = kernel_raw/kernel_raw.sum()
   return kernel.astype(np.float32)
 
-def main_network(x, labels, num_labels, learningRate, globalStep, nData):
+def main_network(x, x_feats, labels, num_labels, learningRate, globalStep, nData):
   '''
     4D-tensor x,  [imageNumber, height, width, nChanns]
+    2D-tensor x_feats [imageNumber, n_features] n_features ~ 120
     2D-tensor labels, [imageNumber, 2]
     float learningRate
     tf.Variable globalStep
@@ -111,12 +112,16 @@ def main_network(x, labels, num_labels, learningRate, globalStep, nData):
 
     network = tflearn.layers.conv.avg_pool_2d(network, kernel_size=4, strides=2)
     network = tflearn.layers.core.fully_connected( network, 2**9, activation='relu', regularizer='L2', weight_decay= L2_CONST)
+    #NEW. DEALING WITH FEATURES
+    network = tflearn.layers.merge_ops.merge( [network, x_feats], 'concat', axis=1)
+    network = tflearn.layers.core.fully_connected( network, 2**8, activation='relu', regularizer='L2', weight_decay= L2_CONST)
+    #END NEW
     network = tflearn.layers.core.dropout(network, DROPOUT_KEEP_PROB)
     logits =  tflearn.layers.core.fully_connected( network, num_labels, activation='linear')
     y_pred = tf.nn.softmax(logits)
     current_lr = tf.train.exponential_decay(learningRate, globalStep, 200*modelDepth, 0.90, staircase=True)
     optimizer = tf.train.AdamOptimizer(learning_rate= learningRate)
-   
+
   elif MODEL=="ResNet":
     network= myResNetBlock(network, 1, 32, 15, reductionStep=2)
     network= myResNetBlock(network, 2, 32, 15, reductionStep=1)
@@ -167,25 +172,25 @@ def main_network(x, labels, num_labels, learningRate, globalStep, nData):
 
   reg_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
   cross_entropy= tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits= logits, labels= labels) + sum(reg_losses) )
-  
+
   optimizer= optimizer.minimize(cross_entropy, global_step= globalStep)
-  
+
   with tf.name_scope('PERFORMANCE'):
     with tf.name_scope('correct_prediction'):
       correct_prediction = tf.equal(tf.argmax(y_pred, 1), tf.argmax(labels, 1))
     with tf.name_scope('accuracy'):
       accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-      
+
     tf.summary.scalar( 'cross_entropy', cross_entropy )
     tf.summary.scalar( 'accuracy', accuracy )
 #    tf.summary.histogram('histogram', prev_layer)
 #    tf.summary.image( '1_images', prev_layer, max_outputs= 3)
 
-#    tf.summary.image("3_kernel_0",  tf.transpose (w_0, [3, 0, 1, 2]), max_outputs= NUM_FILTERS[0]) 
+#    tf.summary.image("3_kernel_0",  tf.transpose (w_0, [3, 0, 1, 2]), max_outputs= NUM_FILTERS[0])
 #    for kerNum in range( NUM_FILTERS[0]):
 #      tf.summary.image("2_activations_0", tf.expand_dims(prev_layer0[:,:,:,kerNum], 3), max_outputs= 3)
 #    for kerNum in range( NUM_FILTERS[1]):
-#      tf.summary.image("3_activations_0", tf.expand_dims(prev_layer1[:,:,:,kerNum], 3), max_outputs= 3)            
+#      tf.summary.image("3_activations_0", tf.expand_dims(prev_layer1[:,:,:,kerNum], 3), max_outputs= 3)
 #    for kerNum in range( NUM_FILTERS[2]):
 #      tf.summary.image("3_activations_0", tf.expand_dims(prev_layer2[:,:,:,kerNum], 3), max_outputs= 3)
     mergedSummaries= tf.summary.merge_all()
