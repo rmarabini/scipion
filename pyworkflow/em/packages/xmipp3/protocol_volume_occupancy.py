@@ -2,7 +2,7 @@
 # *
 # * Authors:     Javier Vargas (javier.vargasbalbuena@mcgill.ca)
 # *
-# * Departament of Anatomy and Cell Biology, McGill University
+# * Department of Anatomy and Cell Biology, McGill University
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -24,20 +24,14 @@
 # *
 # **************************************************************************
 
-import os
-
-from pyworkflow.object import Float, String
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam
-from pyworkflow.em.protocol.protocol import EMProtocol
+from pyworkflow.protocol.params import PointerParam
 from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
-from pyworkflow.utils import cleanPath
-from xmipp3 import getMatlabEnviron
-
 import pyworkflow.protocol as pwprot
-from pyworkflow.em.packages.xmipp3.convert import (getImageLocation)
+from pyworkflow.em.packages.xmipp3.convert import (getImageLocation,readSetOfVolumes,Volume)
 import xmipp
 from pyworkflow.utils import getExt
+from numpy import zeros, double
+from pyworkflow.object import Float, String
 
 
 # import xmipp
@@ -60,55 +54,125 @@ class XmippProtVolumeOccupancy(ProtAnalysis3D):
         
         form.addParam('inputMasks', pwprot.params.MultiPointerParam, 
                                             label="Input Masks", important=True,
-                                            pointerClass='SetOfVolumes,VolumeMask', minNumObjects=2, maxNumObjects=1,
+                                            pointerClass='Volume', minNumObjects=2, maxNumObjects=1,
                                             help='Select two or more masks aligned with the reference map to calculate the occupancies.'
                                                  'inside this regions for the input maps')
 
         form.addParam('inputMaps', pwprot.params.MultiPointerParam, 
                                             label="Input Volumes", important=True,
-                                            pointerClass='SetOfVolumes,Volume', minNumObjects=2, maxNumObjects=1,
+                                            pointerClass='Volume', minNumObjects=2, maxNumObjects=1,
                                             help='Input maps in which we want to calculate the occupancies')
         
     
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
              
-        self._insertFunctionStep("readDataInMemory")
-        self._insertFunctionStep("compareVoxelDensities")
+        #Read the reference map        
+        self.refVol = ''
+        self.mapVol = ''
+        self.mask = ''
         
-    #--------------------------- STEPS functions ---------------------------------------------------
-    
+        self.numOfMaps =  sum(1 for _ in self.inputMaps)
+        self.numOfMasks =  sum(1 for _ in self.inputMasks)
+        
+        self.volDensityInMask = zeros((self.numOfMasks,self.numOfMaps),dtype=double)
+        self.refDensityInMask = zeros((self.numOfMasks,1),dtype=double)
+        
+        self._insertFunctionStep("readRefInMemory", self.refMap.get())
+        numV = 0
+        numMask = 0
+        for itemVol in self.inputMaps:       # Take a look  to protocol_sets line 151 
+            self._insertFunctionStep("readMapInMemory", itemVol.get())
+            for itemMask in self.inputMasks:
+                self._insertFunctionStep("readMaskInMemory", itemMask.get())                                            
+                self._insertFunctionStep("compareVoxelDensities",numV,numMask)
+                numMask += 1
+            numMask = 0
+            numV += 1
+            
+        self._insertFunctionStep('createOutputStep')
+
+        
+    #--------------------------- STEPS functions ---------------------------------------------------    
     def changeExtension(self, vol):
         extVol = getExt(vol)
         if (extVol == '.mrc') or (extVol == '.map'):
             vol = vol + ':mrc'
         return vol
     
-    def readDataInMemory(self):
-        refVolumeLoc = self.changeExtension(getImageLocation(self.refMap.get()))
-        print refVolumeLoc
-        
-        #print self.inputMasks[1].get()
-        #print self.inputMasks[0].get()
-        #print len(self.inputMasks)
+    def readRefInMemory(self, mapLoc):
+        refVolumeLoc = self.changeExtension(getImageLocation(mapLoc))
+        self.refVol = xmipp.Image(refVolumeLoc)
 
+    def readMapInMemory(self, mapLoc):
+        refVolumeLoc = self.changeExtension(getImageLocation(mapLoc))
+        self.mapVol = xmipp.Image(refVolumeLoc)
+    
+    def readMaskInMemory(self, maskLoc):
+        refVolumeLoc = self.changeExtension(getImageLocation(maskLoc))
+        self.mask = xmipp.Image(refVolumeLoc)          
 
-        self.reVol =  xmipp.Image(refVolumeLoc)
-        print(self.reVol)
-
-    def compareVoxelDensities(self):
-        dims = self.reVol.getDimensions()
-        print dims
+    def compareVoxelDensities(self,numV,numMask):        
+        dims = self.refVol.getDimensions()
         n = 0
+        computeRef = (self.refDensityInMask[numMask,0] == 0)
         for i in range(0,dims[0]):
             for j in range(0,dims[1]):
                 for k in range(0,dims[2]):
-                    pass
-                    #a = self.reVol.getPixel(n,i,j,k)
-                         
+                    if (self.mask.getPixel(n,i,j,k) > 0.5):
+                        self.volDensityInMask[numMask,numV] += self.mapVol.getPixel(n,i,j,k)
+                        if (computeRef):
+                            self.refDensityInMask[numMask,0] += self.refVol.getPixel(n,i,j,k)
+                                
+    def createOutputStep(self):
+        fnOccupancy = self._getExtraPath('occupancy.xmd')
+        md = xmipp.MetaData()        
+
         
+        outputSetOfVolumes = self._createSetOfVolumes()        
+        outputSetOfVolumes.setSamplingRate(self.inputMaps[0].get().getSamplingRate())    
+            
+        #outVol.setSamplingRate(self.refMap.get().getSamplingRate())        
+        #outVol.setLocation(self.refMap.get().getFileName())
+        #outVol.setObjLabel(self.refMap.get().getObjLabel())
+                                
+        for maskIdx in range(0,self.numOfMasks):
+            outVol = Volume()
+            outVol.copyAttributes(self.refMap.get())
+            outVol.setFileName(self.refMap.get().getFileName())
+            outVol.setObjComment("Reference Map")
+            
+            outVol.mask = String(self.inputMasks[maskIdx].get().getFileName())
+            outVol.weight = Float(self.refDensityInMask[maskIdx,0])
+            outputSetOfVolumes.append(outVol)                
+
+            objId = md.addObject()
+            md.setValue(xmipp.MDL_IMAGE,self.refMap.get().getFileName(),objId)                       
+            md.setValue(xmipp.MDL_MASK,self.inputMasks[maskIdx].get().getFileName(),objId) 
+            md.setValue(xmipp.MDL_WEIGHT,self.refDensityInMask[maskIdx,0],objId)
         
-    
+        for volIdx in range(0,self.numOfMaps):
+            for maskIdx in range(0,self.numOfMasks):            
+                
+                outVol = Volume()
+                outVol.copyAttributes(self.inputMaps[volIdx].get())
+                outVol.setFileName(self.inputMaps[volIdx].get().getFileName())
+                outVol.setObjComment("Input Map %s " % String(volIdx+1))
+                outVol.mask = String(self.inputMasks[maskIdx].get().getFileName())
+                outVol.weight = Float(self.volDensityInMask[maskIdx,volIdx])
+                outputSetOfVolumes.append(outVol)                
+                
+                objId = md.addObject()
+                md.setValue(xmipp.MDL_IMAGE,self.inputMaps[volIdx].get().getFileName(),objId)
+                md.setValue(xmipp.MDL_MASK,self.inputMasks[maskIdx].get().getFileName(),objId) 
+                md.setValue(xmipp.MDL_WEIGHT,self.volDensityInMask[maskIdx,volIdx],objId)
+        
+        md.write(fnOccupancy)
+        outputArgs = {'outputVolumes': outputSetOfVolumes}
+        self._defineOutputs(**outputArgs)
+ 
+
+                                             
     #--------------------------- INFO functions --------------------------------------------
     def _validate(self):
         errors = []

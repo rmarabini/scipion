@@ -59,6 +59,7 @@ from pyworkflow.em.showj import *
 from protocol_validate_nontilt import XmippProtValidateNonTilt
 from protocol_multireference_alignability import XmippProtMultiRefAlignability
 from protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
+from protocol_volume_occupancy import XmippProtVolumeOccupancy
 
 
 
@@ -91,7 +92,8 @@ class XmippViewer(Viewer):
                 XmippProtCTFMicrographs,
                 XmippProtValidateNonTilt,
                 XmippProtAssignmentTiltPair,
-                XmippProtMultiRefAlignability
+                XmippProtMultiRefAlignability,
+                XmippProtVolumeOccupancy
                 ]
 
     def __init__(self, **kwargs):
@@ -375,6 +377,16 @@ class XmippViewer(Viewer):
 
         elif issubclass(cls, XmippProtExtractParticlesPairs):
             self._visualize(obj.outputParticlesTiltPair)
+            
+            
+        elif issubclass(cls, XmippProtVolumeOccupancy):
+            outputVols = obj.outputVolumes
+            labels = 'id enabled comment _filename  mask weight'
+            self._views.append(ObjectView(self._project, outputVols.strId(), outputVols.getFileName(),
+                                          viewParams={MODE: MODE_MD, VISIBLE:labels, ORDER: labels,
+                                                      RENDER: '_filename'}))
+
+                    
 
         return self._views
 
