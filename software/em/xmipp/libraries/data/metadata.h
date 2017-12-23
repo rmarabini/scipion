@@ -414,6 +414,10 @@ public:
      */
     void asVMetaData(VMetaData &vmdOut);
 
+    /** Import from Vector Metadata.
+     */
+    void fromVMetaData(VMetaData &vmdIn);
+
     /** Set to false for row format (parameter files).
      *  set to true  for column format (this is the default) (docfiles)
      */

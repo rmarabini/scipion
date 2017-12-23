@@ -188,6 +188,13 @@ void MetaData::asVMetaData(VMetaData &vmdOut)
 		vmdOut.push_back(*(__iter.getRow()));
 }
 
+void MetaData::fromVMetaData(VMetaData &vmdIn)
+{
+	clear();
+	for (size_t i=0; i<vmdIn.size(); ++i)
+		addRow2(vmdIn[i]);
+}
+
 bool MetaData::setValue(const MDObject &mdValueIn, size_t id)
 {
     if (id == BAD_OBJID)
