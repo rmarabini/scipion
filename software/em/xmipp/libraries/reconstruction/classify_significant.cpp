@@ -394,6 +394,7 @@ void ProgClassifySignificant::run()
 		double currentWmax=md.getColumnMax(MDL_WEIGHT);
 		double currentWmin=md.getColumnMin(MDL_WEIGHT);
 		md.operate(formatString("weight=%f*(weight-%f)+%f",(1.0-wmin)/(currentWmax-currentWmin),currentWmin,wmin));
+		md.setValueCol(MDL_REF3D,(int)ivol+1);
 		md.write(formatString("class%06d_images@%s",ivol+1,fnOut.c_str()),MD_APPEND);
 	}
 }
