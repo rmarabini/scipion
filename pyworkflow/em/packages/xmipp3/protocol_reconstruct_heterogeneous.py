@@ -106,11 +106,8 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
     def insertIteration(self,iteration):
         self._insertFunctionStep('globalAssignment',iteration)
         self._insertFunctionStep('classifyParticles',iteration)
-#         self._insertFunctionStep('weightParticles',iteration)
-#         self._insertFunctionStep('qualifyParticles',iteration)
-#         self._insertFunctionStep('reconstruct',iteration)
-#         self._insertFunctionStep('postProcessing',iteration)
-#         self._insertFunctionStep('evaluateReconstructions',iteration)
+        self._insertFunctionStep('reconstruct',iteration)
+        self._insertFunctionStep('postProcessing',iteration)
 
     def readInfoField(self,fnDir,block,label):
         mdInfo = xmipp.MetaData("%s@%s"%(block,join(fnDir,"info.xmd")))
@@ -180,7 +177,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         makePath(fnDir)
         i=1
         for vol in self.inputVolumes.get():
-            fnVol=join(fnDir,"volume%02d.vol"%i)
+            fnVol=join(fnDir,"volume%02d.mrc"%i)
             img.convert(vol, fnVol)
             TsVol = vol.getSamplingRate()
             if TsVol!=TsCurrent:
@@ -195,8 +192,8 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         if self.nextMask.hasValue():
             fnMask=self._getExtraPath("mask.vol")
         for i in range(0,self.getNumberOfReconstructedVolumes()):
-            fnPreviousVol=join(fnDirPrevious,"volume%02d.vol"%(i+1))
-            fnReferenceVol=join(fnDir,"volumeRef%02d.vol"%(i+1))
+            fnPreviousVol=join(fnDirPrevious,"volume%02d.mrc"%(i+1))
+            fnReferenceVol=join(fnDir,"volumeRef%02d.mrc"%(i+1))
             copyFile(fnPreviousVol, fnReferenceVol)
             self.runJob('xmipp_transform_filter','-i %s --fourier low_pass %f --sampling %f'%\
                         (fnReferenceVol,self.targetResolution.get(),TsCurrent),numberOfMpi=1)
@@ -232,7 +229,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         for i in range(1,self.getNumberOfReconstructedVolumes()+1):
             fnAngles=join(fnDirCurrent,"angles%02d.xmd"%i)
             if not exists(fnAngles):
-                fnReferenceVol=join(fnDirCurrent,"volumeRef%02d.vol"%i)
+                fnReferenceVol=join(fnDirCurrent,"volumeRef%02d.mrc"%i)
                 fnGallery=join(fnDirCurrent,"gallery%02d.stk"%i)
                 fnGalleryXmd=join(fnDirCurrent,"gallery%02d.doc"%i)
                 args="-i %s -o %s --sampling_rate %f --perturb %f --sym %s --min_tilt_angle %f --max_tilt_angle %f"%\
@@ -262,7 +259,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         fnAnglesAll = join(fnDirCurrent,"anglesAll.xmd")
         mdVolumes = MetaData()
         for i in range(1,self.getNumberOfReconstructedVolumes()+1):
-            fnReferenceVol=join(fnDirCurrent,"volumeRef%02d.vol"%i)
+            fnReferenceVol=join(fnDirCurrent,"volumeRef%02d.mrc"%i)
             fnOut = "angles_%02d@%s"%(i,fnAnglesAll)
             fnAngles=join(fnDirCurrent,"angles%02d.xmd"%i)
             if exists(fnAngles):
@@ -279,6 +276,108 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         fnImgsId = self._getExtraPath("imagesId.xmd")
         fnOut = join(fnDirCurrent,"classes.xmd")
         self.runJob("xmipp_classify_significant","--id %s --angles %s --ref %s -o %s"%(fnImgsId,fnAnglesAll,fnVols,fnOut), numberOfMpi=1)
+        cleanPath(fnVols)
+        cleanPath(fnAnglesAll)
+
+    def reconstruct(self, iteration):
+        fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
+        fnOut = join(fnDirCurrent,"classes.xmd")
+        fnRootVol = join(fnDirCurrent,"class_")
+        for i in range(1,self.getNumberOfReconstructedVolumes()+1):
+            self.runJob("xmipp_metadata_split","-i class%06d_images@%s --oroot %s_%06d_"%(i,fnOut,fnRootVol,i),numberOfMpi=1)
+            for half in range(1,3):
+                args="-i %s_%06d_%06d.xmd -o %s_%02d_half%d.vol --sym %s --weight --thr %d"%(fnRootVol,i,half,fnRootVol,i,half,
+                                                                                             self.symmetryGroup,self.numberOfThreads.get())
+                self.runJob("xmipp_reconstruct_fourier",args,numberOfMpi=self.numberOfMpi.get())
+                cleanPath("%s_%06d_%06d.xmd"%(fnRootVol,i,half))
+
+    def postProcessing(self, iteration):
+        fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
+        TsCurrent=self.readInfoField(self._getExtraPath(),"sampling",xmipp.MDL_SAMPLINGRATE)
+        fnRootVol = join(fnDirCurrent,"class_")
+
+        fnMask=''
+        if self.nextMask.hasValue():
+            fnMask=self._getExtraPath("mask.vol")
+        else:
+            R=self.particleRadius.get()
+            if R<=0:
+                R=self.inputParticles.get().getDimensions()[0]/2*self.TsOrig
+            fnMask=self._getExtraPath("mask.mrc")
+            self.runJob('xmipp_transform_mask','-i %s_000001_half1.vol --mask circular -%d --create_mask %s'%\
+                        (fnRootVol,round(R*self.TsOrig/TsCurrent),fnMask),numberOfMpi=1)
+        fnCentered = join(fnDirCurrent,"volumeCentered.mrc")
+        for i in range(1,self.getNumberOfReconstructedVolumes()+1):
+            # Align the two volumes
+            fnVol1="%s_%02d_half1.vol"%(fnRootVol,i)
+            fnVol2="%s_%02d_half2.vol"%(fnRootVol,i)
+            fnVolAvg=join(fnDirCurrent,"volume%02d.mrc"%i)
+            self.runJob('xmipp_image_operate','-i %s --plus %s -o %s'%(fnVol1,fnVol2,fnVolAvg),numberOfMpi=1)
+            self.runJob('xmipp_image_operate','-i %s --mult 0.5'%fnVolAvg,numberOfMpi=1)
+            self.runJob('xmipp_volume_align','--i1 %s --i2 %s --local --apply'%(fnVolAvg,fnVol1),numberOfMpi=1)
+            self.runJob('xmipp_volume_align','--i1 %s --i2 %s --local --apply'%(fnVolAvg,fnVol2),numberOfMpi=1)
+
+            # Remove untrusted background voxels
+            fnRootRestored=join(fnDirCurrent,"volumeRestored")
+            args='--i1 %s --i2 %s --oroot %s --denoising 1 --mask binary_file %s'%(fnVol1,fnVol2,fnRootRestored,fnMask)
+            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
+            moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
+
+            # Filter bank denoising
+            args='--i1 %s --i2 %s --oroot %s --filterBank 0.01 --mask binary_file %s'%(fnVol1,fnVol2,fnRootRestored,fnMask)
+            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
+            moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
+            cleanPath("%s_filterBank.vol"%fnRootRestored)
+     
+            # Laplacian Denoising
+            args = "-i %s --retinex 0.95 "+fnMask
+            self.runJob('xmipp_transform_filter',args%fnVol1,numberOfMpi=1)
+            self.runJob('xmipp_transform_filter',args%fnVol2,numberOfMpi=1)
+
+            # Blind deconvolution
+            args='--i1 %s --i2 %s --oroot %s --deconvolution 1 --mask binary_file %s'%(fnVol1,fnVol2,fnRootRestored,fnMask)
+            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
+            moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
+            self.runJob("xmipp_image_convert","-i %s_convolved.vol -o %s -t vol"%(fnRootRestored,fnVolAvg),numberOfMpi=1)
+            cleanPath("%s_convolved.vol"%fnRootRestored)
+            cleanPath("%s_deconvolved.vol"%fnRootRestored)
+
+            # Difference evaluation and production of a consensus average
+            args='--i1 %s --i2 %s --oroot %s --difference 2 2 --mask binary_file %s'%(fnVol1,fnVol2,fnRootRestored,fnMask)
+            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            self.runJob("xmipp_image_convert","-i %s_avgDiff.vol -o %s -t vol"%(fnRootRestored,fnVolAvg),numberOfMpi=1)
+            cleanPath("%s_avgDiff.vol"%fnRootRestored)
+            moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
+            moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
+            
+            # FSC
+            self.runJob("xmipp_image_operate","-i %s --mult %s"%(fnVol1,fnMask),numberOfMpi=1)
+            self.runJob("xmipp_image_operate","-i %s --mult %s"%(fnVol2,fnMask),numberOfMpi=1)
+            self.runJob('xmipp_transform_threshold','-i %s --select below 0 --substitute value 0 '%fnVol1,numberOfMpi=1)
+            self.runJob('xmipp_transform_threshold','-i %s --select below 0 --substitute value 0 '%fnVol2,numberOfMpi=1)
+
+            fnFsc=join(fnDirCurrent,"fsc%02d.xmd"%i)
+            self.runJob('xmipp_resolution_fsc','--ref %s -i %s -o %s --sampling_rate %f'\
+                        %(fnVol1,fnVol2,fnFsc,TsCurrent),numberOfMpi=1)
+            self.runJob('xmipp_transform_filter','-i %s --fourier fsc %s --sampling %f'%(fnVolAvg,fnFsc,TsCurrent),numberOfMpi=1)
+            cleanPath(fnVol1)
+            cleanPath(fnVol2)
+
+            self.runJob('xmipp_image_header','-i %s --sampling_rate %f'%(fnVolAvg,TsCurrent),numberOfMpi=1)
+            
+            if i==1:
+                copyFile(fnVolAvg,fnCentered)
+            else:
+                self.runJob("xmipp_image_operate","-i %s --plus %s"%(fnCentered,fnVolAvg),numberOfMpi=1)
+
+        # Align all volumes
+        for i in range(1,self.getNumberOfReconstructedVolumes()+1):
+            fnVolAvg=join(fnDirCurrent,"volume%02d.mrc"%i)
+            self.runJob('xmipp_volume_align','--i1 %s --i2 %s --local --apply'%(fnCentered,fnVolAvg),numberOfMpi=1)
+        cleanPath(fnCentered)
 
     def createOutput(self):
         # get last iteration
@@ -378,44 +477,3 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                 print("Stability of class %d: %f"%(i+1,sizeIntersection/sizeUnion))
                 cleanPath(fnIntersection)
                 cleanPath(fnUnion)                
-
-    def weightParticles(self, iteration):
-        fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
-        fnGeneralAngles=join(fnDirCurrent,"angles.xmd")
-        fnGeneralImages=join(fnDirCurrent,"images.xmd")
-        for i in range(1,self.getNumberOfReconstructedVolumes()+1):
-            fnAngles=join(fnDirCurrent,"angles%02d.xmd"%i)
-            fnImages=join(fnDirCurrent,"images%02d.xmd"%i)
-                
-            if self.weightSSNR:
-                row=getFirstRow(fnAngles)
-                if row.containsLabel(xmipp.MDL_WEIGHT_SSNR):
-                    self.runJob("xmipp_metadata_utilities","-i %s --operate drop_column weightSSNR"%fnAngles,numberOfMpi=1)
-                self.runJob("xmipp_metadata_utilities","-i %s --set join %s particleId"%\
-                            (fnAngles,self._getExtraPath("ssnrWeights.xmd")),numberOfMpi=1)
-
-            mdAngles=xmipp.MetaData(fnAngles)
-            for objId in mdAngles:
-                weight=mdAngles.getValue(xmipp.MDL_WEIGHT_SIGNIFICANT,objId)
-                if self.weightSSNR:
-                    aux=mdAngles.getValue(xmipp.MDL_WEIGHT_SSNR,objId)
-                    weight*=aux
-                mdAngles.setValue(xmipp.MDL_WEIGHT,weight,objId)
-            mdAngles.write(fnAngles)
-            
-            if i==1:
-                copyFile(fnAngles,fnGeneralAngles)
-                copyFile(fnImages,fnGeneralImages)
-            else:
-                self.runJob('xmipp_metadata_utilities',"-i %s --set union_all %s"%(fnGeneralAngles,fnAngles),numberOfMpi=1)
-                self.runJob('xmipp_metadata_utilities',"-i %s --set union_all %s"%(fnGeneralImages,fnImages),numberOfMpi=1)
-
-    def reconstruct(self, iteration):
-        fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
-        for i in range(1,self.getNumberOfReconstructedVolumes()+1):
-            fnAngles=join(fnDirCurrent,"angles%02d.xmd"%i)
-            fnVol=join(fnDirCurrent,"volume%02d.vol"%i)
-            if not exists(fnVol):
-                args="-i %s -o %s --sym %s --weight --thr %d"%(fnAngles,fnVol,self.symmetryGroup,self.numberOfThreads.get())
-                self.runJob("xmipp_reconstruct_fourier",args,numberOfMpi=self.numberOfMpi.get()+1)
-    

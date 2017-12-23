@@ -48,19 +48,29 @@ public:
     FileName fnOut;
     /** Padding factor */
     int pad;
+    /** Min. Weight */
+    double wmin;
 public:
     // Fourier projector
     std::vector<FourierProjector *> projector;
-	// Theoretical projection
-	std::vector<Projection *> P;
 	// Set of Ids
 	std::vector<size_t> setIds;
 	// Set of Angles
 	std::vector<VMetaData> setAngles;
+	// Set of Angles
+	std::vector<VMetaData> classifiedAngles;
 	// Current row
 	std::vector<size_t> currentRowIdx;
 	// Set of Angles for a particular image
 	std::vector<VMetaData> subsetAngles;
+	// Set of projections for a particular image, they act as a pool of projections
+	std::vector<MultidimArray<double> *> subsetProjections;
+	// Set of indexes of the projections for a particular image
+	std::vector< std::vector<size_t> > subsetProjectionIdx;
+	// Experimental image
+	Image<double> Iexp;
+	// Projection aux
+	Projection Paux;
 public:
     /// Destructor
     ~ProgClassifySignificant();
@@ -83,7 +93,16 @@ public:
         parameters. At the output they have the estimated pose.*/
     void run();
 
+    /** Generate the projection of a given volume following the instructions of currentRow.
+     * The result is stored in subsetProjections at poolIdx
+     */
+    void generateProjection(size_t volumeIdx, size_t poolIdx, MDRow &currentRow);
+
+    /** Choose the subset for particleID and generate its projections */
     void selectSubset(size_t particleId);
+
+    /** Update class */
+    void updateClass(int n, double wn);
 };
 //@}
 #endif

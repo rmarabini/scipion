@@ -31,6 +31,8 @@ ProgClassifySignificant::~ProgClassifySignificant()
 {
 	for (size_t i=0; i<projector.size(); i++)
 		delete projector[i];
+	for (size_t i=0; i<subsetProjections.size(); i++)
+		delete subsetProjections[i];
 }
 
 // Read arguments ==========================================================
@@ -41,6 +43,7 @@ void ProgClassifySignificant::readParams()
     fnAngles = getParam("--angles");
     fnOut = getParam("-o");
     pad = getIntParam("--padding");
+    wmin = getDoubleParam("--minWeight");
 }
 
 // Show ====================================================================
@@ -54,6 +57,7 @@ void ProgClassifySignificant::show()
     << "Angles:              " << fnAngles          << std::endl
     << "Output:              " << fnOut             << std::endl
     << "Padding factor:      " << pad               << std::endl
+	<< "Min. Weight:         " << wmin              << std::endl
     ;
 }
 
@@ -68,6 +72,7 @@ void ProgClassifySignificant::defineParams()
     addParamsLine("                               : in different blocks");
     addParamsLine("   -o <metadata>               : Output metadata with a set of angles per volume");
     addParamsLine("  [--padding <p=2>]            : Padding factor");
+    addParamsLine("  [--minWeight <p=0.1>]        : Minimum weight");
 }
 
 // Produce side information ================================================
@@ -94,8 +99,10 @@ void ProgClassifySignificant::produceSideInfo()
         VMetaData *vmd=new VMetaData();
         mdAngles.asVMetaData(*vmd);
         setAngles.push_back(*vmd);
+        classifiedAngles.push_back(*(new VMetaData()));
 
         subsetAngles.push_back(*(new VMetaData()));
+        subsetProjectionIdx.push_back(* (new std::vector<size_t>));
         i+=1;
     }
 
@@ -105,24 +112,175 @@ void ProgClassifySignificant::produceSideInfo()
     mdIds.getColumnValues(MDL_PARTICLE_ID,setIds);
 }
 
-// Current
+//#define DEBUG
+void ProgClassifySignificant::generateProjection(size_t volumeIdx, size_t poolIdx, MDRow &currentRow)
+{
+	double rot, tilt, psi, x, y;
+	bool flip;
+	Matrix2D<double> A;
+	currentRow.getValue(MDL_ANGLE_ROT,rot);
+	currentRow.getValue(MDL_ANGLE_TILT,tilt);
+	currentRow.getValue(MDL_ANGLE_PSI,psi);
+	currentRow.getValue(MDL_SHIFT_X,x);
+	currentRow.getValue(MDL_SHIFT_Y,y);
+	currentRow.getValue(MDL_FLIP,flip);
+	A.initIdentity(3);
+	MAT_ELEM(A,0,2)=x;
+	MAT_ELEM(A,1,2)=y;
+	if (flip)
+	{
+		MAT_ELEM(A,0,0)*=-1;
+		MAT_ELEM(A,0,1)*=-1;
+		MAT_ELEM(A,0,2)*=-1;
+	}
+	projectVolume(*(projector[volumeIdx]), Paux, (int)XSIZE(Iexp()), (int)XSIZE(Iexp()),  rot, tilt, psi);
+
+	if (poolIdx>=subsetProjections.size())
+		subsetProjections.push_back(new MultidimArray<double>);
+	subsetProjections[poolIdx]->resizeNoCopy((int)XSIZE(Iexp()), (int)XSIZE(Iexp()));
+	applyGeometry(LINEAR,*(subsetProjections[poolIdx]),Paux(),A,IS_INV,DONT_WRAP,0.);
+
+#ifdef DEBUG
+	std::cout << "Row: " << " rot: " << rot << " tilt: " << tilt
+			  << " psi: " << psi << " sx: " << x << " sy: " << y
+			  << " flip: " << flip << std::endl;
+	Image<double> save;
+	save()=*(subsetProjections[poolIdx]);
+	save.write(formatString("PPPtheo%02d.xmp",poolIdx));
+#endif
+}
+
+// Select the subset associated to a particleId
 void ProgClassifySignificant::selectSubset(size_t particleId)
 {
+	size_t poolIdx=0;
+	FileName fnImg;
 	for (size_t i=0; i<projector.size(); i++)
 	{
 		subsetAngles[i].clear();
+		subsetProjectionIdx[i].clear();
 		size_t crIdx=currentRowIdx[i];
 		MDRow & currentRow=setAngles[i][crIdx];
+		if (i==0) // First time we see this image
+		{
+			currentRow.getValue(MDL_IMAGE,fnImg);
+			Iexp.read(fnImg);
+		}
 		size_t currentParticleId;
 		currentRow.getValue(MDL_PARTICLE_ID,currentParticleId);
+		size_t idxMax=setAngles[i].size();
 		while (currentParticleId<=particleId)
 		{
-			subsetAngles[i].push_back(currentRow);
-			std::cout << currentRow << std::endl;
-			currentRow=setAngles[i][++crIdx];
-			currentRow.getValue(MDL_PARTICLE_ID,currentParticleId);
+			if (currentParticleId==particleId)
+			{
+				subsetAngles[i].push_back(currentRow);
+				subsetProjectionIdx[i].push_back(poolIdx);
+				generateProjection(i,poolIdx,currentRow);
+				poolIdx+=1;
+			}
+			crIdx+=1;
+			if (crIdx<idxMax)
+			{
+				currentRow=setAngles[i][crIdx];
+				currentRow.getValue(MDL_PARTICLE_ID,currentParticleId);
+			}
+			else
+				break;
 		}
 		currentRowIdx[i]=crIdx;
+	}
+#ifdef DEBUG
+	std::cout << "Reading " << fnImg << std::endl;
+	char c;
+	std::cout << "Press any key" << std::endl;
+	std::cin >> c;
+#endif
+}
+#undef DEBUG
+
+void computeWeightedCorrelation(const MultidimArray<double> &I1, const MultidimArray<double> &I2, const MultidimArray<double> &Iexp,
+		const MultidimArray<double> &Idiff, double &corr1exp, double &corr2exp)
+{
+	double mean, std;
+	Idiff.computeAvgStdev(mean,std);
+	double threshold=std;
+
+	corr1exp=corr2exp=0.0;
+
+	// Estimate the mean and stddev within the mask
+	double N=0;
+	double sumI1=0, sumI2=0, sumIexp=0;
+	FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(Idiff)
+		if (DIRECT_MULTIDIM_ELEM(Idiff,n)>threshold)
+		{
+			double p1=DIRECT_MULTIDIM_ELEM(I1,n);
+			double p2=DIRECT_MULTIDIM_ELEM(I2,n);
+			double pexp=DIRECT_MULTIDIM_ELEM(Iexp,n);
+
+			sumI1+=p1;
+			sumI2+=p2;
+			sumIexp+=pexp;
+			N+=1.0;
+		}
+
+	// Estimate the weighted correlation
+	if (N>0)
+	{
+		double iN=1.0/N;
+		double avg1=sumI1*iN;
+		double avg2=sumI2*iN;
+		double avgExp=sumIexp*iN;
+
+		double sumWI1exp=0.0, sumWI2exp=0.0, sumWI1I1=0.0, sumWI2I2=0.0, sumWIexpIexp=0.0;
+		FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(Idiff)
+			if (DIRECT_MULTIDIM_ELEM(Idiff,n)>threshold)
+			{
+				double p1=DIRECT_MULTIDIM_ELEM(I1,n)-avg1;
+				double p2=DIRECT_MULTIDIM_ELEM(I2,n)-avg2;
+				double pexp=DIRECT_MULTIDIM_ELEM(Iexp,n)-avgExp;
+				double w=DIRECT_MULTIDIM_ELEM(Idiff,n);
+				double wp1=w*p1;
+				double wp2=w*p2;
+				double wpexp=w*pexp;
+
+				sumWI1exp+=wp1*pexp;
+				sumWI2exp+=wp2*pexp;
+				sumWI1I1 +=wp1*p1;
+				sumWI2I2 +=wp2*p2;
+				sumWIexpIexp +=wpexp*pexp;
+			}
+
+		sumWI1exp*=iN;
+		sumWI2exp*=iN;
+		sumWI1I1*=iN;
+		sumWI2I2*=iN;
+		sumWIexpIexp*=iN;
+
+		corr1exp=sumWI1exp/sqrt(sumWI1I1*sumWIexpIexp);
+		corr2exp=sumWI2exp/sqrt(sumWI2I2*sumWIexpIexp);
+	}
+}
+
+void ProgClassifySignificant::updateClass(int n, double wn)
+{
+	double CCbest=-1e38;
+	int iCCbest=-1;
+	VMetaData &subsetAngles_n=subsetAngles[n];
+	for (int i=0; i<subsetAngles_n.size(); i++)
+	{
+		double cc;
+		subsetAngles_n[i].getValue(MDL_MAXCC,cc);
+		if (cc>CCbest)
+		{
+			CCbest=cc;
+			iCCbest=i;
+		}
+	}
+	if (iCCbest>0)
+	{
+		MDRow newRow=subsetAngles_n[iCCbest];
+		newRow.setValue(MDL_WEIGHT,wn);
+		classifiedAngles[n].push_back(newRow);
 	}
 }
 
@@ -131,43 +289,112 @@ void ProgClassifySignificant::run()
 {
 	show();
 	produceSideInfo();
+	MultidimArray<double> Idiff;
 
 	if (verbose>0)
 	{
 		std::cerr << "Classifying images ..." << std::endl;
 		init_progress_bar(setIds.size());
 	}
+
+	Matrix1D<double> winning(projector.size());
+	Matrix1D<double> corrDiff(projector.size());
+	Matrix1D<double> weight;
 	for (size_t iid=0; iid<setIds.size(); iid++)
 	{
 		size_t id=setIds[iid];
-		std::cout << id << std::endl;
 		selectSubset(id);
+		const MultidimArray<double> &mIexp=Iexp();
+		winning.initZeros();
+		corrDiff.initZeros();
+		for (size_t ivol1=0; ivol1<projector.size(); ivol1++)
+		{
+			std::vector<size_t> &subset1=subsetProjectionIdx[ivol1];
+			for (size_t ivol2=ivol1+1; ivol2<projector.size(); ivol2++)
+			{
+				std::vector<size_t> &subset2=subsetProjectionIdx[ivol2];
+				for (size_t i1=0; i1<subset1.size(); i1++)
+				{
+					MultidimArray<double> &I1=*(subsetProjections[subset1[i1]]);
+					for (size_t i2=0; i2<subset2.size(); i2++)
+					{
+						MultidimArray<double> &I2=*(subsetProjections[subset2[i2]]);
+						Idiff=I1;
+						Idiff-=I2;
+						Idiff.selfABS();
+
+						double corr1exp, corr2exp;
+						computeWeightedCorrelation(I1, I2, mIexp, Idiff, corr1exp, corr2exp);
+						double corrDiff12=corr1exp-corr2exp;
+						if (corrDiff12>0)
+						{
+							VEC_ELEM(winning,ivol1)+=1;
+							VEC_ELEM(corrDiff,ivol1)+=corrDiff12;
+							VEC_ELEM(corrDiff,ivol2)-=corrDiff12;
+						}
+						else if (corrDiff12<0)
+						{
+							VEC_ELEM(winning,ivol2)+=1;
+							VEC_ELEM(corrDiff,ivol2)-=corrDiff12;
+							VEC_ELEM(corrDiff,ivol1)+=corrDiff12;
+						}
+
+//						Image<double> save;
+//						save()=Iexp();
+//						save.write("PPPexp.xmp");
+//						save()=I1;
+//						save.write("PPP1.xmp");
+//						save()=I2;
+//						save.write("PPP2.xmp");
+//						save()=Idiff;
+//						save.write("PPPdiff.xmp");
+//						std::cout << "corr1exp=" << corr1exp << " corr2exp=" << corr2exp << std::endl;
+//						char c;
+//						std::cout << "Press any key" << std::endl;
+//						std::cin >> c;
+					}
+				}
+			}
+		}
+		double iNcomparisons=1.0/winning.sum();
+		winning*=iNcomparisons;
+		weight=corrDiff;
+		weight*=iNcomparisons;
+		weight*=winning;
+
+//		std::cout << corrDiff << std::endl;
+//		std::cout << winning << std::endl;
+//		std::cout << weight << std::endl;
+//		char c;
+//		std::cout << "Press any key" << std::endl;
+//		std::cin >> c;
+
+		int nBest=weight.maxIndex();
+		double wBest=VEC_ELEM(weight,nBest);
+		if (wBest>0)
+			updateClass(nBest,wBest);
 		if (verbose>0)
 			progress_bar(iid);
 	}
 	progress_bar(setIds.size());
 
-	/*
-    // Read input image and initial parameters
-    double rot, tilt, psi;
-	rowIn.getValue(MDL_ANGLE_ROT,rot);
-	rowIn.getValue(MDL_ANGLE_TILT,tilt);
-	rowIn.getValue(MDL_ANGLE_PSI,psi);
-
-	double olda=1.0, oldb=0.0;
-	if (rowIn.containsLabel(MDL_CONTINUOUS_GRAY_A)){
-		rowIn.getValue(MDL_CONTINUOUS_GRAY_A,olda);
-		rowIn.getValue(MDL_CONTINUOUS_GRAY_B,oldb);
+	// Write output
+	MetaData md;
+	for (size_t ivol=0; ivol<projector.size(); ivol++)
+	{
+		size_t objId=md.addObject();
+		md.setValue(MDL_REF3D,(int)ivol+1,objId);
+		md.setValue(MDL_CLASS_COUNT,classifiedAngles[ivol].size(),objId);
 	}
-
-	I.read(fnImg);
-	I().setXmippOrigin();
-	Istddev=I().computeStddev();
-
-    Ifiltered()=I();
-    filter.applyMaskSpace(Ifiltered());
-
-	projectVolume(*projector, P, (int)XSIZE(I()), (int)XSIZE(I()),  rot, tilt, psi);
-	*/
+	md.write("classes@"+fnOut);
+	for (size_t ivol=0; ivol<projector.size(); ivol++)
+	{
+		md.clear();
+		md.fromVMetaData(classifiedAngles[ivol]);
+		double currentWmax=md.getColumnMax(MDL_WEIGHT);
+		double currentWmin=md.getColumnMin(MDL_WEIGHT);
+		md.operate(formatString("weight=%f*(weight-%f)+%f",(1.0-wmin)/(currentWmax-currentWmin),currentWmin,wmin));
+		md.write(formatString("class%06d_images@%s",ivol+1,fnOut.c_str()),MD_APPEND);
+	}
 }
 #undef DEBUG

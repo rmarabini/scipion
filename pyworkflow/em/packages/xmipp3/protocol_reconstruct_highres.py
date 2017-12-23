@@ -1322,7 +1322,6 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
      
         # Laplacian Denoising
         if self.postLaplacian:
-            fnRootRestored=join(fnDirCurrent,"volumeRestored")
             args = "-i %s --retinex 0.95 "
             if fnMask!="":
                 args+=fnMask
