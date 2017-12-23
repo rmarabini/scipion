@@ -31,6 +31,7 @@ Protocol to perform high-resolution reconstructions
 
 from glob import glob
 import math
+import numpy as np
 
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, BooleanParam, IntParam, EnumParam
@@ -101,13 +102,15 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         firstIteration = 1
         for self.iteration in range(self.numberOfIterations.get()):
             self.insertIteration(firstIteration+self.iteration)
-#         self._insertFunctionStep("createOutput")
+        self._insertFunctionStep("createOutput")
     
     def insertIteration(self,iteration):
         self._insertFunctionStep('globalAssignment',iteration)
         self._insertFunctionStep('classifyParticles',iteration)
         self._insertFunctionStep('reconstruct',iteration)
         self._insertFunctionStep('postProcessing',iteration)
+        if iteration>1:
+            self._insertFunctionStep('evaluateConvergence',iteration)
 
     def readInfoField(self,fnDir,block,label):
         mdInfo = xmipp.MetaData("%s@%s"%(block,join(fnDir,"info.xmd")))
@@ -378,6 +381,66 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
             fnVolAvg=join(fnDirCurrent,"volume%02d.mrc"%i)
             self.runJob('xmipp_volume_align','--i1 %s --i2 %s --local --apply'%(fnCentered,fnVolAvg),numberOfMpi=1)
         cleanPath(fnCentered)
+        
+        # Rewrite the first block of the classes.xmd with the representative
+        fnClasses = "classes@"+join(fnDirCurrent,"classes.xmd")
+        classesmd = md.MetaData(fnClasses)
+        for objId in classesmd:
+            ref3d = classesmd.getValue(md.MDL_REF3D,objId)
+            classesmd.setValue(md.MDL_IMAGE,join(fnDirCurrent,"volume%02d.mrc"%ref3d),objId)
+        print("Aqui",classesmd)
+        classesmd.write(fnClasses,md.MD_APPEND)
+        
+        # Write the images.xmd
+        mdAll = md.MetaData()
+        for i in range(1,self.getNumberOfReconstructedVolumes()+1):
+            mdi = md.MetaData("class%06d_images@"%i+join(fnDirCurrent,"classes.xmd"))
+            mdAll.unionAll(mdi)
+        mdAll.write(join(fnDirCurrent,"images.xmd"))
+
+    def evaluateConvergence(self,iteration):
+        fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
+        fnDirPrevious=self._getExtraPath("Iter%03d"%(iteration-1))
+        fnIntersection = join(fnDirCurrent,"intersection.xmd")
+        fnUnion = join(fnDirCurrent,"union.xmd")
+        fnAngleDistance = join(fnDirCurrent,"angle_distance")
+        N=self.getNumberOfReconstructedVolumes()
+        coocurrence = np.zeros((N, N))
+        sizeClasses = np.zeros((N, N))
+        for i in range(1,N+1):
+            for j in range(i,N+1):
+                fnCurrent = "class%06d_images@%s"%(i,join(fnDirCurrent,"classes.xmd"))
+                fnPrevious = "class%06d_images@%s"%(i,join(fnDirPrevious,"classes.xmd"))
+                self.runJob("xmipp_metadata_utilities","-i %s --set intersection %s itemId -o %s"%(fnCurrent,fnPrevious,fnIntersection),numberOfMpi=1)
+                self.runJob("xmipp_metadata_utilities","-i %s --set union %s itemId -o %s"%(fnCurrent,fnPrevious,fnUnion),numberOfMpi=1)
+                
+                sizeIntersection = float(md.getSize(fnIntersection))
+                sizeUnion = float(md.getSize(fnUnion))
+                sizeClasses[i-1,j-1]= sizeIntersection
+                
+                coocurrence[i-1,j-1]=sizeIntersection/sizeUnion
+                if i!=j:
+                    coocurrence[j-1,i-1]=coocurrence[i-1,j-1]
+                    sizeClasses[j-1,i-1]=sizeClasses[i-1,j-1]
+                else:
+                    self.runJob("xmipp_angular_distance","--ang1 %s --ang2 %s --oroot %s --sym %s --check_mirrors --compute_weights 1 particleId 0.5"%\
+                                (fnPrevious,fnCurrent,fnAngleDistance,self.symmetryGroup),numberOfMpi=1)
+                    distances = md.MetaData(fnAngleDistance+"_weights.xmd")
+                    angDistance=distances.getColumnValues(md.MDL_ANGLE_DIFF)
+                    avgAngDistance = reduce(lambda x, y: x + y, angDistance) / len(angDistance)
+                    shiftDistance=distances.getColumnValues(md.MDL_SHIFT_DIFF)
+                    avgShiftDistance = reduce(lambda x, y: x + y, shiftDistance) / len(shiftDistance)
+                    print("Class %d: average angular diff=%f      average shift diff=%f"%(i,avgAngDistance,avgShiftDistance))
+        
+        print("Size of the intersections")
+        print(sizeClasses)
+        print(' ')
+        print('Stability of the classes (coocurrence)')
+        print(coocurrence)
+                    
+        cleanPath(fnIntersection)
+        cleanPath(fnUnion)
+        cleanPath(fnAngleDistance+"_weights.xmd")            
 
     def createOutput(self):
         # get last iteration
@@ -389,7 +452,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         if not exists(fnLastImages):
             raise Exception("The file %s does not exist"%fnLastImages)
         partSet = self.inputParticles.get()
-        self.Ts=self.readInfoField(self.fnLastDir,"sampling",xmipp.MDL_SAMPLINGRATE)
+        self.Ts=self.readInfoField(self._getExtraPath(),"sampling",xmipp.MDL_SAMPLINGRATE)
         self.scaleFactor=self.Ts/partSet.getSamplingRate()
 
         classes3D = self._createSetOfClasses3D(partSet)
@@ -430,50 +493,5 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         classId = item.getObjId()
         item.setAlignment3D()
         item.setSamplingRate(self.Ts)
-        item.getRepresentative().setFileName(join(self.fnLastDir,"volume%02d.vol"%classId))
+        item.getRepresentative().setFileName(join(self.fnLastDir,"volume%02d.mrc"%classId))
         
-    def evaluateReconstructions(self,iteration):
-        self.alignReconstructedVolumes(iteration)
-        fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
-        cleanPath(join(fnDirCurrent,"volumeAvg.mrc"))
-     
-        if self.postAdHocMask.hasValue():
-            fnMask=join(fnDirCurrent,"mask.vol")
-            if not exists(fnMask):
-                TsCurrent = self.readInfoField(fnDirCurrent,"sampling",xmipp.MDL_SAMPLINGRATE)
-                volXdim = self.readInfoField(fnDirCurrent, "size", xmipp.MDL_XSIZE)
-                self.prepareMask(self.postAdHocMask.get(), fnMask, TsCurrent, volXdim)
-            for i in range(1,self.getNumberOfReconstructedVolumes()+1):
-                fnVol=join(fnDirCurrent,"volume%02d.vol"%i)
-                self.runJob("xmipp_image_operate","-i %s --mult %s"%(fnVol,fnMask),numberOfMpi=1)
-            cleanPath(fnMask)
-        
-        if self.computeDiff:
-            for i in range(1,self.getNumberOfReconstructedVolumes()):
-                fnVoli=join(fnDirCurrent,"volume%02d.vol"%i)
-                fnVoliAdjusted=join(fnDirCurrent,"volume%02d_adjusted.vol"%i)
-                for j in range(2,self.getNumberOfReconstructedVolumes()+1):
-                    fnVolj=join(fnDirCurrent,"volume%02d.vol"%j)
-                    fnDiff=join(fnDirCurrent,"diff%02d_%02d.vol"%(j,i))
-
-                    copyFile(fnVoli, fnVoliAdjusted)
-                    self.runJob("xmipp_volume_align","--i1 %s --i2 %s --least_squares --apply %s"%(fnVolj, fnVoliAdjusted, fnVoliAdjusted),numberOfMpi=1)
-                    self.runJob("xmipp_image_operate","-i %s --minus %s -o %s"%(fnVolj, fnVoliAdjusted, fnDiff),numberOfMpi=1)
-                    cleanPath(fnVoliAdjusted)
-        
-        if iteration>1:
-            fnDirPrevious=self._getExtraPath("Iter%03d"%(iteration-1))
-            for i in range(0,self.getNumberOfReconstructedVolumes()):
-                fnCurrent=join(fnDirCurrent,"images%02d.xmd"%(i+1))
-                fnPrevious=join(fnDirPrevious,"images%02d.xmd"%(i+1))
-                fnIntersection=self._getExtraPath("intersection.xmd")
-                fnUnion=self._getExtraPath("union.xmd")
-                self.runJob("xmipp_metadata_utilities","-i %s --set intersection %s itemId -o %s"%(fnCurrent,fnPrevious,fnIntersection),numberOfMpi=1)
-                self.runJob("xmipp_metadata_utilities","-i %s --set union %s itemId -o %s"%(fnCurrent,fnPrevious,fnUnion),numberOfMpi=1)
-                
-                sizeIntersection = float(md.getSize(fnIntersection))
-                sizeUnion = float(md.getSize(fnUnion))
-                
-                print("Stability of class %d: %f"%(i+1,sizeIntersection/sizeUnion))
-                cleanPath(fnIntersection)
-                cleanPath(fnUnion)                
