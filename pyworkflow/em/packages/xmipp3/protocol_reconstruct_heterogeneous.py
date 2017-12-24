@@ -388,7 +388,6 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         for objId in classesmd:
             ref3d = classesmd.getValue(md.MDL_REF3D,objId)
             classesmd.setValue(md.MDL_IMAGE,join(fnDirCurrent,"volume%02d.mrc"%ref3d),objId)
-        print("Aqui",classesmd)
         classesmd.write(fnClasses,md.MD_APPEND)
         
         # Write the images.xmd
@@ -408,21 +407,18 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         coocurrence = np.zeros((N, N))
         sizeClasses = np.zeros((N, N))
         for i in range(1,N+1):
-            for j in range(i,N+1):
+            for j in range(1,N+1):
                 fnCurrent = "class%06d_images@%s"%(i,join(fnDirCurrent,"classes.xmd"))
-                fnPrevious = "class%06d_images@%s"%(i,join(fnDirPrevious,"classes.xmd"))
+                fnPrevious = "class%06d_images@%s"%(j,join(fnDirPrevious,"classes.xmd"))
                 self.runJob("xmipp_metadata_utilities","-i %s --set intersection %s itemId -o %s"%(fnCurrent,fnPrevious,fnIntersection),numberOfMpi=1)
                 self.runJob("xmipp_metadata_utilities","-i %s --set union %s itemId -o %s"%(fnCurrent,fnPrevious,fnUnion),numberOfMpi=1)
                 
                 sizeIntersection = float(md.getSize(fnIntersection))
                 sizeUnion = float(md.getSize(fnUnion))
-                sizeClasses[i-1,j-1]= sizeIntersection
-                
+                sizeClasses[i-1,j-1]= sizeIntersection                
                 coocurrence[i-1,j-1]=sizeIntersection/sizeUnion
-                if i!=j:
-                    coocurrence[j-1,i-1]=coocurrence[i-1,j-1]
-                    sizeClasses[j-1,i-1]=sizeClasses[i-1,j-1]
-                else:
+                
+                if i==j:
                     self.runJob("xmipp_angular_distance","--ang1 %s --ang2 %s --oroot %s --sym %s --check_mirrors --compute_weights 1 particleId 0.5"%\
                                 (fnPrevious,fnCurrent,fnAngleDistance,self.symmetryGroup),numberOfMpi=1)
                     distances = md.MetaData(fnAngleDistance+"_weights.xmd")
