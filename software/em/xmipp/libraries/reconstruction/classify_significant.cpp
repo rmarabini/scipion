@@ -326,13 +326,13 @@ void ProgClassifySignificant::run()
 						double corr1exp, corr2exp;
 						computeWeightedCorrelation(I1, I2, mIexp, Idiff, corr1exp, corr2exp);
 						double corrDiff12=corr1exp-corr2exp;
-						if (corrDiff12>0)
+						if (corrDiff12>0 && corr1exp>0)
 						{
 							VEC_ELEM(winning,ivol1)+=1;
 							VEC_ELEM(corrDiff,ivol1)+=corrDiff12;
 							VEC_ELEM(corrDiff,ivol2)-=corrDiff12;
 						}
-						else if (corrDiff12<0)
+						else if (corrDiff12<0 && corr2exp>0)
 						{
 							VEC_ELEM(winning,ivol2)+=1;
 							VEC_ELEM(corrDiff,ivol2)-=corrDiff12;
