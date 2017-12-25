@@ -276,7 +276,7 @@ void ProgClassifySignificant::updateClass(int n, double wn)
 			iCCbest=i;
 		}
 	}
-	if (iCCbest>0)
+	if (iCCbest>=0)
 	{
 		MDRow newRow=subsetAngles_n[iCCbest];
 		newRow.setValue(MDL_WEIGHT,wn);
