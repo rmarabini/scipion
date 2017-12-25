@@ -393,7 +393,10 @@ void ProgClassifySignificant::run()
 		md.fromVMetaData(classifiedAngles[ivol]);
 		double currentWmax=md.getColumnMax(MDL_WEIGHT);
 		double currentWmin=md.getColumnMin(MDL_WEIGHT);
-		md.operate(formatString("weight=%f*(weight-%f)+%f",(1.0-wmin)/(currentWmax-currentWmin),currentWmin,wmin));
+		if (currentWmax>currentWmin)
+			md.operate(formatString("weight=%f*(weight-%f)+%f",(1.0-wmin)/(currentWmax-currentWmin),currentWmin,wmin));
+		else
+			md.operate(formatString("weight=%f",wmin));
 		md.setValueCol(MDL_REF3D,(int)ivol+1);
 		md.write(formatString("class%06d_images@%s",ivol+1,fnOut.c_str()),MD_APPEND);
 	}
