@@ -243,7 +243,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                 cleanPath(join(fnDirCurrent,"gallery%02d_angles.doc"%i))
     
                 maxShift=round(self.angularMaxShift.get()*newXdim/100)
-                args='-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d'%\
+                args='-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d --dontApplyFisher'%\
                      (fnImgs,fnGalleryXmd,maxShift,fnDirCurrent,self.numberOfReplicates.get()-1)
                 self.runJob('xmipp_reconstruct_significant',args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
                 fnAnglesSignificant = join(fnDirCurrent,"angles_iter001_00.xmd")
@@ -252,6 +252,8 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                     self.runJob("xmipp_metadata_utilities",'-i %s --operate sort itemId'%fnAngles,numberOfMpi=1)
                     cleanPath(join(fnDirCurrent,"images_iter001_00.xmd"))
                     cleanPath(join(fnDirCurrent,"images_significant_iter001_00.xmd"))
+                else:
+                    raise Exception("There is no angular assignment for this volume")
                 cleanPath(fnGallery)
                 cleanPath(fnGalleryXmd)
 
