@@ -160,6 +160,8 @@ void ProgClassifySignificant::selectSubset(size_t particleId)
 		subsetAngles[i].clear();
 		subsetProjectionIdx[i].clear();
 		size_t crIdx=currentRowIdx[i];
+		if (crIdx>=setAngles[i].size())
+			return;
 		MDRow & currentRow=setAngles[i][crIdx];
 		if (i==0) // First time we see this image
 		{
