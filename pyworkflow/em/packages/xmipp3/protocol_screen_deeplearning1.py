@@ -27,7 +27,7 @@
 
 import os
 
-from pyworkflow.utils.path import copyFile, cleanPath 
+from pyworkflow.utils.path import copyFile, cleanPath, copyTree
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtProcessParticles
 import pyworkflow.em.metadata as md
@@ -53,10 +53,30 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
 
         form.addParam('inPosSetOfParticles', params.PointerParam, label="Consensus particles (mostly true particles)", 
                       pointerClass='SetOfParticles', 
-                      help='Select the intersection set of particles (mostly true particles).')  
-        form.addParam('inNegSetOfParticles', params.PointerParam, label="Set of negative particles", 
+                      help='Select the intersection set of particles (mostly true particles).')
+
+        form.addParam('inNegSetOfParticles1Picked', params.PointerParam, label="Set of negative particles single Picked", 
                       pointerClass='SetOfParticles',
                       help='Select the set of non-particles.')
+        form.addParam('inNegWeight1Picked', params.IntParam , default='1', label="Weight of negative particles single Picked", 
+                      pointerClass='SetOfParticles',
+                      help='Select the set of non-particles.')
+
+
+        form.addParam('inNegSetOfParticlesBadZScore', params.PointerParam, label="Set of negative particles badZscore", 
+                      pointerClass='SetOfParticles',
+                      help='Select the set of non-particles.')
+        form.addParam('inNegWeightBadZScore', params.IntParam , default='1', label="Weight of negative particles badZscore", 
+                      pointerClass='SetOfParticles',
+                      help='Select the set of non-particles.')
+
+        form.addParam('inNegSetOfParticlesRandom', params.PointerParam, label="Set of negative particles randomPick", 
+                      pointerClass='SetOfParticles',
+                      help='Select the set of non-particles.')
+        form.addParam('inNegWeightRandom', params.IntParam , default='1', label="Weight of negative particles randomPick", 
+                      pointerClass='SetOfParticles',
+                      help='Select the set of non-particles.')
+
 
         form.addParam('predictSetOfParticles', params.PointerParam, label="Set of putative particles to predict", 
                       pointerClass='SetOfParticles',
@@ -66,7 +86,7 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                       label='Auto stop training when convergency is detected?',
                       help='If you set to *Yes*, the program will automatically stop training'
                       'if there is no improvement for consecutive 2 epochs, learning rate will be decreased'
-					  'by a factor 10. If learningRate_t < 0.01*learningrate_0 training will stop. Warning: '
+            'by a factor 10. If learningRate_t < 0.01*learningrate_0 training will stop. Warning: '
                       'Sometimes convergency seems to be reached, but after time, improvement can still happen. '
                       'Not recommended for very small data sets (<100 true particles)')
 
@@ -75,7 +95,7 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
             form.addParam('gpuToUse', params.IntParam, default='0',
                           label='Which GPU to use:',
                           help='Currently just one GPU will be use, by '
-			                   'default GPU number 0 You can override the default '
+                         'default GPU number 0 You can override the default '
                                'allocation by providing other GPU number, p.e. 2')
         else:
             form.addParallelSection(threads=8, mpi=0)
@@ -105,35 +125,42 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
     
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        self._insertFunctionStep('convertInputStep', self.inPosSetOfParticles.get(), self.inNegSetOfParticles.get(),
-				                     self.predictSetOfParticles.get(), 
-				                     self.testPosSetOfParticles.get(), self.testNegSetOfParticles.get()) 
-        self._insertFunctionStep('train',self.inPosSetOfParticles.get(), self.inNegSetOfParticles.get(), self.testPosSetOfParticles.get(),
-				                     self.testNegSetOfParticles.get(), self.learningRate.get()) 
-        self._insertFunctionStep('predict',self.testPosSetOfParticles.get(),self.testNegSetOfParticles.get(),
-				                     self.predictSetOfParticles.get(), self.inPosSetOfParticles.get(), self.inNegSetOfParticles.get())
+        '''
+            negSetDict= { fname: [(SetOfParticles, weight:int)]}
+        '''
+        posSetTrainDict={self._getExtraPath("inputTrueParticlesSet.xmd"):(self.inPosSetOfParticles.get(), 1)}
+        negSetTrainDict={self._getExtraPath("inputFalseParticlesSetBadZScore.xmd"): (self.inNegSetOfParticlesBadZScore.get(),
+                                                                                     self.inNegWeightBadZScore.get()),
+                    self._getExtraPath("inputFalseParticlesSet1Picked.xmd"): (self.inNegSetOfParticles1Picked.get(), 
+                                                                                self.inNegWeight1Picked.get()),
+                    self._getExtraPath("inputFalseParticlesSetRandom.xmd"): (self.inNegSetOfParticlesRandom.get(),
+                                                                             self.inNegWeightRandom.get())}
+        setPredict={self._getExtraPath("predictSetOfParticles.xmd"): (self.predictSetOfParticles.get(),1) }
+        setTestPos={self._getExtraPath("testTrueParticlesSet.xmd"):  (self.testPosSetOfParticles.get(),1)}
+        setTestNeg={self._getExtraPath("testFalseParticlesSet.xmd"): (self.testNegSetOfParticles.get(),1)}
+  
+        self._insertFunctionStep('convertInputStep', posSetTrainDict, negSetTrainDict, setPredict, setTestPos, setTestNeg) 
+        self._insertFunctionStep('train',  posSetTrainDict, negSetTrainDict, setTestPos, setTestNeg, self.learningRate.get()) 
+        self._insertFunctionStep('predict',setTestPos,setTestNeg, setPredict, posSetTrainDict, negSetTrainDict)
         self._insertFunctionStep('createOutputStep')
         
     #--------------------------- STEPS functions --------------------------------------------   
-    def convertInputStep(self, inPosSetOfParticles, inNegSetOfParticles, predictSetOfParticles, testPosSetOfParticles,testNegSetOfParticles):
-        writeSetOfParticles(inPosSetOfParticles, self._getExtraPath("inputTrueParticlesSet.xmd"))
-        writeSetOfParticles(inNegSetOfParticles, self._getExtraPath("inputFalseParticlesSet.xmd"))
-        writeSetOfParticles(predictSetOfParticles, self._getExtraPath("predictSetOfParticles.xmd"))
-        if not testPosSetOfParticles is None and not testNegSetOfParticles is None:
-          writeSetOfParticles(testPosSetOfParticles, self._getExtraPath("testTrueParticlesSet.xmd"))
-          writeSetOfParticles(testNegSetOfParticles, self._getExtraPath("testFalseParticlesSet.xmd"))
-        
-              
-    def train(self, inPosSetOfParticles, inNegSetOfParticles, testPosSetOfParticles, testNegSetOfParticles, learningRate):
+    def convertInputStep(self, *dataDicts):
+        for dataDict in dataDicts:
+          for fnameParticles in sorted(dataDict):
+            print(fnameParticles, dataDict[fnameParticles][0], not dataDict[fnameParticles][0] is None)
+            if not dataDict[fnameParticles][0] is None:
+                writeSetOfParticles(dataDict[fnameParticles][0], fnameParticles)
+            
+    def train(self, posTrainDict, negTrainDict, posTestDict, posTestNeg, learningRate):
         '''
-        inPosSetOfParticles, inNegSetOfParticles, testPosSetOfParticles, testNegSetOfParticles: SetOfParticles
+        posTrainDict, negTrainDict, posTestDict, posTestNeg: { fname: [(SetOfParticles, weight:int)]}
         learningRate: float
         '''
         if self.doContinue.get():
             previousRun=self.continueRun.get()
             print( previousRun._getExtraPath('nnetData') )
-            copyDir(previousRun._getExtraPath('nnetData'),self._getExtraPath('nnetData'))
-
+            copyTree(previousRun._getExtraPath('nnetData'),self._getExtraPath('nnetData'))
       
         from pyworkflow.em.packages.xmipp3.deepLearning1 import  DeepTFSupervised, DataManager, updateEnviron, tf_intarnalError
         
@@ -143,41 +170,36 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
         else:
             numberOfThreads=self.numberOfThreads.get()
 
-        trainDataManager= DataManager(posImagesXMDFname= self._getExtraPath("inputTrueParticlesSet.xmd"),
-                                       posImagesSetOfParticles= inPosSetOfParticles,
-                                       negImagesXMDFname= self._getExtraPath("inputFalseParticlesSet.xmd"),
-                                       negImagesSetOfParticles= inNegSetOfParticles)
+        trainDataManager= DataManager( posSetDict= posTrainDict,
+                                       negSetDict= negTrainDict)
 
-        if not testPosSetOfParticles is None and not testNegSetOfParticles is None:
-			testDataManager= DataManager(posImagesXMDFname=  self._getExtraPath("testTrueParticlesSet.xmd"),
-							    posImagesSetOfParticles= testPosSetOfParticles,
-							    negImagesXMDFname= self._getExtraPath("testFalseParticlesSet.xmd"),
-							    negImagesSetOfParticles= testNegSetOfParticles)
+        if not list(posTestDict.values())[0][0] is None and not list(negTestDict.values())[0][0] is None:
+            testDataManager= DataManager(posSetDict= posTestDict,negSetDict= negTestDict)
         else:
-			testDataManager= None
-        nEpochs= self.nEpochs.get()
-        numberOfBatches = trainDataManager.getNBatches(nEpochs)
-        numModels= self.nModels.get()
-        assert numModels>=1, "Error, nModels>=1"
-        for i in range(numModels):
-            print("Training model %d/%d"%((i+1), numModels))
-            nnet = DeepTFSupervised(rootPath=self._getExtraPath("nnetData"), modelNum=i)
-            try: 
-                nnet.createNet( trainDataManager.shape[0], trainDataManager.shape[1], trainDataManager.shape[2], trainDataManager.nTrue)
-                nnet.startSessionAndInitialize(numberOfThreads)
-            except tf_intarnalError as e:
-                if e._error_code==13:
-                    raise Exception("Out of gpu Memory. gpu # %d"%(self.gpuToUse.get()))
-                else:
-                    raise e
-            nnet.trainNet(numberOfBatches, trainDataManager, learningRate, testDataManager, self.auto_stopping.get())
-            nnet.close(saveModel= False) #Models will be automatically saved during training, so True no needed
-    #        self.predict( testPosSetOfParticles, testNegSetOfParticles, inPosSetOfParticles, inNegSetOfParticles)
-    #        raise ValueError("Debug mode")
-            del nnet
+            testDataManager= None
+            nEpochs= self.nEpochs.get()
+            numberOfBatches = trainDataManager.getNBatches(nEpochs)
+            numModels= self.nModels.get()
+            assert numModels>=1, "Error, nModels>=1"
+            for i in range(numModels):
+                print("Training model %d/%d"%((i+1), numModels))
+                nnet = DeepTFSupervised(rootPath=self._getExtraPath("nnetData"), modelNum=i)
+                try: 
+                    nnet.createNet(trainDataManager.shape[0], trainDataManager.shape[1], trainDataManager.shape[2], trainDataManager.nTrue)
+                    nnet.startSessionAndInitialize(numberOfThreads)
+                except tf_intarnalError as e:
+                    if e._error_code==13:
+                        raise Exception("Out of gpu Memory. gpu # %d"%(self.gpuToUse.get()))
+                    else:
+                        raise e
+                nnet.trainNet(numberOfBatches, trainDataManager, learningRate, testDataManager, self.auto_stopping.get())
+                nnet.close(saveModel= False) #Models will be automatically saved during training, so True no needed
+        #        self.predict( testPosSetOfParticles, testNegSetOfParticles, inPosSetOfParticles, inNegSetOfParticles)
+        #        raise ValueError("Debug mode")
+                del nnet
 
 
-    def predict(self, testPosSetOfParticles, testNegSetOfParticles, predictSetOfParticles, inPosSetOfParticles, inNegSetOfParticles):
+    def predict(self, posTestDict, negTestDict, setPredict, posTrainDict, negTrainDict):
         from pyworkflow.em.packages.xmipp3.deepLearning1 import  DeepTFSupervised, DataManager, updateEnviron
         import numpy as np
         from sklearn.metrics import accuracy_score, roc_auc_score
@@ -188,15 +210,11 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
         else:
             numberOfThreads=self.numberOfThreads.get()
 
-        trainDataManager= DataManager(posImagesXMDFname= self._getExtraPath("inputTrueParticlesSet.xmd"),
-                                       posImagesSetOfParticles= inPosSetOfParticles,
-                                       negImagesXMDFname= self._getExtraPath("inputFalseParticlesSet.xmd"),
-                                       negImagesSetOfParticles= inNegSetOfParticles)
+        trainDataManager= DataManager( posSetDict= posTrainDict,
+                                       negSetDict= negTrainDict)
 
-        predictDataManager= DataManager(posImagesXMDFname= self._getExtraPath("predictSetOfParticles.xmd"),
-                                       posImagesSetOfParticles= predictSetOfParticles,
-                                       negImagesXMDFname= None,
-                                       negImagesSetOfParticles= None)
+        predictDataManager= DataManager( posSetDict= setPredict,
+                                         negSetDict= None)
         numModels= self.nModels.get()
 
         resultsDictPos={}
@@ -210,31 +228,30 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
             y_pred, labels, typeAndIdList = nnet.predictNet(predictDataManager)
             nnet.close(saveModel= False)
 
-            for score, label, (mdIsPosType, mdId) in zip(y_pred , labels, typeAndIdList):
+            for score, label, (mdIsPosType, mdId, mdNumber) in zip(y_pred , labels, typeAndIdList):
               if mdIsPosType==True:
                  try:
-                     resultsDictPos[mdId]+= float(score)/float(numModels)
+                     resultsDictPos[(mdId, mdNumber)]+= float(score)/float(numModels)
                  except KeyError:
-                     resultsDictPos[mdId]=0.0
+                     resultsDictPos[(mdId, mdNumber)]= float(score)/float(numModels)
               else:
                  try:
-                     resultsDictNeg[mdId]+= float(score)/float(numModels)
+                     resultsDictNeg[(mdId, mdNumber)]+= float(score)/float(numModels)
                  except KeyError:
-                     resultsDictNeg[mdId]=0.0
-        metadataPos, metadataNeg= predictDataManager.getMetadata()
-        for mdId in resultsDictPos:
-            metadataPos.setValue(md.MDL_ZSCORE_DEEPLEARNING1, resultsDictPos[mdId], mdId)
+                     resultsDictNeg[(mdId, mdNumber)]= float(score)/float(numModels)
 
-        for mdId in resultsDictNeg:
-            metadataNeg.setValue(md.MDL_ZSCORE_DEEPLEARNING1, resultsDictNeg[mdId], mdId)
+        metadataPosList, metadataNegList= predictDataManager.getMetadata(None)
+        for (mdId, mdNumber) in resultsDictPos:
+             metadataPosList[mdNumber].setValue(md.MDL_ZSCORE_DEEPLEARNING1, resultsDictPos[(mdId, mdNumber)], mdId)
 
-        metadataPos.write(self._getPath("particles.xmd"))
+        for (mdId, mdNumber) in resultsDictNeg:
+             metadataNegList[mdNumber].setValue(md.MDL_ZSCORE_DEEPLEARNING1, resultsDictNeg[(mdId, mdNumber)], mdId)
 
-        if not testPosSetOfParticles is None and not testNegSetOfParticles is None:
-          testDataManager= DataManager(posImagesXMDFname=  self._getExtraPath("testTrueParticlesSet.xmd"), 
-                                posImagesSetOfParticles= testPosSetOfParticles,
-                                negImagesXMDFname= self._getExtraPath("testFalseParticlesSet.xmd"),
-                                negImagesSetOfParticles= testNegSetOfParticles)
+        metadataPosList[0].write(self._getPath("particles.xmd"))
+        assert len(metadataPosList)==1, "Just one SetOfParticles to predict allowed"
+        if not list(posTestDict.values())[0][0] is None and not list(negTestDict.values())[0][0] is None:
+          testDataManager= DataManager(posSetDict= posTestDict,
+                               negSetDict= negTestDict)
 
           nnet.close(saveModel= False)
           scores_list=[]
@@ -260,7 +277,6 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
             nnet.close(saveModel= False)
           labels= np.mean( labels_list, axis=0)[0,:]
           assert np.all( (labels==1) | (labels==0)), "Error, labels mismatch"
-
           scores= np.mean(scores_list, axis=0)[0,:]
           auc_val= roc_auc_score(labels, scores)
           scores[ scores>0.5]=1
