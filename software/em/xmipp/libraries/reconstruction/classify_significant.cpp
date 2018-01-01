@@ -211,46 +211,68 @@ void computeWeightedCorrelation(const MultidimArray<double> &I1, const MultidimA
 
 	// Estimate the mean and stddev within the mask
 	double N=0;
+	double sumWI1=0, sumWI2=0, sumWIexp=0;
 	double sumI1=0, sumI2=0, sumIexp=0;
 	FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(Idiff)
+	{
+		double p1=DIRECT_MULTIDIM_ELEM(I1,n);
+		double p2=DIRECT_MULTIDIM_ELEM(I2,n);
+		double pexp=DIRECT_MULTIDIM_ELEM(Iexp,n);
+		sumI1+=p1;
+		sumI2+=p2;
+		sumIexp+=pexp;
 		if (DIRECT_MULTIDIM_ELEM(Idiff,n)>threshold)
 		{
-			double p1=DIRECT_MULTIDIM_ELEM(I1,n);
-			double p2=DIRECT_MULTIDIM_ELEM(I2,n);
-			double pexp=DIRECT_MULTIDIM_ELEM(Iexp,n);
-
-			sumI1+=p1;
-			sumI2+=p2;
-			sumIexp+=pexp;
+			sumWI1+=p1;
+			sumWI2+=p2;
+			sumWIexp+=pexp;
 			N+=1.0;
 		}
+	}
 
 	// Estimate the weighted correlation
 	if (N>0)
 	{
 		double iN=1.0/N;
-		double avg1=sumI1*iN;
-		double avg2=sumI2*iN;
-		double avgExp=sumIexp*iN;
+		double isize=1.0/MULTIDIM_SIZE(Idiff);
+		double avgW1=sumWI1*iN;
+		double avgW2=sumWI2*iN;
+		double avgWExp=sumWIexp*iN;
 
 		double sumWI1exp=0.0, sumWI2exp=0.0, sumWI1I1=0.0, sumWI2I2=0.0, sumWIexpIexp=0.0;
+		double sumI1exp=0.0,  sumI2exp=0.0,  sumI1I1=0.0,  sumI2I2=0.0,  sumIexpIexp=0.0;
 		FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(Idiff)
+		{
+			double p1=DIRECT_MULTIDIM_ELEM(I1,n);
+			double p2=DIRECT_MULTIDIM_ELEM(I2,n);
+			double pexp=DIRECT_MULTIDIM_ELEM(Iexp,n);
+			double p1a=p1-avgW1;
+			double p2a=p2-avgW2;
+			double pexpa=pexp-avgWExp;
+			sumI1exp+=p1a*pexpa;
+			sumI2exp+=p2a*pexpa;
+			sumI1I1 +=p1a*p1a;
+			sumI2I2 +=p2a*p2a;
+			sumIexpIexp +=pexp*pexp;
+
 			if (DIRECT_MULTIDIM_ELEM(Idiff,n)>threshold)
 			{
-				double p1=DIRECT_MULTIDIM_ELEM(I1,n)-avg1;
-				double p2=DIRECT_MULTIDIM_ELEM(I2,n)-avg2;
-				double pexp=DIRECT_MULTIDIM_ELEM(Iexp,n)-avgExp;
-				double w=DIRECT_MULTIDIM_ELEM(Idiff,n);
-				double wp1=w*p1;
-				double wp2=w*p2;
-				double wpexp=w*pexp;
+				p1a=p1-avgW1;
+				p2a=p2-avgW2;
+				pexpa=pexp-avgWExp;
 
-				sumWI1exp+=wp1*pexp;
-				sumWI2exp+=wp2*pexp;
-				sumWI1I1 +=wp1*p1;
-				sumWI2I2 +=wp2*p2;
-				sumWIexpIexp +=wpexp*pexp;
+				double w=DIRECT_MULTIDIM_ELEM(Idiff,n);
+				double wp1a=w*p1a;
+				double wp2a=w*p2a;
+				double wpexpa=w*pexpa;
+
+				sumWI1exp+=wp1a*pexpa;
+				sumWI2exp+=wp2a*pexpa;
+				sumWI1I1 +=wp1a*p1a;
+				sumWI2I2 +=wp2a*p2a;
+				sumWIexpIexp +=wpexpa*pexpa;
 			}
+		}
 
 		sumWI1exp*=iN;
 		sumWI2exp*=iN;
@@ -258,8 +280,24 @@ void computeWeightedCorrelation(const MultidimArray<double> &I1, const MultidimA
 		sumWI2I2*=iN;
 		sumWIexpIexp*=iN;
 
-		corr1exp=sumWI1exp/sqrt(sumWI1I1*sumWIexpIexp);
-		corr2exp=sumWI2exp/sqrt(sumWI2I2*sumWIexpIexp);
+		sumI1exp*=isize;
+		sumI2exp*=isize;
+		sumI1I1*=isize;
+		sumI2I2*=isize;
+		sumIexpIexp*=isize;
+
+		double corrW1exp=sumWI1exp/sqrt(sumWI1I1*sumWIexpIexp);
+		double corrW2exp=sumWI2exp/sqrt(sumWI2I2*sumWIexpIexp);
+		double corrN1exp=sumI1exp/sqrt(sumI1I1*sumIexpIexp);
+		double corrN2exp=sumI2exp/sqrt(sumI2I2*sumIexpIexp);
+		if (corrW1exp>0 && corrN1exp>0)
+			corr1exp=sqrt(corrW1exp*corrN1exp);
+		else
+			corr1exp=-1;
+		if (corrW2exp>0 && corrN2exp>0)
+			corr2exp=sqrt(corrW2exp*corrN2exp);
+		else
+			corr2exp=-1;
 	}
 }
 
@@ -281,7 +319,7 @@ void ProgClassifySignificant::updateClass(int n, double wn)
 	if (iCCbest>=0)
 	{
 		MDRow newRow=subsetAngles_n[iCCbest];
-		newRow.setValue(MDL_WEIGHT,wn);
+		// COSS newRow.setValue(MDL_WEIGHT,wn);
 		classifiedAngles[n].push_back(newRow);
 	}
 }
