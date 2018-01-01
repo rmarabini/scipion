@@ -257,6 +257,18 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                 cleanPath(fnGallery)
                 cleanPath(fnGalleryXmd)
 
+                fnLocalStk=join(fnDirCurrent,"anglesCont%02d.stk"%i)
+                args="-i %s -o %s --sampling %f --Rmax %d --padding 2 --ref %s --max_resolution %f"%\
+                   (fnImgs,fnLocalStk,TsCurrent,newXdim/2,fnReferenceVol,2*TsCurrent)
+                args+=" --optimizeShift --max_shift %f"%maxShift
+                args+=" --optimizeAngles --max_angular_change %f"%(2*angleStep)
+                if self.inputParticles.get().isPhaseFlipped():
+                    args+=" --phaseFlipped"
+                self.runJob("xmipp_angular_continuous_assign2",args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
+                fnAngles=join(fnDirCurrent,"anglesCont%02d.xmd"%i)
+                self.runJob('xmipp_metadata_utilities','-i %s --fill weight constant 1'%fnAngles,numberOfMpi=1)
+                self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "weight=weightContinuous2"'%fnAngles,numberOfMpi=1)
+
     def classifyParticles(self,iteration):
         fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
 
@@ -266,7 +278,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         for i in range(1,self.getNumberOfReconstructedVolumes()+1):
             fnReferenceVol=join(fnDirCurrent,"volumeRef%02d.mrc"%i)
             fnOut = "angles_%02d@%s"%(i,fnAnglesAll)
-            fnAngles=join(fnDirCurrent,"angles%02d.xmd"%i)
+            fnAngles=join(fnDirCurrent,"anglesCont%02d.xmd"%i)
             if exists(fnAngles):
                 md=MetaData(fnAngles)
             else:
