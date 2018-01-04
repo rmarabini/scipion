@@ -85,7 +85,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         line=form.addLine('Tilt angle:', help='0 degrees represent top views, 90 degrees represent side views', expertLevel=LEVEL_ADVANCED)
         line.addParam('angularMinTilt', FloatParam, label="Min.", default=0, expertLevel=LEVEL_ADVANCED)
         line.addParam('angularMaxTilt', FloatParam, label="Max.", default=90, expertLevel=LEVEL_ADVANCED)
-        form.addParam('numberOfReplicates', IntParam, label="Max. Number of Replicates", default=3, 
+        form.addParam('numberOfReplicates', IntParam, label="Max. Number of Replicates", default=1, 
                   expertLevel=LEVEL_ADVANCED, help="Significant alignment is allowed to replicate each image up to this number of times")
 
         form.addParallelSection(threads=1, mpi=8)
