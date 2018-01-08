@@ -501,7 +501,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
     def _updateClass(self, item):
         classId = item.getObjId()
-        item.setAlignment3D()
+        item.setAlignmentProj()
         item.setSamplingRate(self.Ts)
         item.getRepresentative().setFileName(join(self.fnLastDir,"volume%02d.mrc"%classId))
         
