@@ -24,15 +24,16 @@
 # *
 # **************************************************************************
 
-from protocol_convert_to_pseudoatoms_base import *
+from pyworkflow.em.packages.xmipp3.pdb.protocol_pseudoatoms_base import XmippProtConvertToPseudoAtomsBase
+from pyworkflow.em.packages.xmipp3.convert import getImageLocation
 from protocol_nma_base import *
 from pyworkflow.utils.path import createLink, cleanPath
-from pyworkflow.protocol.params import BooleanParam
+from pyworkflow.protocol.params import BooleanParam, MultiPointerParam
 from xmipp import MetaData, MDL_NMA, MDL_ENABLED, MDL_NMA_MINRANGE, MDL_NMA_MAXRANGE
 
 class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
     """ Protocol for choosing a volume to construct an NMA analysis """
-    _label = 'choose NMA'
+    _label = 'NMA selection'
     def __init__(self, **args):
         XmippProtConvertToPseudoAtomsBase.__init__(self, **args)
         XmippProtNMABase.__init__(self, **args)
@@ -41,50 +42,70 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-        form.addParam('inputStructures', PointerParam, label="Input volumes", important=True, 
-                      pointerClass='SetOfVolumes')
+        form.addParam('inputRefVolume', PointerParam,
+                      pointerClass='Volume',
+                      label="Input reference volume", important=True,
+                      help='Select one volume for reference')
+        form.addParam('inputVolumes', MultiPointerParam,
+                      pointerClass='Volume',
+                      label="Input volume(s)", important=True,
+                      help='Select one or more volumes (Volume or SetOfVolumes)\n'
+                           'to be aligned againt the reference volume.')
+        form.addParam('inputModes', PointerParam, label="Input normal modes", important=True,
+                      pointerClass = 'SetOfNormalModes')
         form.addParam('alignVolumes', BooleanParam, label="Align volumes", default=False,
                       help="Align deformed PDBs to volume to maximize match")
         XmippProtConvertToPseudoAtomsBase._defineParams(self,form)
         form.addParallelSection(threads=4, mpi=1)    
 
-        form.addSection(label='Normal Mode Analysis')
-        XmippProtNMABase._defineParamsCommon(self,form)
+        #form.addSection(label='Normal Mode Analysis')
+        #XmippProtNMABase._defineParamsCommon(self,form)
              
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        inputStructures = self.inputStructures.get()
-        self.sampling = inputStructures.getSamplingRate()
+        #inputStructures = self.inputStructures.get().getFileName()
+        inputModes = self.inputModes.get().getFileName()
+        pseudoatoms = self.inputModes.get().getPdb().getFileName()
+        RefVolume = self.inputRefVolume.get().getFileName()
+        print RefVolume
+        #filenameRef = getImageLocation(RefVolume)
         filenames=[]
-        for inputStructure in inputStructures:
-            filenames.append(getImageLocation(inputStructure))
-          
+        for inputStructure in self.inputVolumes:
+            filenames.append(inputStructure.get().getFileName())
+            self.sampling = inputStructure.get().getSamplingRate()
+
         deps = []  
         for volCounter in range(1,len(filenames)+1):
             fnIn=filenames[volCounter-1]
-            prefix="_%02d"%volCounter
-            fnMask = self._insertMaskStep(fnIn, prefix)
-            
-            self._insertFunctionStep('convertToPseudoAtomsStep', inputStructure, fnIn, fnMask, prefix, prerequisites=deps)
-            parentId=self._insertFunctionStep('computeNMAStep',self._getPath("pseudoatoms%s.pdb"%prefix), prefix)
+            #prefix="_%02d"%volCounter
+            #self._insertFunctionStep('convertToPseudoAtomsStep', inputStructure, fnIn, fnMask, prefix, prerequisites=deps)
+            #parentId=self._insertFunctionStep('computeNMAStep',self._getPath("pseudoatoms%s.pdb"%prefix), prefix)
+            outVolFn = self._getPath('outputRigidAlignment_vol_%s_to_%d.vol' % ("Ref", volCounter))
+            self._insertFunctionStep('alignVolumeStep', RefVolume, fnIn, outVolFn, volCounter)
             deps=[]
-            for volCounter2 in range(1,len(filenames)+1):
-                if volCounter2!=volCounter:
-                    args="-i %s --pdb %s --modes %s --sampling_rate %f -o %s --fixed_Gaussian %f --opdb %s"%\
-                         (filenames[volCounter2-1],self._getPath("pseudoatoms%s.pdb"%prefix), \
-                          self._getPath("modes%s.xmd"%prefix),self.sampling,\
-                          self._getExtraPath('alignment_%02d_%02d.xmd'%(volCounter,volCounter2)),\
-                          self.sampling*self.pseudoAtomRadius.get(),
-                          self._getExtraPath('alignment_%02d_%02d.pdb'%(volCounter,volCounter2)))
-                    if self.alignVolumes.get():
-                        args+=" --alignVolumes"
-                    stepId=self._insertRunJobStep("xmipp_nma_alignment_vol",args,prerequisites=[parentId])
-                    deps.append(stepId)
+            #for volCounter2 in range(1,len(filenames)+1):
+            args="-i %s --pdb %s --modes %s --sampling_rate %f -o %s --fixed_Gaussian %f --opdb %s"%\
+                 (filenames[volCounter-1],pseudoatoms, \
+                  inputModes,self.sampling,\
+                  self._getExtraPath('alignment_%s_%02d.xmd'%("Ref",volCounter)),\
+                  self.sampling*self.pseudoAtomRadius.get(),
+                  self._getExtraPath('alignment_%s_%02d.pdb'%("Ref",volCounter)))
+            if self.alignVolumes.get():
+                args+=" --alignVolumes"
+            stepId=self._insertRunJobStep("xmipp_nma_alignment_vol",args)
+            deps.append(stepId)
             
-        self._insertFunctionStep('evaluateDeformationsStep',prerequisites=deps)
+        #self._insertFunctionStep('evaluateDeformationsStep',prerequisites=deps)
         
 
     #--------------------------- Step functions --------------------------------------------
+    def alignVolumeStep(self, refFn, inVolFn, outVolFn, volId):
+        args = "--i1 %s --i2 %s --apply %s" % (refFn, inVolFn, outVolFn)
+        args += " --local --rot 0 0 1 --tilt 0 0 1 --psi 0 0 1 -x 0 0 1 -y 0 0 1 -z 0 0 1 --dontScale"
+        args += " --copyGeo %s" % (
+                self._getExtraPath('transformation-matrix_vol%06d.txt'%volId))
+        self.runJob("xmipp_volume_align", args)
+
     def convertToPseudoAtomsStep(self, inputStructure, fnIn, fnMask, prefix):
         XmippProtConvertToPseudoAtomsBase.convertToPseudoAtomsStep(self, fnIn, fnMask, prefix)
         self.createChimeraScriptStep(inputStructure, fnIn, prefix)
