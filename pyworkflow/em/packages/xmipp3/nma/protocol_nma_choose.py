@@ -53,9 +53,13 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
                            'to be aligned againt the reference volume.')
         form.addParam('inputModes', PointerParam, label="Input normal modes", important=True,
                       pointerClass = 'SetOfNormalModes')
-        form.addParam('alignVolumes', BooleanParam, label="Align volumes", default=False,
-                      help="Align deformed PDBs to volume to maximize match")
-        XmippProtConvertToPseudoAtomsBase._defineParams(self,form)
+        form.addParam('pseudoAtomRadius', FloatParam, default=1,
+                      label='Pseudoatom radius (vox)',
+                      help='Pseudoatoms are defined as Gaussians whose \n'
+                           'standard deviation is this value in voxels')
+        #form.addParam('alignVolumes', BooleanParam, label="Align volumes", default=False,
+        #              help="Align deformed PDBs to volume to maximize match")
+        #XmippProtConvertToPseudoAtomsBase._defineParams(self,form)
         form.addParallelSection(threads=4, mpi=1)    
 
         #form.addSection(label='Normal Mode Analysis')
@@ -63,12 +67,12 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
              
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        #inputStructures = self.inputStructures.get().getFileName()
+
         inputModes = self.inputModes.get().getFileName()
         pseudoatoms = self.inputModes.get().getPdb().getFileName()
         RefVolume = self.inputRefVolume.get().getFileName()
         print RefVolume
-        #filenameRef = getImageLocation(RefVolume)
+
         filenames=[]
         for inputStructure in self.inputVolumes:
             filenames.append(inputStructure.get().getFileName())
@@ -82,16 +86,15 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
             #parentId=self._insertFunctionStep('computeNMAStep',self._getPath("pseudoatoms%s.pdb"%prefix), prefix)
             outVolFn = self._getPath('outputRigidAlignment_vol_%s_to_%d.vol' % ("Ref", volCounter))
             self._insertFunctionStep('alignVolumeStep', RefVolume, fnIn, outVolFn, volCounter)
-            deps=[]
             #for volCounter2 in range(1,len(filenames)+1):
-            args="-i %s --pdb %s --modes %s --sampling_rate %f -o %s --fixed_Gaussian %f --opdb %s"%\
+            args="-i %s --pdb %s --modes %s --sampling_rate %f -odir %s --fixed_Gaussian %f --opdb %s"%\
                  (filenames[volCounter-1],pseudoatoms, \
                   inputModes,self.sampling,\
                   self._getExtraPath('alignment_%s_%02d.xmd'%("Ref",volCounter)),\
                   self.sampling*self.pseudoAtomRadius.get(),
                   self._getExtraPath('alignment_%s_%02d.pdb'%("Ref",volCounter)))
-            if self.alignVolumes.get():
-                args+=" --alignVolumes"
+            #if self.alignVolumes.get():
+             #   args+=" --alignVolumes"
             stepId=self._insertRunJobStep("xmipp_nma_alignment_vol",args)
             deps.append(stepId)
             
@@ -111,7 +114,7 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
         self.createChimeraScriptStep(inputStructure, fnIn, prefix)
         createLink(self._getPath("pseudoatoms%s.pdb"%prefix),self._getPath("pseudoatoms.pdb"))
 
-    def computeNMAStep(self, fnIn, prefix):
+    '''def computeNMAStep(self, fnIn, prefix):
         cutoffStr=''
         if self.cutoffMode == NMA_CUTOFF_REL:
             cutoffStr = 'Relative %f'%self.rcPercentage.get()
@@ -128,7 +131,7 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
         self.runJob("mv","%s %s"%(self._getPath('modes'),self._getPath('modes%s'%prefix)))
 
         # Remove intermediate files
-        cleanPath(self._getPath("pseudoatoms.pdb"), fnModes, self._getExtraPath('vec_ani.pkl'))
+        cleanPath(self._getPath("pseudoatoms.pdb"), fnModes, self._getExtraPath('vec_ani.pkl'))'''
     
     def evaluateDeformationsStep(self):
         N = self.inputStructures.get().getSize()
