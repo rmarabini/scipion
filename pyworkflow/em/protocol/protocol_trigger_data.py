@@ -1,7 +1,6 @@
 # **************************************************************************
 # *
-# * Authors:     R. Marabini (roberto@cnb.csic.es)
-# *              Tomas Majtner (tmajtner@cnb.csic.es)   -- added particles
+# * Authors:     Tomas Majtner (tmajtner@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -49,7 +48,7 @@ SET_OF_PARTICLES = 3
 
 
 
-class ProtCreateStreamData(EMProtocol):
+class ProtTriggerData(EMProtocol):
     """ create  setofXXXX in streaming mode.
         micrograph -> read a micrograph in memory and writes it nDim times
         movie      -> read a movie in memory and writes it nDim times
