@@ -292,13 +292,13 @@ class XmippProtScreenParticles(ProtProcessParticles):
                     summary.append(line.strip())
                 fhSummary.close()
         return summary
-    
+
     def _validate(self):
         pass
-        
+
     def _citations(self):
         return ['Vargas2013b']
-    
+
     def _methods(self):
         methods = []
         if hasattr(self, 'outputParticles'):
@@ -325,7 +325,7 @@ class XmippProtScreenParticles(ProtProcessParticles):
             methods.append('Output set is %s.'
                            % self.getObjectTag('outputParticles'))
         return methods
-    
+
     #--------------------------- UTILS functions -----------------------------
     def _updateParticle(self, item, row):
         setXmippAttributes(item, row, md.MDL_ZSCORE, md.MDL_ZSCORE_SHAPE1,
