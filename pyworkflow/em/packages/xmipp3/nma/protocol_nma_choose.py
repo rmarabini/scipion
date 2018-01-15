@@ -45,12 +45,12 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
         form.addParam('inputRefVolume', PointerParam,
                       pointerClass='Volume',
                       label="Input reference volume", important=True,
-                      help='Select one volume for reference')
+                      help='Select the volume you have calculated the normal modes')
         form.addParam('inputVolumes', MultiPointerParam,
                       pointerClass='Volume',
                       label="Input volume(s)", important=True,
                       help='Select one or more volumes (Volume or SetOfVolumes)\n'
-                           'to be aligned againt the reference volume.')
+                           'to be aligned against the reference volume.')
         form.addParam('inputModes', PointerParam, label="Input normal modes", important=True,
                       pointerClass = 'SetOfNormalModes')
         form.addParam('pseudoAtomRadius', FloatParam, default=1,
@@ -87,7 +87,7 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
             outVolFn = self._getPath('outputRigidAlignment_vol_%s_to_%d.vol' % ("Ref", volCounter))
             self._insertFunctionStep('alignVolumeStep', RefVolume, fnIn, outVolFn, volCounter)
             #for volCounter2 in range(1,len(filenames)+1):
-            args="-i %s --pdb %s --modes %s --sampling_rate %f -odir %s --fixed_Gaussian %f --opdb %s"%\
+            args="-i %s --pdb %s --modes %s --sampling_rate %f -o %s --fixed_Gaussian %f --opdb %s"%\
                  (filenames[volCounter-1],pseudoatoms, \
                   inputModes,self.sampling,\
                   self._getExtraPath('alignment_%s_%02d.xmd'%("Ref",volCounter)),\
