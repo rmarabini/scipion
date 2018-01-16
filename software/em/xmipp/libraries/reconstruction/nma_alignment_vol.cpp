@@ -265,7 +265,7 @@ void ProgNmaAlignmentVol::processImage(const FileName &fnImg,
 	std::cout << "hhhhhhhhhhhhhhhhhhhhhhhhhhh" << std::endl;
 	static size_t imageCounter = 0;
 	++imageCounter;
-
+	std::cout << numberOfModes << std::endl;
 	ObjectiveFunction *of;
 
 	int dim = numberOfModes;

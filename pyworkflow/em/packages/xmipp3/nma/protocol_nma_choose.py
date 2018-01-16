@@ -69,16 +69,20 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
     def _insertAllSteps(self):
 
         inputModes = self.inputModes.get().getFileName()
+        print inputModes
+        inputModes = inputModes.split(".")
+        print inputModes
+        inputModes = inputModes[0]+".xmd"
         pseudoatoms = self.inputModes.get().getPdb().getFileName()
         RefVolume = self.inputRefVolume.get().getFileName()
-        print RefVolume
 
         filenames=[]
         for inputStructure in self.inputVolumes:
             filenames.append(inputStructure.get().getFileName())
             self.sampling = inputStructure.get().getSamplingRate()
 
-        deps = []  
+        deps = []
+        print inputModes
         for volCounter in range(1,len(filenames)+1):
             fnIn=filenames[volCounter-1]
             #prefix="_%02d"%volCounter

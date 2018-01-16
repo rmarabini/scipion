@@ -26,6 +26,7 @@ you can contact the author at fvandenb@iridia.ulb.ac.be
 
 #include <stdio.h>
 #include <memory.h>
+#include <iostream>
 
 #ifdef WIN32
 #include <crtdbg.h>
@@ -75,6 +76,7 @@ void fullUpdateOfM(double rho,Vector Base,Matrix data,InterPolynomial poly)
 void CONDOR( double rhoStart, double rhoEnd, int niter, 
               ObjectiveFunction *of, int nnode)
 {
+	std::cout << "aaaaaaa" << std::endl;
     rhoStart=mmax(rhoStart,rhoEnd);
     int dim=of->dim(), info, k, t, nerror;
     double rho=rhoStart, delta=rhoStart, rhoNew,
@@ -83,12 +85,12 @@ void CONDOR( double rhoStart, double rhoEnd, int niter,
     bool improvement, forceTRStep=true, evalNeeded;
     
     initConstrainedStep(of);
-
+    std::cout << dim << std::endl;
     // pre-create the MultInd indexes to prevent multi-thread problems:
     cacheMultInd.get(dim,1); cacheMultInd.get(dim,2);    
-
+    std::cout << "aaaaaaaa2222" << std::endl;
     parallelInit(nnode, dim, of);
-
+    std::cout << "aaaaaaaa3333" << std::endl;
     of->initData();
 //    points=getFirstPoints(&ValuesF, &nPtsTotal, rhoStart,of);
 
@@ -99,8 +101,6 @@ void CONDOR( double rhoStart, double rhoEnd, int niter,
         exit(255);
     }
 
-    
-    
     //Base=poly.vBase;
     k=poly.kbest;
     valueFk=poly.valuesF[k];
