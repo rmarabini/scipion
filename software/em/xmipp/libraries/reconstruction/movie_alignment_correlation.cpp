@@ -26,7 +26,12 @@
 #include "movie_alignment_correlation.h"
 #include <data/metadata_extension.h>
 #include <data/xmipp_fftw.h>
+#include <sstream>
+
+#define SSTR( x ) static_cast< std::ostringstream & >( \
+        ( std::ostringstream() << std::dec << x ) ).str()
 #include <data/filters.h>
+#include <ctime>
 
 
 #define OUTSIDE_WRAP 0
@@ -160,6 +165,21 @@ void computeTotalShift(int iref, int j, const Matrix1D<double> &shiftX, const Ma
 
 void ProgMovieAlignmentCorrelation::run()
 {
+
+	Image<double> aaaa(1000, 2000);
+	aaaa.data.initZeros();
+	for (size_t abc = 0; abc < 10; abc++) {
+		aaaa.data.data[abc] = abc;
+	}
+	aaaa.write("test1.mrc");
+
+	Image<double> bbbb(1100, 2000);
+	bbbb.data.initZeros();
+	for (size_t abc = 0; abc < 10; abc++) {
+		bbbb.data.data[abc] = abc;
+	}
+	bbbb.write("test2.mrc");
+
     MetaData movie;
     size_t Xdim, Ydim, Zdim, Ndim;
 	int bestIref=-1;
@@ -218,6 +238,9 @@ void ProgMovieAlignmentCorrelation::run()
     	}
 
 		getImageSize(movie, Xdim, Ydim, Zdim, Ndim);
+
+		std::cout << "image size: " << Xdim << " x " << Ydim << " x " << Zdim << std::endl;
+
 		if (yDRcorner!=-1)
 		{
 			Xdim = xDRcorner - xLTcorner +1 ;
@@ -228,6 +251,8 @@ void ProgMovieAlignmentCorrelation::run()
 
 		newXdim=int(Xdim*sizeFactor);
 		newYdim=int(Ydim*sizeFactor);
+
+		std::cout << "new dim size: " << newXdim << " x " << newYdim << std::endl;
 
 		// Construct 1D profile of the lowpass filter
 		MultidimArray<double> lpf(newXdim/2);
@@ -246,8 +271,8 @@ void ProgMovieAlignmentCorrelation::run()
 			std::cout << "Computing Fourier transform of frames ..." << std::endl;
 			init_progress_bar(movie.size());
 		}
-		int n=0;
 		FourierTransformer transformer;
+		transformer.setThreadsNumber(8);
 		Matrix1D<double> w(2);
 		std::complex<double> zero=0;
 
@@ -270,6 +295,10 @@ void ProgMovieAlignmentCorrelation::run()
 
 		MultidimArray<double> filter;
 		bool firstImage=true;
+
+		clock_t begin = clock();
+
+		int n=0;
 		FOR_ALL_OBJECTS_IN_METADATA(movie)
 		{
 			if (n>=nfirst && n<=nlast)
@@ -287,11 +316,25 @@ void ProgMovieAlignmentCorrelation::run()
 				if (XSIZE(gain())>0)
 					croppedFrame()*=gain();
 				// Reduce the size of the input frame
-				scaleToSizeFourier(1,newYdim,newXdim,croppedFrame(),reducedFrame());
+
+				croppedFrame.write("croppedFrame" + SSTR(n) + ".vol");
+				scaleToSizeFourier(1,newYdim,newXdim,croppedFrame(),reducedFrame(), 8);
+
+				reducedFrame.write("reducedFrame" + SSTR(n) + ".vol");
 
 				// Now do the Fourier transform and filter
 				MultidimArray< std::complex<double> > *reducedFrameFourier=new MultidimArray< std::complex<double> >;
 				transformer.FourierTransform(reducedFrame(),*reducedFrameFourier,true);
+				Image<double> Vout(reducedFrameFourier->xdim, reducedFrameFourier->ydim);
+				Vout.data.initZeros();
+				for (size_t abc = 0; abc < reducedFrameFourier->yxdim; abc++) {
+					double r = reducedFrameFourier->data[abc].real();
+					if (r < 3)
+						Vout.data.data[abc] = r;
+					if (r > 3)
+						std::cout << "skipping " << r << " at possition " << abc << std::endl;
+				}
+				Vout.write("reducedFrameFourier" + SSTR(n) + "_afterFFT.vol");
 				if (firstImage)
 				{
 					filter.initZeros(*reducedFrameFourier);
@@ -304,6 +347,11 @@ void ProgMovieAlignmentCorrelation::run()
 							A2D_ELEM(filter,i,j)=lpf.interpolatedElement1D(wabs*newXdim);
 					}
 					firstImage = false;
+					Image<double> Vout1;
+					Vout1.data.initZeros(filter);
+					Vout1.data.data = filter.data;
+					Vout1.write("filter.vol");
+					Vout1.data.data = NULL;
 				}
 				for (size_t nn=0; nn<filter.nzyxdim; ++nn)
 				{
@@ -313,7 +361,16 @@ void ProgMovieAlignmentCorrelation::run()
 					else
 						DIRECT_MULTIDIM_ELEM(*reducedFrameFourier,nn) = zero;
 				}
-
+				Vout.data.initZeros();
+				Vout.data.initZeros();
+				for (size_t abc = 0; abc < reducedFrameFourier->yxdim; abc++) {
+					double r = reducedFrameFourier->data[abc].real();
+					if (r < 3)
+						Vout.data.data[abc] = r;
+					if (r > 3)
+						std::cout << "skipping " << r << " at possition " << abc << std::endl;
+				}
+				Vout.write("reducedFrameFourier" + SSTR(n) + "_afterFilter.vol");
 				frameFourier.push_back(reducedFrameFourier);
 			}
 			++n;
@@ -322,6 +379,8 @@ void ProgMovieAlignmentCorrelation::run()
 		}
 		if (verbose)
 			progress_bar(movie.size());
+
+		std::cout << "\t\t\t\t#####\t       fourier transforms: " << double(clock() - begin) / CLOCKS_PER_SEC << std::endl;
 
 		// Free useless memory
 		filter.clear();
@@ -340,11 +399,15 @@ void ProgMovieAlignmentCorrelation::run()
 		Mcorr.resizeNoCopy(newYdim,newXdim);
 		Mcorr.setXmippOrigin();
 		CorrelationAux aux;
+		aux.transformer1.setThreadsNumber(8);
+		aux.transformer2.setThreadsNumber(8);
+		begin = clock();
 		for (size_t i=0; i<N-1; ++i)
+//		for (size_t i=N-2; i>=0; --i)
 		{
 			for (size_t j=i+1; j<N; ++j)
 			{
-				bestShift(*frameFourier[i],*frameFourier[j],Mcorr,bX(idx),bY(idx),aux,NULL,maxShift);
+				double tmp1 = bestShift(*frameFourier[i],*frameFourier[j],Mcorr,bX(idx),bY(idx),aux,NULL,maxShift);
 				if (verbose)
 					std::cerr << "Frame " << i+nfirst << " to Frame " << j+nfirst << " -> (" << bX(idx) << "," << bY(idx) << ")\n";
 				for (int ij=i; ij<j; ij++)
@@ -354,7 +417,11 @@ void ProgMovieAlignmentCorrelation::run()
 			}
 			delete frameFourier[i];
 		}
-
+//		for (size_t i=frameFourier.size()-1; i>0; --i) {
+//		for (size_t i=0; i<frameFourier.size(); ++i) {
+//			delete frameFourier[i];
+//		}
+		std::cout << "\t\t\t\t#####\t       cross-corelation: " << double(clock() - begin) / CLOCKS_PER_SEC << std::endl;
 		// Finally solve the equation system
 		Matrix1D<double> shiftX, shiftY, ex, ey;
 		WeightedLeastSquaresHelper helper;
@@ -370,6 +437,7 @@ void ProgMovieAlignmentCorrelation::run()
 		varbY*=varbY;
 		if (verbose)
 			std::cout << "\nSolving for the shifts ...\n";
+		begin = clock();
 		do
 		{
 			// Solve the equation system
@@ -412,6 +480,7 @@ void ProgMovieAlignmentCorrelation::run()
 			it++;
 		}
 		while (it<solverIterations);
+		std::cout << "\t\t\t\t#####\t       equation system: " << double(clock() - begin) / CLOCKS_PER_SEC << std::endl;
 
 		// Choose reference image as the minimax of shifts
 		double worstShiftEver=1e38;
@@ -436,6 +505,7 @@ void ProgMovieAlignmentCorrelation::run()
 		if (verbose)
 			std::cout << "Reference frame: " << bestIref+1+nfirst << std::endl;
 
+		begin = clock();
 	    // Compute shifts
 	    int j=0;
 	    n=0;
@@ -461,6 +531,7 @@ void ProgMovieAlignmentCorrelation::run()
 	        movie.setValue(MDL_WEIGHT,1.0,__iter.objId);
 	        n++;
 	    }
+		std::cout << "\t\t\t\t#####\t       shift calculation: " << double(clock() - begin) / CLOCKS_PER_SEC << std::endl;
     }
     else
     {
@@ -478,6 +549,7 @@ void ProgMovieAlignmentCorrelation::run()
     int j=0;
 	size_t N=0, Ninitial=0;
 	Image<double> initialMic;
+	clock_t bbb = clock();
     FOR_ALL_OBJECTS_IN_METADATA(movie)
     {
         if (n>=nfirstSum && n<=nlastSum)
@@ -536,6 +608,8 @@ void ProgMovieAlignmentCorrelation::run()
         }
         n++;
     }
+
+	std::cout << "\t\t\t\t#####\t       translate: " << double(clock() - bbb) / CLOCKS_PER_SEC << std::endl;
     if (fnInitialAvg!="")
     {
     	initialMic()/=Ninitial;

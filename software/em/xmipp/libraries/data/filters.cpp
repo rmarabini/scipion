@@ -27,7 +27,13 @@
 #include <list>
 #include "morphology.h"
 #include "wavelet.h"
+#include <ctime>
 #include "xmipp_fftw.h"
+
+#include <sstream>
+
+#define SSTR( x ) static_cast< std::ostringstream & >( \
+        ( std::ostringstream() << std::dec << x ) ).str()
 
 /* Subtract background ---------------------------------------------------- */
 void substractBackgroundPlane(MultidimArray<double> &I)
@@ -1169,6 +1175,7 @@ double bestShift(MultidimArray<double> &Mcorr,
     int imax, jmax, i_actual, j_actual;
     double xmax, ymax, avecorr, stdcorr, dummy;
     bool neighbourhood = true;
+    static int counter = 0;
 
     /*
      Warning: for masks with a small number of non-zero pixels, this routine is NOT reliable...
@@ -1176,7 +1183,7 @@ double bestShift(MultidimArray<double> &Mcorr,
      */
 
     // Adjust statistics within shiftmask to average 0 and stddev 1
-    if (mask != NULL)
+    if (mask != NULL) // neprovede se, maska je NULL
     {
         if ((*mask).sum() < 2)
         {
@@ -1198,9 +1205,17 @@ double bestShift(MultidimArray<double> &Mcorr,
         }
     }
     else
-        Mcorr.statisticsAdjust(0, 1);
+        Mcorr.statisticsAdjust(0, 1); // projde pole a naskaluje hodnoty
+
+    Image<double> Vout;
+    Vout.data.initZeros(Mcorr);
+    Vout.data.data = Mcorr.data;
+	Vout.write("bestShiftStatisticsAdjust" + SSTR(counter) + ".vol");
+	Vout.data.data = NULL;
+
 
     // Look for maximum shift
+	std::cout << "maxShift " << maxShift << " ";
     if (maxShift==-1)
     	Mcorr.maxIndex(imax, jmax);
     else
@@ -1221,6 +1236,7 @@ double bestShift(MultidimArray<double> &Mcorr,
     		}
     }
     double max = A2D_ELEM(Mcorr, imax, jmax);
+    std::cout << "max: " << max << " i: " << imax << " j: " << jmax << " ";
 
     // Estimate n_max around the maximum
     int n_max = -1;
@@ -1251,6 +1267,8 @@ double bestShift(MultidimArray<double> &Mcorr,
             }
         }
     }
+    std::cout << "n_max: " << n_max << " ";
+
 
     // We have the neighbourhood => looking for the gravity centre
     xmax = ymax = 0.;
@@ -1275,11 +1293,13 @@ double bestShift(MultidimArray<double> &Mcorr,
             sumcorr += val;
         }
     }
+    std::cout << "sumcorr: " << sumcorr << " ";
     if (sumcorr != 0)
     {
         shiftX = xmax / sumcorr;
         shiftY = ymax / sumcorr;
     }
+    std::cout << "shiftX: " << shiftX << " shiftY: " << shiftY << std::endl;
     return max;
 }
 
@@ -1315,8 +1335,13 @@ double bestShift(const MultidimArray< std::complex<double> > &FFTI1,
                double &shiftX, double &shiftY, CorrelationAux &aux,
                const MultidimArray<int> *mask, int maxShift)
 {
+	clock_t begin = clock();
 	correlation_matrix(FFTI1, FFTI2, Mcorr, aux);
-	return bestShift(Mcorr, shiftX, shiftY, mask, maxShift);
+	std::cout << "\t\t\t\t#####\t       correlation_matrix: " << double(clock() - begin) / CLOCKS_PER_SEC << std::endl;
+	begin = clock();
+	double result = bestShift(Mcorr, shiftX, shiftY, mask, maxShift);
+	std::cout << "\t\t\t\t#####\t       best shift: " << double(clock() - begin) / CLOCKS_PER_SEC << std::endl;
+	return result;
 }
 
 /* Best shift -------------------------------------------------------------- */

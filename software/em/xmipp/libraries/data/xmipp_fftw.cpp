@@ -28,6 +28,11 @@
 #include "args.h"
 #include <string.h>
 #include <pthread.h>
+#include <sstream>
+#include "xmipp_image.h"
+
+#define SSTR( x ) static_cast< std::ostringstream & >( \
+        ( std::ostringstream() << std::dec << x ) ).str()
 
 static pthread_mutex_t fftw_plan_mutex = PTHREAD_MUTEX_INITIALIZER;
 bool	planCreated=false;
@@ -893,12 +898,28 @@ void correlation_matrix(const MultidimArray< std::complex< double > > & FFT1,
                         CorrelationAux &aux,
                         bool center)
 {
+	static int counter = 0;
 	aux.transformer2.setReal(R);
 	aux.transformer2.setFourier(FFT2);
+	Image<double> Vout;
+	Vout.data.initZeros(FFT2);
     correlationInFourier(FFT1,aux.transformer2.fFourier,MULTIDIM_SIZE(R));
+	for (size_t abc = 0; abc < FFT2.yxdim; abc++) {
+		double r = FFT2.data[abc].real();
+		if (r < 3)
+			Vout.data.data[abc] = r;
+		else
+			std::cout << "skipping " << r << " at possition " << abc << std::endl;
+	}
+	Vout.write("correlation" + SSTR(counter) + ".vol");
     aux.transformer2.inverseFourierTransform();
     if (center)
         CenterFFT(R, true);
+    Vout.data.initZeros(R);
+    Vout.data.data = R.data;
+    Vout.write("correlationIFFT" + SSTR(counter) + ".vol");
+    Vout.data.data = NULL;
+	counter++;
 }
 
 void fast_correlation_vector(const MultidimArray< std::complex<double> > & FFT1,
