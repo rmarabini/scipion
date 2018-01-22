@@ -87,6 +87,12 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         line.addParam('angularMaxTilt', FloatParam, label="Max.", default=90, expertLevel=LEVEL_ADVANCED)
         form.addParam('numberOfReplicates', IntParam, label="Max. Number of Replicates", default=1, 
                   expertLevel=LEVEL_ADVANCED, help="Significant alignment is allowed to replicate each image up to this number of times")
+        form.addParam('stochastic', BooleanParam, label="Stochastic", default=False, 
+                  help="Stochastic optimization")
+        form.addParam("stochasticAlpha", FloatParam, label="Relaxation factor", default=0.1, condition="stochastic", expertLevel=LEVEL_ADVANCED,
+                      help="Relaxation factor (between 0 and 1). Set it closer to 0 if the random subset size is small")
+        form.addParam("stochasticN", IntParam, label="Subset size", default=200, condition="stochastic", expertLevel=LEVEL_ADVANCED,
+                      help="Number of images in the random subset")
 
         form.addParallelSection(threads=1, mpi=8)
     
@@ -229,6 +235,11 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         
         # Generate projections
         fnImgs = self._getExtraPath("imagesWiener.xmd")
+        fnImgsToUse = fnImgs
+        if self.stochastic and iteration<self.numberOfIterations.get():
+            fnImgsToUse = join(fnDirCurrent,"imagesWiener%02d.xmd"%iteration)
+            self.runJob("xmipp_metadata_utilities","-i %s -o %s --operate random_subset %d"%(fnImgs,fnImgsToUse,self.stochasticN),
+                        numberOfMpi=1)
         for i in range(1,self.getNumberOfReconstructedVolumes()+1):
             fnAngles=join(fnDirCurrent,"angles%02d.xmd"%i)
             if not exists(fnAngles):
@@ -244,7 +255,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
     
                 maxShift=round(self.angularMaxShift.get()*newXdim/100)
                 args='-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d --dontApplyFisher'%\
-                     (fnImgs,fnGalleryXmd,maxShift,fnDirCurrent,self.numberOfReplicates.get()-1)
+                     (fnImgsToUse,fnGalleryXmd,maxShift,fnDirCurrent,self.numberOfReplicates.get()-1)
                 self.runJob('xmipp_reconstruct_significant',args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
                 fnAnglesSignificant = join(fnDirCurrent,"angles_iter001_00.xmd")
                 if exists(fnAnglesSignificant): 
@@ -259,7 +270,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
                 fnLocalStk=join(fnDirCurrent,"anglesCont%02d.stk"%i)
                 args="-i %s -o %s --sampling %f --Rmax %d --padding 2 --ref %s --max_resolution %f"%\
-                   (fnImgs,fnLocalStk,TsCurrent,newXdim/2,fnReferenceVol,2*TsCurrent)
+                   (fnImgsToUse,fnLocalStk,TsCurrent,newXdim/2,fnReferenceVol,2*TsCurrent)
                 args+=" --optimizeShift --max_shift %f"%maxShift
                 args+=" --optimizeAngles --max_angular_change %f"%(2*angleStep)
                 if self.inputParticles.get().isPhaseFlipped():
@@ -298,15 +309,27 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
     def reconstruct(self, iteration):
         fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
+        fnDirPrevious=self._getExtraPath("Iter%03d"%(iteration-1))
         fnOut = join(fnDirCurrent,"classes.xmd")
         fnRootVol = join(fnDirCurrent,"class_")
+        
         for i in range(1,self.getNumberOfReconstructedVolumes()+1):
             self.runJob("xmipp_metadata_split","-i class%06d_images@%s --oroot %s_%06d_"%(i,fnOut,fnRootVol,i),numberOfMpi=1)
             for half in range(1,3):
-                args="-i %s_%06d_%06d.xmd -o %s_%02d_half%d.vol --sym %s --weight --thr %d"%(fnRootVol,i,half,fnRootVol,i,half,
-                                                                                             self.symmetryGroup,self.numberOfThreads.get())
+                fnOutVol = "%s_%02d_half%d.vol"%(fnRootVol,i,half)
+                fnOutVolPrevious = join(fnDirPrevious,"volume%02d.mrc"%i)
+                args="-i %s_%06d_%06d.xmd -o %s --sym %s --weight --thr %d"%(fnRootVol,i,half,fnOutVol,
+                                                                             self.symmetryGroup,self.numberOfThreads.get())
                 self.runJob("xmipp_reconstruct_fourier",args,numberOfMpi=self.numberOfMpi.get())
                 cleanPath("%s_%06d_%06d.xmd"%(fnRootVol,i,half))
+                if self.stochastic and iteration<self.numberOfIterations.get():
+                    fnAux=join(fnDirCurrent,"aux.vol")
+                    self.runJob("xmipp_image_operate","-i %s --mult %f"%(fnOutVol,self.stochasticAlpha),numberOfMpi=1)
+                    self.runJob("xmipp_image_operate","-i %s --mult %f -o %s"%(fnOutVolPrevious,1-self.stochasticAlpha.get(),fnAux),numberOfMpi=1)
+                    self.runJob("xmipp_image_operate","-i %s --plus %s"%(fnOutVol,fnAux),numberOfMpi=1)
+                    cleanPath(fnAux)
+            cleanPath(join(fnDirCurrent,"volumeRef%02d.mrc"%i))
+            cleanPath(fnOutVolPrevious)
 
     def postProcessing(self, iteration):
         fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
@@ -412,45 +435,46 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         mdAll.write(join(fnDirCurrent,"images.xmd"))
 
     def evaluateConvergence(self,iteration):
-        fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
-        fnDirPrevious=self._getExtraPath("Iter%03d"%(iteration-1))
-        fnIntersection = join(fnDirCurrent,"intersection.xmd")
-        fnUnion = join(fnDirCurrent,"union.xmd")
-        fnAngleDistance = join(fnDirCurrent,"angle_distance")
-        N=self.getNumberOfReconstructedVolumes()
-        coocurrence = np.zeros((N, N))
-        sizeClasses = np.zeros((N, N))
-        for i in range(1,N+1):
-            for j in range(1,N+1):
-                fnCurrent = "class%06d_images@%s"%(i,join(fnDirCurrent,"classes.xmd"))
-                fnPrevious = "class%06d_images@%s"%(j,join(fnDirPrevious,"classes.xmd"))
-                self.runJob("xmipp_metadata_utilities","-i %s --set intersection %s itemId -o %s"%(fnCurrent,fnPrevious,fnIntersection),numberOfMpi=1)
-                self.runJob("xmipp_metadata_utilities","-i %s --set union %s itemId -o %s"%(fnCurrent,fnPrevious,fnUnion),numberOfMpi=1)
-                
-                sizeIntersection = float(md.getSize(fnIntersection))
-                sizeUnion = float(md.getSize(fnUnion))
-                sizeClasses[i-1,j-1]= sizeIntersection                
-                coocurrence[i-1,j-1]=sizeIntersection/sizeUnion
-                
-                if i==j:
-                    self.runJob("xmipp_angular_distance","--ang1 %s --ang2 %s --oroot %s --sym %s --check_mirrors --compute_weights 1 particleId 0.5"%\
-                                (fnPrevious,fnCurrent,fnAngleDistance,self.symmetryGroup),numberOfMpi=1)
-                    distances = md.MetaData(fnAngleDistance+"_weights.xmd")
-                    angDistance=distances.getColumnValues(md.MDL_ANGLE_DIFF)
-                    avgAngDistance = reduce(lambda x, y: x + y, angDistance) / len(angDistance)
-                    shiftDistance=distances.getColumnValues(md.MDL_SHIFT_DIFF)
-                    avgShiftDistance = reduce(lambda x, y: x + y, shiftDistance) / len(shiftDistance)
-                    print("Class %d: average angular diff=%f      average shift diff=%f"%(i,avgAngDistance,avgShiftDistance))
-        
-        print("Size of the intersections")
-        print(sizeClasses)
-        print(' ')
-        print('Stability of the classes (coocurrence)')
-        print(coocurrence)
+        if not self.stochastic:
+            fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
+            fnDirPrevious=self._getExtraPath("Iter%03d"%(iteration-1))
+            fnIntersection = join(fnDirCurrent,"intersection.xmd")
+            fnUnion = join(fnDirCurrent,"union.xmd")
+            fnAngleDistance = join(fnDirCurrent,"angle_distance")
+            N=self.getNumberOfReconstructedVolumes()
+            coocurrence = np.zeros((N, N))
+            sizeClasses = np.zeros((N, N))
+            for i in range(1,N+1):
+                for j in range(1,N+1):
+                    fnCurrent = "class%06d_images@%s"%(i,join(fnDirCurrent,"classes.xmd"))
+                    fnPrevious = "class%06d_images@%s"%(j,join(fnDirPrevious,"classes.xmd"))
+                    self.runJob("xmipp_metadata_utilities","-i %s --set intersection %s itemId -o %s"%(fnCurrent,fnPrevious,fnIntersection),numberOfMpi=1)
+                    self.runJob("xmipp_metadata_utilities","-i %s --set union %s itemId -o %s"%(fnCurrent,fnPrevious,fnUnion),numberOfMpi=1)
                     
-        cleanPath(fnIntersection)
-        cleanPath(fnUnion)
-        cleanPath(fnAngleDistance+"_weights.xmd")            
+                    sizeIntersection = float(md.getSize(fnIntersection))
+                    sizeUnion = float(md.getSize(fnUnion))
+                    sizeClasses[i-1,j-1]= sizeIntersection                
+                    coocurrence[i-1,j-1]=sizeIntersection/sizeUnion
+                    
+                    if i==j:
+                        self.runJob("xmipp_angular_distance","--ang1 %s --ang2 %s --oroot %s --sym %s --check_mirrors --compute_weights 1 particleId 0.5"%\
+                                    (fnPrevious,fnCurrent,fnAngleDistance,self.symmetryGroup),numberOfMpi=1)
+                        distances = md.MetaData(fnAngleDistance+"_weights.xmd")
+                        angDistance=distances.getColumnValues(md.MDL_ANGLE_DIFF)
+                        avgAngDistance = reduce(lambda x, y: x + y, angDistance) / len(angDistance)
+                        shiftDistance=distances.getColumnValues(md.MDL_SHIFT_DIFF)
+                        avgShiftDistance = reduce(lambda x, y: x + y, shiftDistance) / len(shiftDistance)
+                        print("Class %d: average angular diff=%f      average shift diff=%f"%(i,avgAngDistance,avgShiftDistance))
+            
+            print("Size of the intersections")
+            print(sizeClasses)
+            print(' ')
+            print('Stability of the classes (coocurrence)')
+            print(coocurrence)
+                        
+            cleanPath(fnIntersection)
+            cleanPath(fnUnion)
+            cleanPath(fnAngleDistance+"_weights.xmd")            
 
     def createOutput(self):
         # get last iteration
