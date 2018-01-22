@@ -26,16 +26,17 @@
 # **************************************************************************
 from __future__ import print_function
 
-import time
 
 INIT_REFRESH_SECONDS = 3
 
 """
 View with the protocols inside the main project window.
 """
-
 import os
 import pickle
+import json
+import re
+import tempfile
 from collections import OrderedDict
 import Tkinter as tk
 import ttk
@@ -45,13 +46,15 @@ import pyworkflow.utils as pwutils
 import pyworkflow.protocol as pwprot
 import pyworkflow.gui as pwgui
 import pyworkflow.em as em
-from pyworkflow.config import isAFinalProtocol
+from pyworkflow.config import isAFinalProtocol, getProtocolTag, \
+    PROTOCOL_DISABLED_TAG, PROTOCOL_TAG
 from pyworkflow.em.wizard import ListTreeProvider
 from pyworkflow.gui.dialog import askColor, ListDialog
 from pyworkflow.viewer import DESKTOP_TKINTER, ProtocolViewer
-from pyworkflow.utils.properties import Message, Icon, Color
+from pyworkflow.utils.properties import Message, Icon, Color, KEYSYM
 
 from constants import STATUS_COLORS
+from pyworkflow.gui.project.utils import getStatusColorFromNode
 
 DEFAULT_BOX_COLOR = '#f8f8f8'
 
@@ -121,7 +124,6 @@ def populateTree(self, tree, treeItems, prefix, obj, subclassedDict, level=0):
 
         if tag == 'protocol' and text == 'default':
             if prot is None:
-
                 print("Protocol className '%s' not found!!!. \n"
                       "Fix your config/protocols.conf configuration."
                       % protClassName)
@@ -177,13 +179,16 @@ class RunsTreeProvider(pwgui.tree.ProjectRunsTreeProvider):
         else:
             status = None
 
+        stoppable = status in [pwprot.STATUS_RUNNING, pwprot.STATUS_SCHEDULED, 
+                               pwprot.STATUS_LAUNCHED] 
+
         return [(ACTION_EDIT, single),
                 (ACTION_COPY, True),
                 (ACTION_DELETE, status != pwprot.STATUS_RUNNING),
                 (ACTION_STEPS, single),
                 (ACTION_BROWSE, single),
                 (ACTION_DB, single),
-                (ACTION_STOP, status == pwprot.STATUS_RUNNING and single),
+                (ACTION_STOP, stoppable and single),
                 (ACTION_EXPORT, not single),
                 (ACTION_COLLAPSE, single and status and expanded),
                 (ACTION_EXPAND, single and status and not expanded),
@@ -198,7 +203,7 @@ class RunsTreeProvider(pwgui.tree.ProjectRunsTreeProvider):
                 text = actionLabel
                 action = actionLabel
                 actionLabel = (text, lambda: self.actionFunc(action),
-                     ActionIcons.get(action, None))
+                               ActionIcons.get(action, None))
             return actionLabel
 
         actions = [addAction(a)
@@ -277,7 +282,8 @@ class StepsWindow(pwgui.browser.BrowserWindow):
 
         toolbar = tk.Frame(self.root)
         toolbar.grid(row=0, column=0, sticky='nw', padx=5, pady=5)
-        btn = tk.Label(toolbar, text="Tree", image=self.getImage(Icon.RUNS_TREE),
+        btn = tk.Label(toolbar, text="Tree",
+                       image=self.getImage(Icon.RUNS_TREE),
                        compound=tk.LEFT, cursor='hand2')
         btn.bind('<Button-1>', self._showTree)
         btn.grid(row=0, column=0, sticky='nw')
@@ -285,7 +291,6 @@ class StepsWindow(pwgui.browser.BrowserWindow):
         browser = pwgui.browser.ObjectBrowser(self.root, provider,
                                               showPreviewTop=False)
         self.setBrowser(browser, row=1, column=0)
-
 
     # noinspection PyUnusedLocal
     def _showTree(self, e=None):
@@ -347,12 +352,18 @@ class SearchProtocolWindow(pwgui.Window):
             if isAFinalProtocol(prot, key):
                 label = prot.getClassLabel().lower()
                 if keyword in label:
-                    protList.append((key, label))
+                    protList.append((key,
+                                     label,
+                                     prot.isInstalled()))
 
+        # Sort by label
         protList.sort(key=lambda x: x[1])  # sort by label
-        for key, label in protList:
+
+        for key, label, installed in protList:
+            tag = getProtocolTag(installed)
+            if not installed: label += " (not installed)"
             self._resultsTree.insert('', 'end', key,
-                                     text=label, tags=('protocol'))
+                                     text=label, tags=(tag))
 
 
 class RunIOTreeProvider(pwgui.tree.TreeProvider):
@@ -395,7 +406,8 @@ class RunIOTreeProvider(pwgui.tree.TreeProvider):
                     self.inputParentDict[key] = inputObj
                 inputs.append(attr)
 
-            outputs = [attr for _, attr in self.protocol.iterOutputAttributes(em.EMObject)]
+            outputs = [attr for _, attr in
+                       self.protocol.iterOutputAttributes(em.EMObject)]
             self.outputStr = pwobj.String(Message.LABEL_OUTPUT)
             objs = inputParents + inputs + [self.outputStr] + outputs
         return objs
@@ -574,7 +586,7 @@ class ProtocolsView(tk.Frame):
         self.keybinds = dict()
 
         # Register key binds
-        self._bindKeyPress('Delete', self._onDelPressed)
+        self._bindKeyPress(KEYSYM.DELETE, self._onDelPressed)
 
         self.__autoRefresh = None
         self.__autoRefreshCounter = INIT_REFRESH_SECONDS  # start by 3 secs
@@ -601,7 +613,6 @@ class ProtocolsView(tk.Frame):
             Right: containing the Runs list
         """
         p = tk.PanedWindow(self, orient=tk.HORIZONTAL, bg='white')
-
         bgColor = Color.LIGHT_GREY_COLOR
         # Left pane, contains Protocols Pane
         leftFrame = tk.Frame(p, bg=bgColor)
@@ -619,7 +630,8 @@ class ProtocolsView(tk.Frame):
         # a Action Buttons TOOLBAR in the top
         # and another vertical Pane with:
         # Runs History (at Top)
-        # Sectected run info (at Bottom)
+
+        # Selected run info (at Bottom)
         rightFrame = tk.Frame(p, bg='white')
         rightFrame.columnconfigure(0, weight=1)
         rightFrame.rowconfigure(1, weight=1)
@@ -689,7 +701,9 @@ class ProtocolsView(tk.Frame):
                          font=self.windows.fontBold)
         label.grid(row=1, column=0, sticky='nw', padx=(15, 0))
 
-        hView = {'sci-open': self._viewObject}
+        hView = {'sci-open': self._viewObject,
+                 'sci-bib': self._bibExportClicked}
+
         self.summaryText = pwgui.text.TaggedText(dframe, width=40, height=5,
                                                  bg='white', bd=0,
                                                  font=self.windows.font,
@@ -699,9 +713,19 @@ class ProtocolsView(tk.Frame):
         # Method tab
         mframe = tk.Frame(tab)
         pwgui.configureWeigths(mframe)
+        # Methods text box
         self.methodText = pwgui.text.TaggedText(mframe, width=40, height=15,
                                                 bg='white', handlers=hView)
         self.methodText.grid(row=0, column=0, sticky='news')
+        # Reference export button
+        # btnExportBib = pwgui.Button(mframe, text=Message.LABEL_BIB_BTN,
+        #                             fg='white', bg=Color.RED_COLOR,
+        #                             image=self.getImage(Icon.ACTION_BROWSE),
+        #                             compound=tk.LEFT,
+        #                             activeforeground='white',
+        #                             activebackground='#A60C0C',
+        #                             command=self._bibExportClicked)
+        # btnExportBib.grid(row=2, column=0, sticky='w', padx=0)
 
         # Logs
         ologframe = tk.Frame(tab)
@@ -721,15 +745,16 @@ class ProtocolsView(tk.Frame):
         #         tab.add(slogframe, text=Message.LABEL_LOGS_SCIPION)
         tab.grid(row=1, column=0, sticky='news')
 
-        v.add(runsFrame, weight=3)
-        v.add(infoFrame, weight=1)
+        v.add(runsFrame, weight=1)
+        v.add(infoFrame, weight=20)
         v.grid(row=1, column=0, sticky='news')
 
         # Add sub-windows to PanedWindows
-        p.add(leftFrame, padx=5, pady=5, sticky='news')
-        p.add(rightFrame, padx=5, pady=5)
-        p.paneconfig(leftFrame, minsize=300)
-        p.paneconfig(rightFrame, minsize=400)
+        p.add(leftFrame, padx=0, pady=0, sticky='news')
+        p.add(rightFrame, padx=0, pady=0)
+        p.paneconfig(leftFrame, minsize=5)
+        leftFrame.config(width=235)
+        p.paneconfig(rightFrame, minsize=10)
 
         return p
 
@@ -778,8 +803,9 @@ class ProtocolsView(tk.Frame):
             self.__autoRefreshCounter = INIT_REFRESH_SECONDS  # start by 3 secs
             if self.__autoRefresh:
                 self.runsTree.after_cancel(self.__autoRefresh)
-                self.__autoRefresh = self.runsTree.after(self.__autoRefreshCounter * 1000,
-                                                         self._automaticRefreshRuns)
+                self.__autoRefresh = self.runsTree.after(
+                    self.__autoRefreshCounter * 1000,
+                    self._automaticRefreshRuns)
 
     # noinspection PyUnusedLocal
     def _automaticRefreshRuns(self, e=None):
@@ -855,9 +881,13 @@ class ProtocolsView(tk.Frame):
         viewChoices = ['List', 'Tree', 'Tree - small']
         self.switchCombo = pwgui.widgets.ComboBox(parent, width=10,
                                                   choices=viewChoices,
-                                                  values=[VIEW_LIST, VIEW_TREE, VIEW_TREE_SMALL],
-                                                  initial=viewChoices[self.runsView],
-                                                  onChange=lambda e: self._runActionClicked(ACTION_SWITCH_VIEW))
+                                                  values=[VIEW_LIST, VIEW_TREE,
+                                                          VIEW_TREE_SMALL],
+                                                  initial=viewChoices[
+                                                      self.runsView],
+                                                  onChange=lambda
+                                                      e: self._runActionClicked(
+                                                      ACTION_SWITCH_VIEW))
         self.switchCombo.grid(row=0, column=1)
 
     def _updateActionToolbar(self):
@@ -870,8 +900,11 @@ class ProtocolsView(tk.Frame):
             # If action present (set color is not in the toolbar but in the context menu)
             if self.actionButtons.has_key(actionToDisplay):
                 if condition:
-                    self.actionButtons[actionToDisplay].grid(row=0, column=column, sticky='sw',
-                                                             padx=(0, 5), ipadx=0)
+                    self.actionButtons[actionToDisplay].grid(row=0,
+                                                             column=column,
+                                                             sticky='sw',
+                                                             padx=(0, 5),
+                                                             ipadx=0)
                 else:
                     self.actionButtons[actionToDisplay].grid_remove()
             else:
@@ -887,9 +920,17 @@ class ProtocolsView(tk.Frame):
                              fieldbackground=background)
         t = pwgui.tree.Tree(parent, show='tree', style='W.Treeview')
         t.column('#0', minwidth=300)
-        t.tag_configure('protocol', image=self.getImage('python_file.gif'))
-        t.tag_bind('protocol', '<Double-1>', self._protocolItemClick)
-        t.tag_bind('protocol', '<Return>', self._protocolItemClick)
+        # Protocol nodes
+        t.tag_configure(PROTOCOL_TAG, image=self.getImage('python_file.gif'))
+        t.tag_bind(PROTOCOL_TAG, '<Double-1>', self._protocolItemClick)
+        t.tag_bind(PROTOCOL_TAG, '<Return>', self._protocolItemClick)
+
+        # Disable protocols (not installed) are allowed to be added.
+        t.tag_configure(PROTOCOL_DISABLED_TAG, image=self.getImage('prot_disabled.gif'))
+        t.tag_bind(PROTOCOL_DISABLED_TAG, '<Double-1>', self._protocolItemClick)
+        t.tag_bind(PROTOCOL_DISABLED_TAG, '<Return>', self._protocolItemClick)
+
+
         t.tag_configure('protocol_base', image=self.getImage('class_obj.gif'))
         t.tag_configure('protocol_group', image=self.getImage('class_obj.gif'))
         t.tag_configure('section', font=self.windows.fontBold)
@@ -974,7 +1015,9 @@ class ProtocolsView(tk.Frame):
     def createRunsGraph(self, parent):
         self.runsGraphCanvas = pwgui.Canvas(parent, width=400, height=400,
                                             tooltipCallback=self._runItemTooltip,
-                                            tooltipDelay=1000, name=ProtocolsView.RUNS_CANVAS_NAME, takefocus=True,
+                                            tooltipDelay=1000,
+                                            name=ProtocolsView.RUNS_CANVAS_NAME,
+                                            takefocus=True,
                                             highlightthickness=0)
 
         self.runsGraphCanvas.onClickCallback = self._runItemClick
@@ -983,7 +1026,6 @@ class ProtocolsView(tk.Frame):
         self.runsGraphCanvas.onControlClickCallback = self._runItemControlClick
         self.runsGraphCanvas.onAreaSelected = self._selectItemsWithinArea
         self.runsGraphCanvas.onMiddleMouseClickCallback = self._runItemMiddleClick
-
 
         parent.grid_columnconfigure(0, weight=1)
         parent.grid_rowconfigure(0, weight=1)
@@ -1031,7 +1073,7 @@ class ProtocolsView(tk.Frame):
         nodeText = self._getNodeText(node)
 
         # Get status color
-        statusColor = self._getStatusColor(node)
+        statusColor = getStatusColorFromNode(node)
 
         # Get the box color (depends on color mode: label or status)
         boxColor = self._getBoxColor(nodeInfo, statusColor, node)
@@ -1078,9 +1120,10 @@ class ProtocolsView(tk.Frame):
                     else:
 
                         # tc closer to the end are younger
-                        protAge = ts-creationTime
+                        protAge = ts - creationTime
 
-                        boxColor = self._ageColor('#6666ff', elapsedTime, protAge)
+                        boxColor = self._ageColor('#6666ff', elapsedTime,
+                                                  protAge)
                 else:
                     boxColor = DEFAULT_BOX_COLOR
 
@@ -1106,14 +1149,13 @@ class ProtocolsView(tk.Frame):
 
             return boxColor
         except Exception as e:
-            print ("Can't calculate box color:" + str(e))
             return DEFAULT_BOX_COLOR
 
     @staticmethod
     def _ageColor(rgbColor, projectAge, protocolAge):
 
         #  Get the ratio
-        ratio = protocolAge.seconds/float(projectAge.seconds)
+        ratio = protocolAge.seconds / float(projectAge.seconds)
 
         # Invert direction: older = white = 100%, newest = rgbColor = 0%
         ratio = 1 - ratio
@@ -1138,7 +1180,8 @@ class ProtocolsView(tk.Frame):
         # Show the status as a circle in the top right corner
         if not self.settings.statusColorMode():
             # Option: Status item.
-            (topLeftX, topLeftY, bottomRightX, bottomRightY) = self.runsGraphCanvas.bbox(item.id)
+            (topLeftX, topLeftY, bottomRightX,
+             bottomRightY) = self.runsGraphCanvas.bbox(item.id)
             statusSize = 10
             statusX = bottomRightX - (statusSize + 3)
             statusY = topLeftY + 3
@@ -1150,7 +1193,8 @@ class ProtocolsView(tk.Frame):
         else:
             # Show a black circle if there is any label
             if self._getLabelsCount(item.nodeInfo) > 0:
-                (topLeftX, topLeftY, bottomRightX, bottomRightY) = self.runsGraphCanvas.bbox(item.id)
+                (topLeftX, topLeftY, bottomRightX,
+                 bottomRightY) = self.runsGraphCanvas.bbox(item.id)
                 statusSize = 10
                 statusX = bottomRightX - (statusSize + 3)
                 statusY = topLeftY + 3
@@ -1158,15 +1202,6 @@ class ProtocolsView(tk.Frame):
                 pwgui.Oval(self.runsGraphCanvas, statusX, statusY, statusSize,
                            color='black', anchor=item)
 
-    @staticmethod
-    def _getStatusColor(node):
-
-        # If it is a run node (not PROJECT)
-        if node.run:
-            status = node.run.status.get(pwprot.STATUS_FAILED)
-            return STATUS_COLORS[status]
-        else:
-            return '#ADD8E6'  # Light blue
 
     def _getNodeText(self, node):
 
@@ -1182,6 +1217,8 @@ class ProtocolsView(tk.Frame):
                 nodeText = node.getName() + expandedStr
             else:
                 nodeText = nodeText + expandedStr + '\n' + node.run.getStatusMessage()
+                if node.run.summaryWarnings:
+                    nodeText += u' \u26a0'
 
         return nodeText
 
@@ -1191,7 +1228,8 @@ class ProtocolsView(tk.Frame):
         if self._getLabelsCount(item.nodeInfo) < 2: return
 
         # Get the positions of the box
-        (topLeftX, topLeftY, bottomRightX, bottomRightY) = self.runsGraphCanvas.bbox(item.id)
+        (topLeftX, topLeftY, bottomRightX,
+         bottomRightY) = self.runsGraphCanvas.bbox(item.id)
 
         # Get the width of the box
         boxWidth = bottomRightX - topLeftX
@@ -1277,7 +1315,6 @@ class ProtocolsView(tk.Frame):
             self._selection.append(prot.getObjId())
         self._updateSelection()
 
-
         # self.updateRunsGraph()
         self.drawRunsGraph()
 
@@ -1360,7 +1397,6 @@ class ProtocolsView(tk.Frame):
     def _runItemMiddleClick(self, e=None):
         self._runActionClicked(ACTION_SELECT_TO)
 
-
     def _runItemRightClick(self, item=None):
         prot = item.node.run
         if prot is None:  # in case it is the main "Project" node
@@ -1390,6 +1426,11 @@ class ProtocolsView(tk.Frame):
             else:
 
                 item.setSelected(True)
+                if len(self._selection) == 1: #repaint first selected item
+                    firstSelectedNode = self.runsGraph.getNode(str(self._selection[0]))
+                    if hasattr(firstSelectedNode, 'item'):
+                        firstSelectedNode.item.setSelected(False)
+                        firstSelectedNode.item.setSelected(True)
                 self._selection.append(prot.getObjId())
 
                 # Select output data too
@@ -1496,6 +1537,7 @@ class ProtocolsView(tk.Frame):
         protocol = self.getSelectedProtocol()
         workingDir = protocol.getWorkingDir()
         if os.path.exists(workingDir):
+
             window = pwgui.browser.FileBrowserWindow("Browsing: " + workingDir,
                                                      master=self.windows,
                                                      path=workingDir)
@@ -1573,7 +1615,8 @@ class ProtocolsView(tk.Frame):
                 self.methodText.addLine('')
 
             if cites:
-                self.methodText.addLine('*REFERENCES:*')
+                self.methodText.addLine('*REFERENCES:*   '
+                                        ' [[sci-bib:][<<< Open as bibtex >>>]]')
                 for cite in cites.values():
                     self.methodText.addLine(cite)
 
@@ -1620,14 +1663,17 @@ class ProtocolsView(tk.Frame):
         # to be executed in the same thread
         self.windows.enqueue(lambda: self._executeSaveProtocol(prot))
 
-    def _executeSaveProtocol(self, prot, onlySave=False):
+    def _executeSaveProtocol(self, prot, onlySave=False, doSchedule=False):
         if onlySave:
             self.project.saveProtocol(prot)
             msg = Message.LABEL_SAVED_FORM
             # msg = "Protocol successfully saved."
 
         else:
-            self.project.launchProtocol(prot)
+            if doSchedule:
+                self.project.scheduleProtocol(prot)
+            else:
+                self.project.launchProtocol(prot)
             # Select the launched protocol to display its summary, methods..etc
             self._selection.clear()
             self._selection.append(prot.getObjId())
@@ -1729,7 +1775,6 @@ class ProtocolsView(tk.Frame):
 
             # Select himself plus ancestors
             for parent in run.getParents():
-
                 self._selectAncestors(parent)
 
         self._updateSelection()
@@ -1749,15 +1794,17 @@ class ProtocolsView(tk.Frame):
             except Exception as ex:
                 self.windows.showError(str(ex))
 
-        browser = pwgui.browser.FileBrowserWindow("Choose .json file to save workflow",
-                                                  master=self.windows,
-                                                  path=self.project.getPath(''),
-                                                  onSelect=_export,
-                                                  entryLabel='File', entryValue='workflow.json')
+        browser = pwgui.browser.FileBrowserWindow(
+            "Choose .json file to save workflow",
+            master=self.windows,
+            path=self.project.getPath(''),
+            onSelect=_export,
+            entryLabel='File', entryValue='workflow.json')
         browser.show()
 
     def _stopProtocol(self, prot):
-        if pwgui.dialog.askYesNo(Message.TITLE_STOP_FORM, Message.LABEL_STOP_FORM, self.root):
+        if pwgui.dialog.askYesNo(Message.TITLE_STOP_FORM,
+                                 Message.LABEL_STOP_FORM, self.root):
             self.project.stopProtocol(prot)
             self._lastStatus = None  # force logs to re-load
             self._scheduleRunsUpdate()
@@ -1798,6 +1845,39 @@ class ProtocolsView(tk.Frame):
             self._analyzeResults(prot)
         else:
             self.windows.showInfo("Selected protocol hasn't been run yet.")
+
+    def _bibExportClicked(self, e=None):
+        try:
+            bibTexCites = OrderedDict()
+            for prot in self._iterSelectedProtocols():
+                bibTexCites.update(prot.getCitations(bibTexOutput=True))
+                bibTexCites.update(prot.getPackageCitations(bibTexOutput=True))
+
+            if bibTexCites:
+                with tempfile.NamedTemporaryFile(suffix='.bib') as bibFile:
+                    for refId, refDict in bibTexCites.iteritems():
+                        refType = refDict['type']
+                        # remove 'type' and 'id' keys
+                        refDict = {k: v for k, v in refDict.items()
+                                   if k not in ['type', 'id']}
+                        jsonStr = json.dumps(refDict, indent=4,
+                                             ensure_ascii=False)[1:]
+                        jsonStr = jsonStr.replace('": "', '"= "')
+                        jsonStr = re.sub('(?<!= )"(\S*?)"', '\\1', jsonStr)
+                        jsonStr = jsonStr.replace('= "', ' = "')
+                        refStr = '@%s{%s,%s\n\n' % (refType, refId, jsonStr)
+                        bibFile.write(refStr.encode('utf-8'))
+                    # flush so we can see content when opening
+                    bibFile.flush()
+                    pwgui.text.openTextFileEditor(bibFile.name)
+                    #pwgui.text.showTextFileViewer("References bibtex",
+                    #                              [bibFile.name],
+                    #                              parent=self.windows)
+
+        except Exception as ex:
+            self.windows.showError(str(ex))
+
+        return
 
     def _runActionClicked(self, action):
         prot = self.getSelectedProtocol()

@@ -35,7 +35,9 @@ from protocol_classify2d import ProtRelionClassify2D
 from protocol_preprocess import ProtRelionPreprocessParticles
 from protocol_autopick import ProtRelionAutopickFom, ProtRelionAutopick
 from protocol_autopick_v2 import ProtRelion2Autopick, RUN_COMPUTE
+from protocol_create_mask3d import ProtRelionCreateMask3D
 from protocol_sort import ProtRelionSortParticles
+from protocol_initialmodel import ProtRelionInitialModel
 from pyworkflow.utils.utils import readProperties
 
 #===============================================================================
@@ -74,7 +76,8 @@ class RelionPartMaskDiameterWizard(RelionBackRadiusWizard):
     _targets = [(ProtRelionClassify2D, ['maskDiameterA']),
                 (ProtRelionRefine3D, ['maskDiameterA']),
                 (ProtRelionClassify3D, ['maskDiameterA']),
-                (ProtRelionClassify2D, ['maskDiameterA'])]
+                (ProtRelionClassify2D, ['maskDiameterA']),
+                (ProtRelionInitialModel, ['maskDiameterA'])]
     _unit = UNIT_ANGSTROM
 
     def _getParameters(self, protocol):
@@ -112,16 +115,21 @@ class RelionSortMaskWizard(RelionPartMaskDiameterWizard):
 
 class RelionVolFilterWizard(FilterVolumesWizard):
     _targets = [(ProtRelionClassify3D, ['initialLowPassFilterA']),
-                (ProtRelionRefine3D, ['initialLowPassFilterA'])]
+                (ProtRelionRefine3D, ['initialLowPassFilterA']),
+                (ProtRelionCreateMask3D, ['initialLowPassFilterA'])]
     
     def _getParameters(self, protocol):
         
         label, value = self._getInputProtocol(self._targets, protocol)
-        
         protParams = {}
-        protParams['input']= protocol.referenceVolume
-        protParams['label']= label
-        protParams['value']= value
+
+        if protocol.__class__.__name__ == 'ProtRelionCreateMask3D':
+            protParams['input'] = protocol.inputVolume
+        else:
+            protParams['input'] = protocol.referenceVolume
+
+        protParams['label'] = label
+        protParams['value'] = value
         protParams['mode'] = FILTER_LOW_PASS_NO_DECAY
         return protParams  
     
@@ -256,6 +264,7 @@ class Relion2AutopickParams(EmWizard):
         cmd = '%s relion_autopick ' % pw.getScipionScript()
         cmd += '--i extra/%(micrographName).star '
         cmd += '--threshold %(threshold) --min_distance %(ipd) '
+        cmd += ' --max_stddev_noise %(maxStddevNoise) '
         cmd += ' --read_fom_maps'
         cmd += autopickProt.getAutopickParams()
 

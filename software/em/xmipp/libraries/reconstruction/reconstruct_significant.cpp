@@ -32,6 +32,7 @@ ProgReconstructSignificant::ProgReconstructSignificant()
 	rank=0;
 	Nprocessors=1;
 	randomize_random_generator();
+	deltaAlpha2=0;
 }
 
 void ProgReconstructSignificant::defineParams()
@@ -161,7 +162,7 @@ void ProgReconstructSignificant::alignImagesToGallery()
 
 	MultidimArray<double> imgcc(Nvols*Ndirs), imgimed(Nvols*Ndirs);
 	MultidimArray<double> cdfcc, cdfimed;
-	double one_alpha=1-currentAlpha;
+	double one_alpha=1-currentAlpha-deltaAlpha2;
 
 	FileName fnImg;
 	size_t nImg=0;
@@ -307,7 +308,7 @@ void ProgReconstructSignificant::alignImagesToGallery()
 //					if (!condition && cc>ccl)
 //						std::cout << "Image " << nImg << " " << fnImg << " does not qualify by imed percentile to " << nDir << " -> " << cdfimedthis << " " << currentAlpha<< std::endl;
 					bool condition=true;
-					condition=condition && ((applyFisher && cc>ccl) || !applyFisher);
+					condition=condition && ((applyFisher && cc>=ccl) || !applyFisher);
 					condition=condition && cdfccthis>=one_alpha;
 					if (condition)
 					{
@@ -413,7 +414,7 @@ void ProgReconstructSignificant::run()
     	size_t Ndirs=mdGallery[0].size();
     	cc.initZeros(Nimgs,Nvols,Ndirs);
     	weight=cc;
-    	double oneAlpha=1-currentAlpha;
+    	double oneAlpha=1-currentAlpha-deltaAlpha2;
 
     	// Align the input images to the projections
     	alignImagesToGallery();
@@ -516,7 +517,7 @@ void ProgReconstructSignificant::run()
 				}
 
 				MetaData &mdPM=mdReconstructionProjectionMatching[nVolume];
-				if (mdPM.size()>0)
+				if (mdPM.size()>0 && fileExists(fnAngles.c_str()))
 				{
 					String fnImages=formatString("%s/images_iter%03d_%02d.xmd",fnDir.c_str(),iter,nVolume);
 					mdPM.write(fnImages);
@@ -716,6 +717,7 @@ void ProgReconstructSignificant::numberOfProjections()
 
 	alpha0 = numOrientationsPerParticle/number_of_projections;
 	alphaF = alpha0;
+	deltaAlpha2 = 1/(2*number_of_projections);
 
     if (rank==0)
     {
