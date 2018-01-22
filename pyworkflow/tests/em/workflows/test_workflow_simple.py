@@ -30,12 +30,13 @@ from test_workflow import TestWorkflow
 from pyworkflow.em import *
 from pyworkflow.em.packages.xmipp3 import XmippProtPreprocessMicrographs
 from pyworkflow.em.packages.simple.protocol_simple_pick import *
+from pyworkflow.em.packages.simple.protocol_prime3d_initial import ProtPrime3DInitial
 
 
 class TestSimpleBase(BaseTest):
     
     def runInitialModel(self, samplingRate, symmetry, 
-                        numberOfIterations, numberOfModels):
+                        maskRadius):
         #Import a set of averages
         print "Import Set of averages"
         protImportAvg = self.newProtocol(ProtImportAverages, 
@@ -48,12 +49,11 @@ class TestSimpleBase(BaseTest):
 
      
         print "Run Simple"
-        protIniModel = self.newProtocol(ProtPrime,
-                                      symmetry=symmetry, 
-                                      numberOfIterations=numberOfIterations, 
-                                      numberOfModels=numberOfModels, 
-                                      numberOfThreads=4)
-        protIniModel.inputClasses.set(protImportAvg.outputAverages)
+        protIniModel = self.newProtocol(ProtPrime3DInitial,
+                                        symmetry=symmetry,
+                                        maskRadius=maskRadius,
+                                        numberOfThreads=4)
+        protIniModel.inputSet.set(protImportAvg.outputAverages)
         self.launchProtocol(protIniModel)
         self.assertIsNotNone(protIniModel.outputVol,
                              "There was a problem with simple initial "
@@ -68,7 +68,7 @@ class TestSimpleMDA(TestSimpleBase):
         cls.averages = cls.dataset.getFile('averages')
         
     def test_mda(self):
-        self.runInitialModel(3.5, 'd6', 5, 2)
+        self.runInitialModel(3.5, 'd6', maskRadius=45)
 
 
 class TestSimpleGroel(TestSimpleBase):
@@ -79,7 +79,7 @@ class TestSimpleGroel(TestSimpleBase):
         cls.averages = cls.dataset.getFile('averages')
         
     def test_groel(self):
-        self.runInitialModel(2.1, 'd7', 10, 10)
+        self.runInitialModel(2.1, 'd7', maskRadius=45)
 
 
 class TestWorkflowSimplePick(TestWorkflow):
