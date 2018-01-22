@@ -46,6 +46,7 @@ from protocol_particle_pick_consensus import XmippProtConsensusPicking
 from protocol_resolution_monogenic_signal import XmippProtMonoRes
 from protocol_rotational_spectra import XmippProtRotSpectra
 from protocol_reconstruct_highres import XmippProtReconstructHighRes
+from protocol_reconstruct_heterogeneous import XmippProtReconstructHeterogeneous
 
 from pyworkflow.em.wizard import *
 
@@ -182,7 +183,8 @@ class XmippCL2DNumberOfClassesWizard(Wizard):
 class XmippParticleMaskRadiusWizard(ParticleMaskRadiusWizard):
     _targets = [(XmippProtMaskParticles, ['radius']),
                 (XmippProtPreprocessParticles, ['backRadius']),
-                (XmippProtReconstructHighRes, ['particleRadius'])]
+                (XmippProtReconstructHighRes, ['particleRadius']),
+                (XmippProtReconstructHeterogeneous, ['particleRadius'])]
     
     def _getParameters(self, protocol):
         
