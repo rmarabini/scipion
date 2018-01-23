@@ -1,7 +1,6 @@
 /***************************************************************************
  *
- * Authors:    Carlos Oscar Sanchez Sorzano coss@cnb.csic.es
- *             David Strelak (davidstrelak@gmail.com)
+ * Authors:    David Strelak (davidstrelak@gmail.com)
  *
  * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
  *
@@ -24,29 +23,17 @@
  *  e-mail address 'xmipp@cnb.csic.es'
  ***************************************************************************/
 
-#ifndef _PROG_MOVIE_ALIGNMENT_CORRELATION
-#define _PROG_MOVIE_ALIGNMENT_CORRELATION
-
-#include "data/filters.h"
-#include "data/xmipp_fftw.h"
-#include "reconstruction/movie_alignment_correlation_base.h"
+#include "reconstruction_adapt_cuda/movie_alignment_correlation_gpu.h"
 
 
-/** Movie alignment correlation Parameters. */
-class ProgMovieAlignmentCorrelation: public AProgMovieAlignmentCorrelation
-{
-protected:
-	// Fourier transforms of the input images
-	std::vector< MultidimArray<std::complex<double> > * > frameFourier;
+void ProgMovieAlignmentCorrelationGPU::loadData(const MetaData& movie,
+		const Image<double>& dark, const Image<double>& gain,
+		double targetOccupancy, const MultidimArray<double>& lpf) {
+	std::cout << "GPU load data" << std:: endl;
+}
 
-protected:
-	void loadData(const MetaData& movie, const Image<double>& dark,
-			const Image<double>& gain,
-			double targetOccupancy,
-			const MultidimArray<double>& lpf);
-
-	void computeShifts(size_t N, const Matrix1D<double>& bX,
-			const Matrix1D<double>& bY, const Matrix2D<double>& A);
-};
-
-#endif
+void ProgMovieAlignmentCorrelationGPU::computeShifts(size_t N,
+		const Matrix1D<double>& bX, const Matrix1D<double>& bY,
+		const Matrix2D<double>& A) {
+	std::cout << "GPU computeShifts" << std:: endl;
+}

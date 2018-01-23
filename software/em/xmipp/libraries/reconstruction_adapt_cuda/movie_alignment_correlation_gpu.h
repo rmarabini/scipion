@@ -1,7 +1,6 @@
 /***************************************************************************
  *
- * Authors:    Carlos Oscar Sanchez Sorzano coss@cnb.csic.es
- *             David Strelak (davidstrelak@gmail.com)
+ * Authors:    David Strelak (davidstrelak@gmail.com)
  *
  * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
  *
@@ -24,21 +23,13 @@
  *  e-mail address 'xmipp@cnb.csic.es'
  ***************************************************************************/
 
-#ifndef _PROG_MOVIE_ALIGNMENT_CORRELATION
-#define _PROG_MOVIE_ALIGNMENT_CORRELATION
+#ifndef MOVIE_ALIGNMENT_CORRELATION_GPU
+#define MOVIE_ALIGNMENT_CORRELATION_GPU
 
-#include "data/filters.h"
-#include "data/xmipp_fftw.h"
 #include "reconstruction/movie_alignment_correlation_base.h"
 
-
-/** Movie alignment correlation Parameters. */
-class ProgMovieAlignmentCorrelation: public AProgMovieAlignmentCorrelation
+class ProgMovieAlignmentCorrelationGPU: public AProgMovieAlignmentCorrelation
 {
-protected:
-	// Fourier transforms of the input images
-	std::vector< MultidimArray<std::complex<double> > * > frameFourier;
-
 protected:
 	void loadData(const MetaData& movie, const Image<double>& dark,
 			const Image<double>& gain,
@@ -49,4 +40,5 @@ protected:
 			const Matrix1D<double>& bY, const Matrix2D<double>& A);
 };
 
-#endif
+
+#endif /* MOVIE_ALIGNMENT_CORRELATION_GPU */

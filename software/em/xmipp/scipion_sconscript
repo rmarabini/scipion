@@ -215,7 +215,7 @@ if cuda:
        dirs=['libraries'],
        patterns=['reconstruction_adapt_cuda/*.cpp'],
        incs=bilib_incs,
-       libs=['pthread'])
+       libs=['pthread', 'XmippRecons'])
        
   
 
@@ -542,6 +542,7 @@ for p in ['angular_break_symmetry',
           'ctf_show',
           'ctf_sort_psds',
 
+          'cuda_movie_alignment_correlation',
           'cuda_reconstruct_fourier',
           'evaluate_coordinates',
 
