@@ -1,6 +1,7 @@
 /***************************************************************************
  *
  * Authors:    Carlos Oscar Sanchez Sorzano coss@cnb.csic.es
+ * 			   David Strelak david.strelak@gmail.com
  *
  * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
  *
@@ -158,401 +159,464 @@ void computeTotalShift(int iref, int j, const Matrix1D<double> &shiftX, const Ma
     }
 }
 
+int ProgMovieAlignmentCorrelation::findReferenceImage(size_t N,
+		const Matrix1D<double>& shiftX, const Matrix1D<double>& shiftY) {
+	int bestIref = -1;
+	// Choose reference image as the minimax of shifts
+	double worstShiftEver = 1e38;
+	for (int iref = 0; iref < N; ++iref) {
+		double worstShift = -1;
+		for (int j = 0; j < N; ++j) {
+			double totalShiftX, totalShiftY;
+			computeTotalShift(iref, j, shiftX, shiftY, totalShiftX,
+					totalShiftY);
+			if (fabs(totalShiftX) > worstShift)
+				worstShift = fabs(totalShiftX);
+		}
+		if (worstShift < worstShiftEver) {
+			worstShiftEver = worstShift;
+			bestIref = iref;
+		}
+	}
+	if (verbose)
+		std::cout << "Reference frame: " << bestIref + 1 + nfirst << std::endl;
+
+	return bestIref;
+}
+
+void ProgMovieAlignmentCorrelation::loadData(const MetaData& movie,
+		const Image<double>& dark, const Image<double>& gain,
+		double targetOccupancy, const MultidimArray<double>& lpf) {
+	MultidimArray<double> filter;
+	Matrix1D<double> w(2);
+	FourierTransformer transformer;
+	bool firstImage = true;
+	int n = 0;
+	FileName fnFrame;
+	Image<double> frame, croppedFrame, reducedFrame;
+
+	if (verbose)
+	{
+		std::cout << "Computing Fourier transform of frames ..." << std::endl;
+		init_progress_bar(movie.size());
+	}
+
+	FOR_ALL_OBJECTS_IN_METADATA(movie)
+	{
+		if (n >= nfirst && n <= nlast) {
+			movie.getValue(MDL_IMAGE, fnFrame, __iter.objId);
+			if (yDRcorner == -1)
+				croppedFrame.read(fnFrame);
+			else {
+				frame.read(fnFrame);
+				frame().window(croppedFrame(), yLTcorner, xLTcorner, yDRcorner,
+						xDRcorner);
+			}
+			if (XSIZE(dark()) > 0)
+				croppedFrame() -= dark();
+			if (XSIZE(gain()) > 0)
+				croppedFrame() *= gain();
+			// Reduce the size of the input frame
+			scaleToSizeFourier(1, newYdim, newXdim, croppedFrame(),
+					reducedFrame());
+
+			// Now do the Fourier transform and filter
+			MultidimArray<std::complex<double> > *reducedFrameFourier =
+					new MultidimArray<std::complex<double> >;
+			transformer.FourierTransform(reducedFrame(), *reducedFrameFourier,
+					true);
+			if (firstImage) {
+				filter.initZeros(*reducedFrameFourier);
+				FOR_ALL_DIRECT_ELEMENTS_IN_ARRAY2D(*reducedFrameFourier)
+				{
+					FFT_IDX2DIGFREQ(i, newYdim, YY(w));
+					FFT_IDX2DIGFREQ(j, newXdim, XX(w));
+					double wabs = w.module();
+					if (wabs <= targetOccupancy)
+						A2D_ELEM(filter,i,j) = lpf.interpolatedElement1D(
+								wabs * newXdim);
+				}
+				firstImage = false;
+			}
+			for (size_t nn = 0; nn < filter.nzyxdim; ++nn) {
+				double wlpf = DIRECT_MULTIDIM_ELEM(filter, nn);
+					DIRECT_MULTIDIM_ELEM(*reducedFrameFourier,nn) *= wlpf;
+			}
+			frameFourier.push_back(reducedFrameFourier);
+		}
+		++n;
+		if (verbose)
+			progress_bar(n);
+	}
+	if (verbose)
+		progress_bar(movie.size());
+}
+
+void ProgMovieAlignmentCorrelation::solveEquationSystem(Matrix1D<double>& bX,
+		Matrix1D<double>& bY, Matrix2D<double>& A, Matrix1D<double>& shiftX,
+		Matrix1D<double>& shiftY) {
+	// Finally solve the equation system
+	Matrix1D<double> ex, ey;
+	WeightedLeastSquaresHelper helper;
+	helper.A=A;
+	helper.w.initZeros(VEC_XSIZE(bX));
+	helper.w.initConstant(1);
+
+	int it=0;
+	double mean, varbX, varbY;
+	bX.computeMeanAndStddev(mean,varbX);
+	varbX*=varbX;
+	bY.computeMeanAndStddev(mean,varbY);
+	varbY*=varbY;
+	if (verbose)
+		std::cout << "\nSolving for the shifts ...\n";
+	do
+	{
+		// Solve the equation system
+		helper.b=bX;
+		weightedLeastSquares(helper,shiftX);
+		helper.b=bY;
+		weightedLeastSquares(helper,shiftY);
+
+		// Compute residuals
+		ex=bX-A*shiftX;
+		ey=bY-A*shiftY;
+
+		// Compute R2
+		double mean, vareX, vareY;
+		ex.computeMeanAndStddev(mean,vareX);
+		vareX*=vareX;
+		ey.computeMeanAndStddev(mean,vareY);
+		vareY*=vareY;
+		double R2x=1-vareX/varbX;
+		double R2y=1-vareY/varbY;
+		if (verbose)
+			std::cout << "Iteration " << it << " R2x=" << R2x << " R2y=" << R2y << std::endl;
+
+		// Identify outliers
+		double oldWeightSum=helper.w.sum();
+		double stddeveX=sqrt(vareX);
+		double stddeveY=sqrt(vareY);
+		FOR_ALL_ELEMENTS_IN_MATRIX1D(ex)
+		if (fabs(VEC_ELEM(ex,i))>3*stddeveX || fabs(VEC_ELEM(ey,i))>3*stddeveY)
+			VEC_ELEM(helper.w,i)=0.0;
+		double newWeightSum=helper.w.sum();
+		if (newWeightSum==oldWeightSum)
+		{
+			std::cout << "No outlier found\n";
+			break;
+		}
+		else
+			std::cout << "Found " << (int)(oldWeightSum-newWeightSum) << " outliers\n";
+
+		it++;
+	}
+	while (it<solverIterations);
+}
+
+void ProgMovieAlignmentCorrelation::loadDarkCorrection(Image<double>& dark) {
+	if (fnDark.isEmpty()) return;
+	// load dark correction image
+	dark.read(fnDark);
+	if (yDRcorner != -1)
+		dark().selfWindow(yLTcorner, xLTcorner, yDRcorner, xDRcorner);
+}
+
+void ProgMovieAlignmentCorrelation::loadGainCorrection(Image<double>& gain) {
+	if (fnGain.isEmpty()) return;
+	// load gain correction image
+	gain.read(fnGain);
+	if (yDRcorner != -1)
+		gain().selfWindow(yLTcorner, xLTcorner, yDRcorner, xDRcorner);
+	gain() = 1.0 / gain();
+	double avg = gain().computeAvg();
+	if (isinf(avg) || isnan(avg))
+		REPORT_ERROR(ERR_ARG_INCORRECT,
+				"The input gain image is incorrect, its inverse produces infinite or nan");
+}
+
+void ProgMovieAlignmentCorrelation::computeShifts(size_t N,
+		const Matrix1D<double>& bX, const Matrix1D<double>& bY,
+		const Matrix2D<double>& A) {
+	int idx = 0;
+	MultidimArray<double> Mcorr;
+	Mcorr.resizeNoCopy(newYdim, newXdim);
+	Mcorr.setXmippOrigin();
+	CorrelationAux aux;
+	for (size_t i = 0; i < N - 1; ++i) {
+		for (size_t j = i + 1; j < N; ++j) {
+			bestShift(*frameFourier[i], *frameFourier[j], Mcorr, bX(idx),
+					bY(idx), aux, NULL, maxShift);
+			if (verbose)
+				std::cerr << "Frame " << i + nfirst << " to Frame "
+						<< j + nfirst << " -> (" << bX(idx) << "," << bY(idx)
+						<< ")\n";
+			for (int ij = i; ij < j; ij++)
+				A(idx, ij) = 1;
+
+			idx++;
+		}
+		delete frameFourier[i];
+	}
+}
+
+void ProgMovieAlignmentCorrelation::constructLPF(double targetOccupancy,
+		const MultidimArray<double>& lpf) {
+	double iNewXdim = 1.0 / newXdim;
+	double sigma = targetOccupancy / 6; // So that from -targetOccupancy to targetOccupancy there is 6 sigma
+	double K = -0.5 / (sigma * sigma);
+	FOR_ALL_ELEMENTS_IN_ARRAY1D(lpf)
+	{
+		double w = i * iNewXdim;
+		A1D_ELEM(lpf,i) = exp(K * (w * w));
+	}
+}
+
+void ProgMovieAlignmentCorrelation::setNewDimensions(double& targetOccupancy,
+		const MetaData& movie, double& sizeFactor) {
+	if (bin < 0) {
+		targetOccupancy = 0.9; // Set to 1 if you want fmax maps onto 1/(2*newTs)
+		// Determine target size of the images
+		newTs = targetOccupancy * maxFreq / 2;
+		newTs = std::max(newTs, Ts);
+
+		sizeFactor = Ts / newTs;
+		std::cout << "Estimated binning factor = " << 1 / sizeFactor
+				<< std::endl;
+	} else {
+		newTs = bin * Ts;
+		sizeFactor = 1.0 / bin;
+		targetOccupancy = 2 * newTs / maxFreq;
+	}
+	size_t Xdim, Ydim, Zdim, Ndim;
+	getImageSize(movie, Xdim, Ydim, Zdim, Ndim);
+	if (yDRcorner != -1) {
+		Xdim = xDRcorner - xLTcorner + 1;
+		Ydim = yDRcorner - yLTcorner + 1;
+	}
+	if (Zdim != 1)
+		REPORT_ERROR(ERR_ARG_INCORRECT,
+				"This program is meant to align 2D frames, not 3D");
+
+	newXdim = int(Xdim * sizeFactor);
+	newYdim = int(Ydim * sizeFactor);
+}
+
+void ProgMovieAlignmentCorrelation::readMovie(MetaData& movie) {
+	//if input is an stack create a metadata.
+	if (fnMovie.isMetaData())
+		movie.read(fnMovie);
+	else {
+		ImageGeneric movieStack;
+		movieStack.read(fnMovie, HEADER);
+		size_t Xdim, Ydim, Zdim, Ndim;
+		movieStack.getDimensions(Xdim, Ydim, Zdim, Ndim);
+		if (fnMovie.getExtension() == "mrc" and Ndim == 1)
+			Ndim = Zdim;
+		size_t id;
+		FileName fn;
+		for (size_t i = 0; i < Ndim; i++) {
+			id = movie.addObject();
+			fn.compose(i + FIRST_IMAGE, fnMovie);
+			movie.setValue(MDL_IMAGE, fn, id);
+		}
+	}
+}
+
+void ProgMovieAlignmentCorrelation::storeRelativeShifts(int bestIref,
+		const Matrix1D<double>& shiftX, const Matrix1D<double>& shiftY,
+		double sizeFactor, MetaData& movie) {
+	int j = 0;
+	int n = 0;
+	Matrix1D<double> shift(2);
+	FOR_ALL_OBJECTS_IN_METADATA(movie)
+	{
+		if (n >= nfirst && n <= nlast) {
+			computeTotalShift(bestIref, j, shiftX, shiftY, XX(shift),
+					YY(shift));
+			shift /= sizeFactor;
+			shift *= -1;
+			movie.setValue(MDL_SHIFT_X, XX(shift), __iter.objId);
+			movie.setValue(MDL_SHIFT_Y, YY(shift), __iter.objId);
+			j++;
+			movie.setValue(MDL_ENABLED, 1, __iter.objId);
+		} else {
+			movie.setValue(MDL_ENABLED, -1, __iter.objId);
+			movie.setValue(MDL_SHIFT_X, 0.0, __iter.objId);
+			movie.setValue(MDL_SHIFT_Y, 0.0, __iter.objId);
+		}
+		movie.setValue(MDL_WEIGHT, 1.0, __iter.objId);
+		n++;
+	}
+}
+
+void ProgMovieAlignmentCorrelation::setZeroShift(MetaData& movie) {
+	// assuming movie does not contain MDL_SHIFT_X label
+	movie.addLabel(MDL_SHIFT_X);
+	movie.addLabel(MDL_SHIFT_Y);
+	movie.fillConstant(MDL_SHIFT_X, "0.0");
+	movie.fillConstant(MDL_SHIFT_Y, "0.0");
+}
+
+int ProgMovieAlignmentCorrelation::findShiftsAndStore(
+		MetaData& movie, Image<double>& dark, Image<double>& gain) {
+	double sizeFactor = 1.0;
+	double targetOccupancy = 1.0; // Set to 1 if you want fmax maps onto 1/(2*newTs)
+
+	setNewDimensions(targetOccupancy, movie, sizeFactor);
+	// Construct 1D profile of the lowpass filter
+	MultidimArray<double> lpf(newXdim / 2);
+	constructLPF(targetOccupancy, lpf);
+
+	// Compute the Fourier transform of all input images
+	size_t N = nlast - nfirst + 1; // no of images to process
+	Matrix2D<double> A(N * (N - 1) / 2, N - 1);
+	Matrix1D<double> bX(N * (N - 1) / 2), bY(N * (N - 1) / 2);
+	// Now compute all shifts
+	if (verbose)
+		std::cout << "Loading frames ..." << std::endl;
+	loadData(movie, dark, gain, targetOccupancy, lpf);
+	if (verbose)
+		std::cout << "Computing shifts between frames ..." << std::endl;
+	computeShifts(N, bX, bY, A);
+
+	Matrix1D<double> shiftX, shiftY;
+	solveEquationSystem(bX, bY, A, shiftX, shiftY);
+
+	// Choose reference image as the minimax of shifts
+	int bestIref = findReferenceImage(N, shiftX, shiftY);
+	storeRelativeShifts(bestIref, shiftX, shiftY, sizeFactor, movie);
+	return bestIref;
+}
+
+void ProgMovieAlignmentCorrelation::applyShiftsComputeAverage(
+		const MetaData& movie, const Image<double>& dark,
+		const Image<double>& gain, Image<double>& initialMic,
+		size_t& Ninitial, Image<double>& averageMicrograph, size_t& N) {
+	// Apply shifts and compute average
+	Image<double> frame, croppedFrame, reducedFrame, shiftedFrame;
+	Matrix1D<double> shift(2);
+	FileName fnFrame;
+	int j = 0;
+	int n = 0;
+	Ninitial = N = 0;
+	FOR_ALL_OBJECTS_IN_METADATA(movie)
+	{
+		if (n >= nfirstSum && n <= nlastSum) {
+			movie.getValue(MDL_IMAGE, fnFrame, __iter.objId);
+			movie.getValue(MDL_SHIFT_X, XX(shift), __iter.objId);
+			movie.getValue(MDL_SHIFT_Y, YY(shift), __iter.objId);
+			std::cout << fnFrame << " shiftX=" << XX(shift) << " shiftY="
+					<< YY(shift) << std::endl;
+
+			frame.read(fnFrame);
+			if (XSIZE(dark()) > 0)
+				frame() -= dark();
+			if (XSIZE(gain()) > 0)
+				frame() *= gain();
+			if (yDRcorner != -1)
+				frame().window(croppedFrame(), yLTcorner, xLTcorner, yDRcorner,
+						xDRcorner);
+			else
+				croppedFrame() = frame();
+			if (bin > 0) {
+				scaleToSizeFourier(1, floor(YSIZE(croppedFrame()) / bin),
+						floor(XSIZE(croppedFrame()) / bin), croppedFrame(),
+						reducedFrame());
+				shift /= bin;
+				croppedFrame() = reducedFrame(); // FIXME what is this supposed to do?
+			}
+
+			if (fnInitialAvg != "") {
+				if (j == 0)
+					initialMic() = croppedFrame();
+				else
+					initialMic() += croppedFrame();
+				Ninitial++;
+			}
+
+			if (fnAligned != "" || fnAvg != "") {
+				if (outsideMode == OUTSIDE_WRAP)
+					translate(BsplineOrder, shiftedFrame(), croppedFrame(),
+							shift, WRAP);
+				else if (outsideMode == OUTSIDE_VALUE)
+					translate(BsplineOrder, shiftedFrame(), croppedFrame(),
+							shift, DONT_WRAP, outsideValue);
+				else
+					translate(BsplineOrder, shiftedFrame(), croppedFrame(),
+							shift, DONT_WRAP, croppedFrame().computeAvg());
+				if (fnAligned != "")
+					shiftedFrame.write(fnAligned, j + 1, true, WRITE_REPLACE);
+				if (fnAvg != "") {
+					if (j == 0)
+						averageMicrograph() = shiftedFrame();
+					else
+						averageMicrograph() += shiftedFrame();
+					N++;
+				}
+			}
+
+			j++;
+		}
+		n++;
+	}
+}
+
+void ProgMovieAlignmentCorrelation::storeResults(Image<double> initialMic,
+		size_t Ninitial, Image<double> averageMicrograph, size_t N,
+		const MetaData& movie, int bestIref) {
+	if (fnInitialAvg != "") {
+		initialMic() /= Ninitial;
+		initialMic.write(fnInitialAvg);
+	}
+	if (fnAvg != "") {
+		averageMicrograph() /= N;
+		averageMicrograph.write(fnAvg);
+	}
+	movie.write((FileName) ("frameShifts@") + fnOut);
+	if (bestIref >= 0) {
+		MetaData mdIref;
+		mdIref.setValue(MDL_REF, nfirst + bestIref, mdIref.addObject());
+		mdIref.write((FileName) ("referenceFrame@") + fnOut, MD_APPEND);
+	}
+}
+
+void ProgMovieAlignmentCorrelation::correctLoopIndices(const MetaData& movie) {
+	nfirst = std::max(nfirst, 0);
+	nfirstSum = std::max(nfirstSum, 0);
+	if (nlast < 0)
+		nlast = movie.size();
+
+	if (nlastSum < 0)
+		nlastSum = movie.size();
+}
+
 void ProgMovieAlignmentCorrelation::run()
 {
+    // preprocess input data
     MetaData movie;
-    size_t Xdim, Ydim, Zdim, Ndim;
-	int bestIref=-1;
+	readMovie(movie);
+	correctLoopIndices(movie);
 
-    //if input is an stack create a metadata.
-    if (fnMovie.isMetaData())
-        movie.read(fnMovie);
-    else
+	Image<double> dark, gain;
+	loadDarkCorrection(dark);
+	loadGainCorrection(gain);
+
+    int bestIref;
+    if (useInputShifts)
     {
-        ImageGeneric movieStack;
-        movieStack.read(fnMovie,HEADER);
-        movieStack.getDimensions(Xdim,Ydim,Zdim,Ndim);
-        if (fnMovie.getExtension()=="mrc" and Ndim ==1)
-            Ndim = Zdim;
-        size_t id;
-        FileName fn;
-        for (size_t i=0;i<Ndim;i++)
-        {
-            id = movie.addObject();
-            fn.compose(i+FIRST_IMAGE,fnMovie);
-            movie.setValue(MDL_IMAGE, fn, id);
-        }
+    	if (!movie.containsLabel(MDL_SHIFT_X)) { // FIXME seems suspicious
+    		setZeroShift(movie);
+    	}
+    } else {
+		bestIref = findShiftsAndStore(movie, dark, gain);
     }
 
-    if (nfirst<0)
-        nfirst=0;
-    if (nlast<0)
-        nlast=movie.size();
-    if (nfirstSum<0)
-        nfirstSum=0;
-    if (nlastSum<0)
-        nlastSum=movie.size();
-
-	FileName fnFrame;
-	Image<double> frame, croppedFrame, reducedFrame, shiftedFrame, averageMicrograph, dark, gain;
-    Matrix1D<double> shift(2);
-    if (!useInputShifts)
-    {
-    	double sizeFactor=1.0;
-		double targetOccupancy=1.0; // Set to 1 if you want fmax maps onto 1/(2*newTs)
-    	if (bin<0)
-    	{
-    		targetOccupancy=0.9; // Set to 1 if you want fmax maps onto 1/(2*newTs)
-			// Determine target size of the images
-			newTs=targetOccupancy*maxFreq/2;
-			if (newTs<Ts)
-				newTs=Ts;
-			sizeFactor=Ts/newTs;
-			std::cout << "Estimated binning factor = " << 1/sizeFactor << std::endl;
-    	}
-    	else
-    	{
-    		newTs = bin*Ts;
-    		sizeFactor=1.0/bin;
-    		targetOccupancy=2*newTs/maxFreq;
-    	}
-
-		getImageSize(movie, Xdim, Ydim, Zdim, Ndim);
-		if (yDRcorner!=-1)
-		{
-			Xdim = xDRcorner - xLTcorner +1 ;
-			Ydim = yDRcorner - yLTcorner +1 ;
-		}
-		if (Zdim!=1)
-			REPORT_ERROR(ERR_ARG_INCORRECT,"This program is meant to align 2D frames, not 3D");
-
-		newXdim=int(Xdim*sizeFactor);
-		newYdim=int(Ydim*sizeFactor);
-
-		// Construct 1D profile of the lowpass filter
-		MultidimArray<double> lpf(newXdim/2);
-		double iNewXdim=1.0/newXdim;
-		double sigma=targetOccupancy/6; // So that from -targetOccupancy to targetOccupancy there is 6 sigma
-		double K=-0.5/(sigma*sigma);
-		FOR_ALL_ELEMENTS_IN_ARRAY1D(lpf)
-		{
-			double w=i*iNewXdim;
-			A1D_ELEM(lpf,i)=exp(K*(w*w));
-		}
-
-		// Compute the Fourier transform of all input images
-		if (verbose)
-		{
-			std::cout << "Computing Fourier transform of frames ..." << std::endl;
-			init_progress_bar(movie.size());
-		}
-		int n=0;
-		FourierTransformer transformer;
-		Matrix1D<double> w(2);
-		std::complex<double> zero=0;
-
-		if (fnDark!="")
-		{
-			dark.read(fnDark);
-			if (yDRcorner!=-1)
-				dark().selfWindow(yLTcorner, xLTcorner, yDRcorner, xDRcorner);
-		}
-		if (fnGain!="")
-		{
-			gain.read(fnGain);
-			if (yDRcorner!=-1)
-				gain().selfWindow(yLTcorner, xLTcorner, yDRcorner, xDRcorner);
-			gain()=1.0/gain();
-			double avg=gain().computeAvg();
-			if (isinf(avg) || isnan(avg))
-				REPORT_ERROR(ERR_ARG_INCORRECT,"The input gain image is incorrect, its inverse produces infinite or nan");
-		}
-
-		MultidimArray<double> filter;
-		bool firstImage=true;
-		FOR_ALL_OBJECTS_IN_METADATA(movie)
-		{
-			if (n>=nfirst && n<=nlast)
-			{
-				movie.getValue(MDL_IMAGE,fnFrame,__iter.objId);
-				if (yDRcorner==-1)
-					croppedFrame.read(fnFrame);
-				else
-				{
-					frame.read(fnFrame);
-					frame().window(croppedFrame(), yLTcorner, xLTcorner, yDRcorner, xDRcorner);
-				}
-				if (XSIZE(dark())>0)
-					croppedFrame()-=dark();
-				if (XSIZE(gain())>0)
-					croppedFrame()*=gain();
-				// Reduce the size of the input frame
-				scaleToSizeFourier(1,newYdim,newXdim,croppedFrame(),reducedFrame());
-
-				// Now do the Fourier transform and filter
-				MultidimArray< std::complex<double> > *reducedFrameFourier=new MultidimArray< std::complex<double> >;
-				transformer.FourierTransform(reducedFrame(),*reducedFrameFourier,true);
-				if (firstImage)
-				{
-					filter.initZeros(*reducedFrameFourier);
-					FOR_ALL_DIRECT_ELEMENTS_IN_ARRAY2D(*reducedFrameFourier)
-					{
-						FFT_IDX2DIGFREQ(i,newYdim,YY(w));
-						FFT_IDX2DIGFREQ(j,newXdim,XX(w));
-						double wabs=w.module();
-						if (wabs<=targetOccupancy)
-							A2D_ELEM(filter,i,j)=lpf.interpolatedElement1D(wabs*newXdim);
-					}
-					firstImage = false;
-				}
-				for (size_t nn=0; nn<filter.nzyxdim; ++nn)
-				{
-					double wlpf=DIRECT_MULTIDIM_ELEM(filter,nn);
-					if (wlpf!=0)
-						DIRECT_MULTIDIM_ELEM(*reducedFrameFourier,nn) *= wlpf;
-					else
-						DIRECT_MULTIDIM_ELEM(*reducedFrameFourier,nn) = zero;
-				}
-
-				frameFourier.push_back(reducedFrameFourier);
-			}
-			++n;
-			if (verbose)
-				progress_bar(n);
-		}
-		if (verbose)
-			progress_bar(movie.size());
-
-		// Free useless memory
-		filter.clear();
-		reducedFrame.clear();
-		croppedFrame.clear();
-		frame.clear();
-
-		// Now compute all shifts
-		size_t N=frameFourier.size();
-		Matrix2D<double> A(N*(N-1)/2,N-1);
-		Matrix1D<double> bX(N*(N-1)/2), bY(N*(N-1)/2);
-		if (verbose)
-			std::cout << "Computing shifts between frames ..." << std::endl;
-		int idx=0;
-		MultidimArray<double> Mcorr;
-		Mcorr.resizeNoCopy(newYdim,newXdim);
-		Mcorr.setXmippOrigin();
-		CorrelationAux aux;
-		for (size_t i=0; i<N-1; ++i)
-		{
-			for (size_t j=i+1; j<N; ++j)
-			{
-				bestShift(*frameFourier[i],*frameFourier[j],Mcorr,bX(idx),bY(idx),aux,NULL,maxShift);
-				if (verbose)
-					std::cerr << "Frame " << i+nfirst << " to Frame " << j+nfirst << " -> (" << bX(idx) << "," << bY(idx) << ")\n";
-				for (int ij=i; ij<j; ij++)
-					A(idx,ij)=1;
-
-				idx++;
-			}
-			delete frameFourier[i];
-		}
-
-		// Finally solve the equation system
-		Matrix1D<double> shiftX, shiftY, ex, ey;
-		WeightedLeastSquaresHelper helper;
-		helper.A=A;
-		helper.w.initZeros(VEC_XSIZE(bX));
-		helper.w.initConstant(1);
-
-		int it=0;
-		double mean, varbX, varbY;
-		bX.computeMeanAndStddev(mean,varbX);
-		varbX*=varbX;
-		bY.computeMeanAndStddev(mean,varbY);
-		varbY*=varbY;
-		if (verbose)
-			std::cout << "\nSolving for the shifts ...\n";
-		do
-		{
-			// Solve the equation system
-			helper.b=bX;
-			weightedLeastSquares(helper,shiftX);
-			helper.b=bY;
-			weightedLeastSquares(helper,shiftY);
-
-			// Compute residuals
-			ex=bX-A*shiftX;
-			ey=bY-A*shiftY;
-
-			// Compute R2
-			double mean, vareX, vareY;
-			ex.computeMeanAndStddev(mean,vareX);
-			vareX*=vareX;
-			ey.computeMeanAndStddev(mean,vareY);
-			vareY*=vareY;
-			double R2x=1-vareX/varbX;
-			double R2y=1-vareY/varbY;
-			if (verbose)
-				std::cout << "Iteration " << it << " R2x=" << R2x << " R2y=" << R2y << std::endl;
-
-			// Identify outliers
-			double oldWeightSum=helper.w.sum();
-			double stddeveX=sqrt(vareX);
-			double stddeveY=sqrt(vareY);
-			FOR_ALL_ELEMENTS_IN_MATRIX1D(ex)
-			if (fabs(VEC_ELEM(ex,i))>3*stddeveX || fabs(VEC_ELEM(ey,i))>3*stddeveY)
-				VEC_ELEM(helper.w,i)=0.0;
-			double newWeightSum=helper.w.sum();
-			if (newWeightSum==oldWeightSum)
-			{
-				std::cout << "No outlier found\n";
-				break;
-			}
-			else
-				std::cout << "Found " << (int)(oldWeightSum-newWeightSum) << " outliers\n";
-
-			it++;
-		}
-		while (it<solverIterations);
-
-		// Choose reference image as the minimax of shifts
-		double worstShiftEver=1e38;
-		for (int iref=0; iref<N; ++iref)
-		{
-			double worstShift=-1;
-			for (int j=0; j<N; ++j)
-			{
-				double totalShiftX, totalShiftY;
-				computeTotalShift(iref, j, shiftX, shiftY,totalShiftX, totalShiftY);
-				if (fabs(totalShiftX)>worstShift)
-					worstShift=fabs(totalShiftX);
-				if (fabs(totalShiftX)>worstShift)
-					worstShift=fabs(totalShiftX);
-			}
-			if (worstShift<worstShiftEver)
-			{
-				worstShiftEver=worstShift;
-				bestIref=iref;
-			}
-		}
-		if (verbose)
-			std::cout << "Reference frame: " << bestIref+1+nfirst << std::endl;
-
-	    // Compute shifts
-	    int j=0;
-	    n=0;
-	    FOR_ALL_OBJECTS_IN_METADATA(movie)
-	    {
-	        if (n>=nfirst && n<=nlast)
-	        {
-	            double totalShiftX, totalShiftY;
-	            computeTotalShift(bestIref, j, shiftX, shiftY,XX(shift), YY(shift));
-	            shift/=sizeFactor;
-	            shift*=-1;
-	            movie.setValue(MDL_SHIFT_X,XX(shift),__iter.objId);
-	            movie.setValue(MDL_SHIFT_Y,YY(shift),__iter.objId);
-	            j++;
-	            movie.setValue(MDL_ENABLED,1,__iter.objId);
-	        }
-	        else
-	        {
-	            movie.setValue(MDL_ENABLED,-1,__iter.objId);
-	            movie.setValue(MDL_SHIFT_X,0.0,__iter.objId);
-	            movie.setValue(MDL_SHIFT_Y,0.0,__iter.objId);
-	        }
-	        movie.setValue(MDL_WEIGHT,1.0,__iter.objId);
-	        n++;
-	    }
-    }
-    else
-    {
-    	if (!movie.containsLabel(MDL_SHIFT_X))
-    	{
-    		movie.addLabel(MDL_SHIFT_X);
-    		movie.addLabel(MDL_SHIFT_Y);
-    		movie.fillConstant(MDL_SHIFT_X,"0.0");
-    		movie.fillConstant(MDL_SHIFT_Y,"0.0");
-    	}
-    }
-
+	size_t N, Ninitial;
+	Image<double> initialMic, averageMicrograph;
     // Apply shifts and compute average
-	int n=0;
-    int j=0;
-	size_t N=0, Ninitial=0;
-	Image<double> initialMic;
-    FOR_ALL_OBJECTS_IN_METADATA(movie)
-    {
-        if (n>=nfirstSum && n<=nlastSum)
-        {
-            movie.getValue(MDL_IMAGE,fnFrame,__iter.objId);
-            movie.getValue(MDL_SHIFT_X,XX(shift),__iter.objId);
-            movie.getValue(MDL_SHIFT_Y,YY(shift),__iter.objId);
-            std::cout << fnFrame << " shiftX=" << XX(shift) << " shiftY=" << YY(shift) << std::endl;
+	applyShiftsComputeAverage(movie, dark, gain, initialMic, Ninitial,
+			averageMicrograph, N);
 
-            frame.read(fnFrame);
-            if (XSIZE(dark())>0)
-            	frame()-=dark();
-            if (XSIZE(gain())>0)
-            	frame()*=gain();
-            if (yDRcorner!=-1)
-                frame().window(croppedFrame(), yLTcorner, xLTcorner, yDRcorner, xDRcorner);
-            else
-            	croppedFrame()=frame();
-            if (bin>0)
-            {
-            	scaleToSizeFourier(1,floor(YSIZE(croppedFrame())/bin),floor(XSIZE(croppedFrame())/bin),croppedFrame(),reducedFrame());
-            	shift/=bin;
-            	croppedFrame()=reducedFrame();
-            }
-
-            if (fnInitialAvg!="")
-            {
-            	if (j==0)
-            		initialMic()=croppedFrame();
-            	else
-            		initialMic()+=croppedFrame();
-            	Ninitial++;
-            }
-
-            if (fnAligned!="" || fnAvg!="")
-            {
-            	if (outsideMode == OUTSIDE_WRAP)
-            		translate(BsplineOrder,shiftedFrame(),croppedFrame(),shift,WRAP);
-            	else if (outsideMode == OUTSIDE_VALUE)
-            		translate(BsplineOrder,shiftedFrame(),croppedFrame(),shift,DONT_WRAP, outsideValue);
-            	else
-            		translate(BsplineOrder,shiftedFrame(),croppedFrame(),shift,DONT_WRAP, croppedFrame().computeAvg());
-                if (fnAligned!="")
-                    shiftedFrame.write(fnAligned,j+1,true,WRITE_REPLACE);
-                if (fnAvg!="")
-                {
-                    if (j==0)
-                        averageMicrograph()=shiftedFrame();
-                    else
-                        averageMicrograph()+=shiftedFrame();
-                    N++;
-                }
-            }
-
-            j++;
-        }
-        n++;
-    }
-    if (fnInitialAvg!="")
-    {
-    	initialMic()/=Ninitial;
-    	initialMic.write(fnInitialAvg);
-    }
-
-    if (fnAvg!="")
-    {
-        averageMicrograph()/=N;
-        averageMicrograph.write(fnAvg);
-    }
-
-    movie.write((FileName)"frameShifts@"+fnOut);
-    if (bestIref>=0)
-    {
-    	MetaData mdIref;
-    	mdIref.setValue(MDL_REF,nfirst+bestIref,mdIref.addObject());
-    	mdIref.write((FileName)"referenceFrame@"+fnOut,MD_APPEND);
-    }
+	storeResults(initialMic, Ninitial, averageMicrograph, N, movie, bestIref);
 }

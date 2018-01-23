@@ -105,6 +105,38 @@ public:
     /// Run
     void run();
 
+
+private:
+	int findReferenceImage(size_t N, const Matrix1D<double>& shiftX,
+			const Matrix1D<double>& shiftY);
+	void loadData(const MetaData& movie, const Image<double>& dark,
+			const Image<double>& gain,
+			double targetOccupancy,
+			const MultidimArray<double>& lpf);
+	void solveEquationSystem(Matrix1D<double>& bX, Matrix1D<double>& bY,
+			Matrix2D<double>& A, Matrix1D<double>& shiftX,
+			Matrix1D<double>& shiftY);
+	void loadDarkCorrection(Image<double>& dark);
+	void loadGainCorrection(Image<double>& gain);
+	void computeShifts(size_t N, const Matrix1D<double>& bX,
+			const Matrix1D<double>& bY, const Matrix2D<double>& A);
+	void constructLPF(double targetOccupancy, const MultidimArray<double>& lpf);
+	void setNewDimensions(double& targetOccupancy, const MetaData& movie,
+			double& sizeFactor);
+	void readMovie(MetaData& movie);
+	void storeRelativeShifts(int bestIref, const Matrix1D<double>& shiftX,
+			const Matrix1D<double>& shiftY, double sizeFactor, MetaData& movie);
+	void setZeroShift(MetaData& movie);
+	int findShiftsAndStore(MetaData& movie, Image<double>& dark,
+			Image<double>& gain);
+	void applyShiftsComputeAverage(const MetaData& movie,
+			const Image<double>& dark, const Image<double>& gain,
+			Image<double>& initialMic, size_t& Ninitial,
+			Image<double>& averageMicrograph, size_t& N);
+	void storeResults(Image<double> initialMic, size_t Ninitial,
+			Image<double> averageMicrograph, size_t N, const MetaData& movie,
+			int bestIref);
+	void correctLoopIndices(const MetaData& movie);
 };
 //@}
 #endif
