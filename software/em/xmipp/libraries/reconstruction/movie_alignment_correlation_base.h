@@ -33,7 +33,7 @@
 //@{
 
 /** Movie alignment correlation Parameters. */
-class ProgMovieAlignmentCorrelation: public XmippProgram
+class AProgMovieAlignmentCorrelation: public XmippProgram
 {
 public:
     /** Filename of movie metadata */

@@ -35,7 +35,7 @@
 #define OUTSIDE_VALUE 2
 
 // Read arguments ==========================================================
-void ProgMovieAlignmentCorrelation::readParams()
+void AProgMovieAlignmentCorrelation::readParams()
 {
     fnMovie = getParam("-i");
     fnOut = getParam("-o");
@@ -74,7 +74,7 @@ void ProgMovieAlignmentCorrelation::readParams()
 }
 
 // Show ====================================================================
-void ProgMovieAlignmentCorrelation::show()
+void AProgMovieAlignmentCorrelation::show()
 {
     if (!verbose)
         return;
@@ -101,7 +101,7 @@ void ProgMovieAlignmentCorrelation::show()
 }
 
 // usage ===================================================================
-void ProgMovieAlignmentCorrelation::defineParams()
+void AProgMovieAlignmentCorrelation::defineParams()
 {
     addUsageLine("Align a set of frames by cross-correlation of the frames");
     addParamsLine("   -i <metadata>               : Metadata with the list of frames to align");
@@ -159,7 +159,7 @@ void computeTotalShift(int iref, int j, const Matrix1D<double> &shiftX, const Ma
     }
 }
 
-int ProgMovieAlignmentCorrelation::findReferenceImage(size_t N,
+int AProgMovieAlignmentCorrelation::findReferenceImage(size_t N,
 		const Matrix1D<double>& shiftX, const Matrix1D<double>& shiftY) {
 	int bestIref = -1;
 	// Choose reference image as the minimax of shifts
@@ -184,7 +184,7 @@ int ProgMovieAlignmentCorrelation::findReferenceImage(size_t N,
 	return bestIref;
 }
 
-void ProgMovieAlignmentCorrelation::loadData(const MetaData& movie,
+void AProgMovieAlignmentCorrelation::loadData(const MetaData& movie,
 		const Image<double>& dark, const Image<double>& gain,
 		double targetOccupancy, const MultidimArray<double>& lpf) {
 	MultidimArray<double> filter;
@@ -252,7 +252,7 @@ void ProgMovieAlignmentCorrelation::loadData(const MetaData& movie,
 		progress_bar(movie.size());
 }
 
-void ProgMovieAlignmentCorrelation::solveEquationSystem(Matrix1D<double>& bX,
+void AProgMovieAlignmentCorrelation::solveEquationSystem(Matrix1D<double>& bX,
 		Matrix1D<double>& bY, Matrix2D<double>& A, Matrix1D<double>& shiftX,
 		Matrix1D<double>& shiftY) {
 	// Finally solve the equation system
@@ -314,7 +314,7 @@ void ProgMovieAlignmentCorrelation::solveEquationSystem(Matrix1D<double>& bX,
 	while (it<solverIterations);
 }
 
-void ProgMovieAlignmentCorrelation::loadDarkCorrection(Image<double>& dark) {
+void AProgMovieAlignmentCorrelation::loadDarkCorrection(Image<double>& dark) {
 	if (fnDark.isEmpty()) return;
 	// load dark correction image
 	dark.read(fnDark);
@@ -322,7 +322,7 @@ void ProgMovieAlignmentCorrelation::loadDarkCorrection(Image<double>& dark) {
 		dark().selfWindow(yLTcorner, xLTcorner, yDRcorner, xDRcorner);
 }
 
-void ProgMovieAlignmentCorrelation::loadGainCorrection(Image<double>& gain) {
+void AProgMovieAlignmentCorrelation::loadGainCorrection(Image<double>& gain) {
 	if (fnGain.isEmpty()) return;
 	// load gain correction image
 	gain.read(fnGain);
@@ -335,7 +335,7 @@ void ProgMovieAlignmentCorrelation::loadGainCorrection(Image<double>& gain) {
 				"The input gain image is incorrect, its inverse produces infinite or nan");
 }
 
-void ProgMovieAlignmentCorrelation::computeShifts(size_t N,
+void AProgMovieAlignmentCorrelation::computeShifts(size_t N,
 		const Matrix1D<double>& bX, const Matrix1D<double>& bY,
 		const Matrix2D<double>& A) {
 	int idx = 0;
@@ -360,7 +360,7 @@ void ProgMovieAlignmentCorrelation::computeShifts(size_t N,
 	}
 }
 
-void ProgMovieAlignmentCorrelation::constructLPF(double targetOccupancy,
+void AProgMovieAlignmentCorrelation::constructLPF(double targetOccupancy,
 		const MultidimArray<double>& lpf) {
 	double iNewXdim = 1.0 / newXdim;
 	double sigma = targetOccupancy / 6; // So that from -targetOccupancy to targetOccupancy there is 6 sigma
@@ -372,7 +372,7 @@ void ProgMovieAlignmentCorrelation::constructLPF(double targetOccupancy,
 	}
 }
 
-void ProgMovieAlignmentCorrelation::setNewDimensions(double& targetOccupancy,
+void AProgMovieAlignmentCorrelation::setNewDimensions(double& targetOccupancy,
 		const MetaData& movie, double& sizeFactor) {
 	if (bin < 0) {
 		targetOccupancy = 0.9; // Set to 1 if you want fmax maps onto 1/(2*newTs)
@@ -402,7 +402,7 @@ void ProgMovieAlignmentCorrelation::setNewDimensions(double& targetOccupancy,
 	newYdim = int(Ydim * sizeFactor);
 }
 
-void ProgMovieAlignmentCorrelation::readMovie(MetaData& movie) {
+void AProgMovieAlignmentCorrelation::readMovie(MetaData& movie) {
 	//if input is an stack create a metadata.
 	if (fnMovie.isMetaData())
 		movie.read(fnMovie);
@@ -423,7 +423,7 @@ void ProgMovieAlignmentCorrelation::readMovie(MetaData& movie) {
 	}
 }
 
-void ProgMovieAlignmentCorrelation::storeRelativeShifts(int bestIref,
+void AProgMovieAlignmentCorrelation::storeRelativeShifts(int bestIref,
 		const Matrix1D<double>& shiftX, const Matrix1D<double>& shiftY,
 		double sizeFactor, MetaData& movie) {
 	int j = 0;
@@ -450,7 +450,7 @@ void ProgMovieAlignmentCorrelation::storeRelativeShifts(int bestIref,
 	}
 }
 
-void ProgMovieAlignmentCorrelation::setZeroShift(MetaData& movie) {
+void AProgMovieAlignmentCorrelation::setZeroShift(MetaData& movie) {
 	// assuming movie does not contain MDL_SHIFT_X label
 	movie.addLabel(MDL_SHIFT_X);
 	movie.addLabel(MDL_SHIFT_Y);
@@ -458,7 +458,7 @@ void ProgMovieAlignmentCorrelation::setZeroShift(MetaData& movie) {
 	movie.fillConstant(MDL_SHIFT_Y, "0.0");
 }
 
-int ProgMovieAlignmentCorrelation::findShiftsAndStore(
+int AProgMovieAlignmentCorrelation::findShiftsAndStore(
 		MetaData& movie, Image<double>& dark, Image<double>& gain) {
 	double sizeFactor = 1.0;
 	double targetOccupancy = 1.0; // Set to 1 if you want fmax maps onto 1/(2*newTs)
@@ -489,7 +489,7 @@ int ProgMovieAlignmentCorrelation::findShiftsAndStore(
 	return bestIref;
 }
 
-void ProgMovieAlignmentCorrelation::applyShiftsComputeAverage(
+void AProgMovieAlignmentCorrelation::applyShiftsComputeAverage(
 		const MetaData& movie, const Image<double>& dark,
 		const Image<double>& gain, Image<double>& initialMic,
 		size_t& Ninitial, Image<double>& averageMicrograph, size_t& N) {
@@ -562,7 +562,7 @@ void ProgMovieAlignmentCorrelation::applyShiftsComputeAverage(
 	}
 }
 
-void ProgMovieAlignmentCorrelation::storeResults(Image<double> initialMic,
+void AProgMovieAlignmentCorrelation::storeResults(Image<double> initialMic,
 		size_t Ninitial, Image<double> averageMicrograph, size_t N,
 		const MetaData& movie, int bestIref) {
 	if (fnInitialAvg != "") {
@@ -581,7 +581,7 @@ void ProgMovieAlignmentCorrelation::storeResults(Image<double> initialMic,
 	}
 }
 
-void ProgMovieAlignmentCorrelation::correctLoopIndices(const MetaData& movie) {
+void AProgMovieAlignmentCorrelation::correctLoopIndices(const MetaData& movie) {
 	nfirst = std::max(nfirst, 0);
 	nfirstSum = std::max(nfirstSum, 0);
 	if (nlast < 0)
@@ -591,7 +591,7 @@ void ProgMovieAlignmentCorrelation::correctLoopIndices(const MetaData& movie) {
 		nlastSum = movie.size();
 }
 
-void ProgMovieAlignmentCorrelation::run()
+void AProgMovieAlignmentCorrelation::run()
 {
     // preprocess input data
     MetaData movie;
