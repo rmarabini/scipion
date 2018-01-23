@@ -23,8 +23,8 @@
  *  e-mail address 'xmipp@cnb.csic.es'
  ***************************************************************************/
 
-#ifndef _PROG_MOVIE_ALIGNMENT_CORRELATION
-#define _PROG_MOVIE_ALIGNMENT_CORRELATION
+#ifndef _PROG_MOVIE_ALIGNMENT_CORRELATION_BASE
+#define _PROG_MOVIE_ALIGNMENT_CORRELATION_BASE
 
 #include <data/xmipp_program.h>
 
@@ -36,6 +36,9 @@
 class AProgMovieAlignmentCorrelation: public XmippProgram
 {
 public:
+
+//	FIXME move to protected
+
     /** Filename of movie metadata */
     FileName fnMovie;
     /** Correction images */
@@ -84,9 +87,6 @@ public:
     int yDRcorner;
 
 public:
-    // Fourier transforms of the input images
-	std::vector< MultidimArray<std::complex<double> > * > frameFourier;
-
 	// Target sampling rate
 	double newTs;
 
@@ -105,21 +105,25 @@ public:
     /// Run
     void run();
 
+protected:
+    virtual void loadData(const MetaData& movie, const Image<double>& dark,
+    			const Image<double>& gain,
+    			double targetOccupancy,
+    			const MultidimArray<double>& lpf) = 0;
+
+    virtual void computeShifts(size_t N, const Matrix1D<double>& bX,
+    			const Matrix1D<double>& bY, const Matrix2D<double>& A) = 0;
 
 private:
 	int findReferenceImage(size_t N, const Matrix1D<double>& shiftX,
 			const Matrix1D<double>& shiftY);
-	void loadData(const MetaData& movie, const Image<double>& dark,
-			const Image<double>& gain,
-			double targetOccupancy,
-			const MultidimArray<double>& lpf);
+
 	void solveEquationSystem(Matrix1D<double>& bX, Matrix1D<double>& bY,
 			Matrix2D<double>& A, Matrix1D<double>& shiftX,
 			Matrix1D<double>& shiftY);
 	void loadDarkCorrection(Image<double>& dark);
 	void loadGainCorrection(Image<double>& gain);
-	void computeShifts(size_t N, const Matrix1D<double>& bX,
-			const Matrix1D<double>& bY, const Matrix2D<double>& A);
+
 	void constructLPF(double targetOccupancy, const MultidimArray<double>& lpf);
 	void setNewDimensions(double& targetOccupancy, const MetaData& movie,
 			double& sizeFactor);
