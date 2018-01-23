@@ -1,7 +1,7 @@
 /***************************************************************************
  *
  * Authors:    Carlos Oscar Sanchez Sorzano coss@cnb.csic.es
- * 			   David Strelak david.strelak@gmail.com
+ *             David Strelak david.strelak@gmail.com
  *
  * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
  *
@@ -24,7 +24,7 @@
  *  e-mail address 'xmipp@cnb.csic.es'
  ***************************************************************************/
 
-#include "movie_alignment_correlation.h"
+#include "movie_alignment_correlation_base.h"
 #include <data/metadata_extension.h>
 #include <data/xmipp_fftw.h>
 #include <data/filters.h>
