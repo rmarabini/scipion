@@ -26,6 +26,8 @@
 #ifndef _PROG_MOVIE_ALIGNMENT_CORRELATION
 #define _PROG_MOVIE_ALIGNMENT_CORRELATION
 
+#include "data/filters.h"
+#include "data/xmipp_fftw.h"
 #include "reconstruction/movie_alignment_correlation_base.h"
 
 

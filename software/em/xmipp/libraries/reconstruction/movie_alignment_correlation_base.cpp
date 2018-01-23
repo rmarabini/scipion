@@ -25,10 +25,6 @@
  ***************************************************************************/
 
 #include "reconstruction/movie_alignment_correlation_base.h"
-#include <data/metadata_extension.h>
-#include <data/xmipp_fftw.h>
-#include <data/filters.h>
-
 
 #define OUTSIDE_WRAP 0
 #define OUTSIDE_AVG 1

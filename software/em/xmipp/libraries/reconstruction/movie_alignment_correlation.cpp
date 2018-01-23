@@ -24,11 +24,7 @@
  *  e-mail address 'xmipp@cnb.csic.es'
  ***************************************************************************/
 
-#include "movie_alignment_correlation.h"
-#include <data/metadata_extension.h>
-#include <data/xmipp_fftw.h>
-#include <data/filters.h>
-
+#include "reconstruction/movie_alignment_correlation.h"
 
 void ProgMovieAlignmentCorrelation::loadData(const MetaData& movie,
 		const Image<double>& dark, const Image<double>& gain,

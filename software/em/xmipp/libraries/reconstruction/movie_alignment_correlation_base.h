@@ -26,7 +26,9 @@
 #ifndef _PROG_MOVIE_ALIGNMENT_CORRELATION_BASE
 #define _PROG_MOVIE_ALIGNMENT_CORRELATION_BASE
 
-#include <data/xmipp_program.h>
+#include "data/xmipp_program.h"
+#include "data/metadata_extension.h"
+#include "data/xmipp_fftw.h"
 
 /**@defgroup MovieAlignmentCorrelation Movie alignment by correlation
    @ingroup ReconsLibrary */
@@ -35,63 +37,6 @@
 /** Movie alignment correlation Parameters. */
 class AProgMovieAlignmentCorrelation: public XmippProgram
 {
-public:
-
-//	FIXME move to protected
-
-    /** Filename of movie metadata */
-    FileName fnMovie;
-    /** Correction images */
-    FileName fnDark, fnGain;
-    /** Max shift */
-    double maxShift;
-    /** Sampling rate */
-    double Ts;
-    /** Max freq. */
-    double maxFreq;
-    /** Solver iterations */
-    int solverIterations;
-    /** Aligned movie */
-    FileName fnAligned;
-    /** Aligned micrograph */
-    FileName fnAvg;
-    /** Aligned micrograph */
-    FileName fnInitialAvg;
-    /** Metadata with shifts */
-    FileName fnOut;
-    /** First and last frame*/
-    int nfirst, nlast;
-    /** First and last frame*/
-    int nfirstSum, nlastSum;
-    /** Do not calculate and use the input shifts */
-    bool useInputShifts;
-    /** Binning factor */
-    double bin;
-    /** Bspline order */
-    int BsplineOrder;
-    /** Outside mode */
-    int outsideMode;
-    /** Outside value */
-    double outsideValue;
-
-    /*****************************/
-    /** crop corner **/
-    /*****************************/
-    /** x left top corner **/
-    int xLTcorner;
-    /** y left top corner **/
-    int yLTcorner;
-    /** x right down corner **/
-    int xDRcorner;
-    /** y right down corner **/
-    int yDRcorner;
-
-public:
-	// Target sampling rate
-	double newTs;
-
-	// Target size of the frames
-	int newXdim, newYdim;
 public:
     /// Read argument from command line
     void readParams();
@@ -104,6 +49,7 @@ public:
 
     /// Run
     void run();
+
 
 protected:
     virtual void loadData(const MetaData& movie, const Image<double>& dark,
@@ -141,6 +87,60 @@ private:
 			Image<double> averageMicrograph, size_t N, const MetaData& movie,
 			int bestIref);
 	void correctLoopIndices(const MetaData& movie);
+
+protected:
+	// Target size of the frames
+	int newXdim, newYdim;
+	/** First and last frame (inclusive)*/
+	int nfirst, nlast;
+	/** Max shift */
+	double maxShift;
+	/*****************************/
+	/** crop corner **/
+	/*****************************/
+	/** x left top corner **/
+	int xLTcorner;
+	/** y left top corner **/
+	int yLTcorner;
+	/** x right down corner **/
+	int xDRcorner;
+	/** y right down corner **/
+	int yDRcorner;
+
+private:
+	// Target sampling rate
+	double newTs;
+	 /** Filename of movie metadata */
+	FileName fnMovie;
+	/** Correction images */
+	FileName fnDark, fnGain;
+	/** Sampling rate */
+	double Ts;
+	/** Max freq. */
+	double maxFreq;
+	/** Solver iterations */
+	int solverIterations;
+	/** Aligned movie */
+	FileName fnAligned;
+	/** Aligned micrograph */
+	FileName fnAvg;
+	/** Aligned micrograph */
+	FileName fnInitialAvg;
+	/** Metadata with shifts */
+	FileName fnOut;
+	/** First and last frame*/
+	int nfirstSum, nlastSum;
+	/** Do not calculate and use the input shifts */
+	bool useInputShifts;
+	/** Binning factor */
+	double bin;
+	/** Bspline order */
+	int BsplineOrder;
+	/** Outside mode */
+	int outsideMode;
+	/** Outside value */
+	double outsideValue;
+
 };
 //@}
 #endif
