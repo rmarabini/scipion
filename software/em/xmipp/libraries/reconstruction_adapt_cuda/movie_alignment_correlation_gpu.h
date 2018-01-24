@@ -30,7 +30,7 @@
 
 class ProgMovieAlignmentCorrelationGPU: public AProgMovieAlignmentCorrelation
 {
-protected:
+private:
 	void loadData(const MetaData& movie, const Image<double>& dark,
 			const Image<double>& gain,
 			double targetOccupancy,

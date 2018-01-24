@@ -52,7 +52,7 @@ public:
     void run();
 
 
-protected:
+private:
     virtual void loadData(const MetaData& movie, const Image<double>& dark,
     			const Image<double>& gain,
     			double targetOccupancy,

@@ -35,11 +35,11 @@
 /** Movie alignment correlation Parameters. */
 class ProgMovieAlignmentCorrelation: public AProgMovieAlignmentCorrelation
 {
-protected:
+private:
 	// Fourier transforms of the input images
 	std::vector< MultidimArray<std::complex<double> > * > frameFourier;
 
-protected:
+private:
 	void loadData(const MetaData& movie, const Image<double>& dark,
 			const Image<double>& gain,
 			double targetOccupancy,
