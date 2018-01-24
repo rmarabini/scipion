@@ -273,6 +273,8 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                    (fnImgsToUse,fnLocalStk,TsCurrent,newXdim/2,fnReferenceVol,2*TsCurrent)
                 args+=" --optimizeShift --max_shift %f"%maxShift
                 args+=" --optimizeAngles --max_angular_change %f"%(2*angleStep)
+                if self.numberOfMpi.get()*self.numberOfThreads.get()>1:
+                    args+=" --Nsimultaneous 12"
                 if self.inputParticles.get().isPhaseFlipped():
                     args+=" --phaseFlipped"
                 self.runJob("xmipp_angular_continuous_assign2",args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
