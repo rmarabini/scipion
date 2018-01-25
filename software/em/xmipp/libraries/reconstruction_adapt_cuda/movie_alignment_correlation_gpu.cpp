@@ -26,14 +26,95 @@
 #include "reconstruction_adapt_cuda/movie_alignment_correlation_gpu.h"
 
 
+// FIXME: REMOVE
+#include <sstream>
+#include "data/filters.h"
+#include "data/xmipp_fftw.h"
+#define SSTR( x ) static_cast< std::ostringstream & >( \
+        ( std::ostringstream() << std::dec << x ) ).str()
+// FIXME
+
+void ProgMovieAlignmentCorrelationGPU::loadFrame(const MetaData& movie, size_t objId, bool crop, Image<float>& out) {
+	FileName fnFrame;
+	movie.getValue(MDL_IMAGE, fnFrame, objId);
+	if (crop) {
+		Image<double>tmp;
+		tmp.read(fnFrame);
+		tmp().window(out(), yLTcorner, xLTcorner, yDRcorner, xDRcorner);
+	} else {
+		out.read(fnFrame);
+	}
+}
+
 void ProgMovieAlignmentCorrelationGPU::loadData(const MetaData& movie,
 		const Image<double>& dark, const Image<double>& gain,
 		double targetOccupancy, const MultidimArray<double>& lpf) {
-	std::cout << "GPU load data" << std:: endl;
+	Image<float> frame, gainF, darkF;
+	// FIXME consider loading imgs in full size and cropping them on GPU
+	bool cropInput = (yDRcorner != -1);
+	// find input image size
+	gainF.data.resize(gain());
+	darkF.data.resize(dark());
+
+	loadFrame(movie, movie.firstObject(), cropInput, frame);
+	int noOfImgs = nlast - nfirst + 1;
+	size_t noOfFloats = noOfImgs * frame.data.yxdim;
+	float* imgs = new float[noOfFloats];
+	int counter = -1;
+	FOR_ALL_OBJECTS_IN_METADATA(movie) {
+		counter++;
+		if (counter < nfirst ) continue;
+		if (counter > nlast) break;
+
+		loadFrame(movie, __iter.objId, cropInput, frame);
+		// FIXME optimize if necessary
+		if (XSIZE(darkF()) > 0)
+			frame() -= darkF();
+		if (XSIZE(gainF()) > 0)
+			frame() *= gainF();
+
+		// add image at the end of the stack (that is already long enough)
+		memcpy(imgs + ((counter-nfirst) * frame.data.yxdim),
+				frame.data.data,
+				frame.data.yxdim * sizeof(float));
+	}
+	std::complex<float>* result;
+	kernel1(imgs, frame.data.xdim, frame.data.ydim, noOfImgs, newXdim, newYdim, result);
+	// 16785408 X:2049 Y:4096
+	Image<float> tmp(2049, 4096, 1, noOfImgs);
+	for (size_t i = 0; i < 16785408L; i++) {
+		float val = result[i].real() / 16785408.f;
+		if (val < 1) tmp.data[i] = val;
+		else std::cout << "skipping " << val << " at position " << i << std::endl;
+
+	}
+	tmp.write("fftFromGPU" + SSTR(counter) + ".vol");
 }
 
 void ProgMovieAlignmentCorrelationGPU::computeShifts(size_t N,
 		const Matrix1D<double>& bX, const Matrix1D<double>& bY,
 		const Matrix2D<double>& A) {
-	std::cout << "GPU computeShifts" << std:: endl;
+	return;
+	// FIXME refactor
+
+	int idx = 0;
+	MultidimArray<double> Mcorr;
+	Mcorr.resizeNoCopy(newYdim, newXdim);
+	Mcorr.setXmippOrigin();
+	CorrelationAux aux;
+	for (size_t i = 0; i < N - 1; ++i) {
+		for (size_t j = i + 1; j < N; ++j) {
+			bestShift(*frameFourier[i], *frameFourier[j], Mcorr, bX(idx),
+					bY(idx), aux, NULL, maxShift);
+			if (verbose)
+				std::cerr << "Frame " << i + nfirst << " to Frame "
+						<< j + nfirst << " -> (" << bX(idx) << "," << bY(idx)
+						<< ")\n";
+			for (int ij = i; ij < j; ij++)
+				A(idx, ij) = 1;
+
+			idx++;
+		}
+		delete frameFourier[i];
+	}
 }

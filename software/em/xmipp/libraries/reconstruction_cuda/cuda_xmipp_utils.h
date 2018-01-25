@@ -3,6 +3,7 @@
 #define CUDA_XMIPP_UTILS_H
 
 #include <stdio.h>
+#include <iostream>
 
 void mycufftDestroy(void *ptr);
 void gpuMalloc(void** d_data, size_t Nbytes);
@@ -93,7 +94,7 @@ public:
 
 		clear();
 		setDims(_Xdim, _Ydim, _Zdim, _Ndim);
-
+		std::cout << "allocating " << nzyxdim * sizeof(T) / 1048576  << " MB (" << nzyxdim << "x" <<sizeof(T) << ")" <<std::endl;
         gpuMalloc((void**) &d_data,nzyxdim*sizeof(T));
 
     }
@@ -120,7 +121,13 @@ public:
 
 	void copyToGpu(T* data)
 	{
+		std::cout << "copying " << nzyxdim << "x" << sizeof(T) << " (" << nzyxdim*sizeof(T) << ") bytes to GPU" << std::endl;
 		gpuCopyFromCPUToGPU((void *)data, (void *)d_data, nzyxdim*sizeof(T));
+	}
+
+	void copyToCpu(T* data)
+	{
+		gpuCopyFromGPUToCPU((void *)d_data, (void *)data, nzyxdim*sizeof(T));
 	}
 
 	void fillImageToGpu(T* data, size_t n=0)

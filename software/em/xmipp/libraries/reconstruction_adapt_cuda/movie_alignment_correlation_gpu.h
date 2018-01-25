@@ -27,9 +27,16 @@
 #define MOVIE_ALIGNMENT_CORRELATION_GPU
 
 #include "reconstruction/movie_alignment_correlation_base.h"
+#include "reconstruction_cuda/cuda_gpu_movie_alignment_correlation.h"
 
 class ProgMovieAlignmentCorrelationGPU: public AProgMovieAlignmentCorrelation
 {
+
+	// FIXME remove
+private:
+	// Fourier transforms of the input images
+	std::vector< MultidimArray<std::complex<double> > * > frameFourier;
+
 private:
 	void loadData(const MetaData& movie, const Image<double>& dark,
 			const Image<double>& gain,
@@ -38,6 +45,9 @@ private:
 
 	void computeShifts(size_t N, const Matrix1D<double>& bX,
 			const Matrix1D<double>& bY, const Matrix2D<double>& A);
+
+private:
+	void loadFrame(const MetaData& movie, size_t objId, bool crop, Image<float>& out);
 };
 
 
