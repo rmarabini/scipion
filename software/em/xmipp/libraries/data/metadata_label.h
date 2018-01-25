@@ -277,6 +277,7 @@ enum MDLabel
     MDL_NMA_ENERGY, ///< NMA energy contained in the NMA displacement vector
     MDL_NMA_MINRANGE, ///< Minimum value observed for a given NMA mode
     MDL_NMA_MAXRANGE, ///< Maximum value observed for a given NMA mode
+	MDL_NMA_ABS, ///<Absolute value observed for a given NMA mode
     MDL_NMA_MODEFILE, ///< File with an NMA mode
     MDL_NMA_SCORE, ///< NMA Score of a given mode
     MDL_NOISE_ANGLES, ///< Noise description for projected angles
@@ -1704,6 +1705,7 @@ private:
         MDL::addLabel(MDL_NMA_ENERGY, LABEL_DOUBLE, "nmaEnergy");
         MDL::addLabel(MDL_NMA_MINRANGE, LABEL_DOUBLE, "nmaMin");
         MDL::addLabel(MDL_NMA_MAXRANGE, LABEL_DOUBLE, "nmaMax");
+        MDL::addLabel(MDL_NMA_ABS, LABEL_DOUBLE,"nmaAbs");
         MDL::addLabel(MDL_NMA_MODEFILE, LABEL_STRING, "nmaModefile", TAGLABEL_TEXTFILE);
         MDL::addLabelAlias(MDL_NMA_MODEFILE, "NMAModefile");//3.0
         MDL::addLabel(MDL_NMA_SCORE, LABEL_DOUBLE, "nmaScore");

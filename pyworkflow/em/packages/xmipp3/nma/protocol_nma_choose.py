@@ -1,6 +1,7 @@
 # **************************************************************************
 # *
 # * Authors:  Carlos Oscar Sanchez Sorzano (coss@cnb.csic.es), March 2014
+# *           Javier Mota Garcia (jmota@cnb.csic.es), January 2018
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -29,7 +30,10 @@ from pyworkflow.em.packages.xmipp3.convert import getImageLocation
 from protocol_nma_base import *
 from pyworkflow.utils.path import createLink, cleanPath
 from pyworkflow.protocol.params import BooleanParam, MultiPointerParam
-from xmipp import MetaData, MDL_NMA, MDL_ENABLED, MDL_NMA_MINRANGE, MDL_NMA_MAXRANGE
+from xmipp import MetaData, MDL_NMA, MDL_ENABLED, MDL_NMA_MINRANGE, MDL_NMA_MAXRANGE, MDL_NMA_ABS
+import xmipp
+from pyworkflow.em.packages.xmipp3 import XmippMdRow
+from convert import rowToMode
 
 class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
     """ Protocol for choosing a volume to construct an NMA analysis """
@@ -67,33 +71,30 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
              
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-
         inputModes = self.inputModes.get().getFileName()
-        print inputModes
         inputModes = inputModes.split(".")
-        print inputModes
-        inputModes = inputModes[0]+".xmd"
-        pseudoatoms = self.inputModes.get().getPdb().getFileName()
+        self.Modes = inputModes[0]+".xmd"
+        self.pseudoatoms = self.inputModes.get().getPdb().getFileName()
+
+        print self.inputModes.get().getPdb().getVolume()
         RefVolume = self.inputRefVolume.get().getFileName()
+        print self.inputModes.get().getPdb()
 
         filenames=[]
+        self.files = 0
         for inputStructure in self.inputVolumes:
             filenames.append(inputStructure.get().getFileName())
             self.sampling = inputStructure.get().getSamplingRate()
+            self.files += 1
 
         deps = []
-        print inputModes
         for volCounter in range(1,len(filenames)+1):
             fnIn=filenames[volCounter-1]
-            #prefix="_%02d"%volCounter
-            #self._insertFunctionStep('convertToPseudoAtomsStep', inputStructure, fnIn, fnMask, prefix, prerequisites=deps)
-            #parentId=self._insertFunctionStep('computeNMAStep',self._getPath("pseudoatoms%s.pdb"%prefix), prefix)
             outVolFn = self._getPath('outputRigidAlignment_vol_%s_to_%d.vol' % ("Ref", volCounter))
             self._insertFunctionStep('alignVolumeStep', RefVolume, fnIn, outVolFn, volCounter)
-            #for volCounter2 in range(1,len(filenames)+1):
             args="-i %s --pdb %s --modes %s --sampling_rate %f -o %s --fixed_Gaussian %f --opdb %s"%\
-                 (filenames[volCounter-1],pseudoatoms, \
-                  inputModes,self.sampling,\
+                 (filenames[volCounter-1],self.pseudoatoms, \
+                  self.Modes,self.sampling,\
                   self._getExtraPath('alignment_%s_%02d.xmd'%("Ref",volCounter)),\
                   self.sampling*self.pseudoAtomRadius.get(),
                   self._getExtraPath('alignment_%s_%02d.pdb'%("Ref",volCounter)))
@@ -102,7 +103,7 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
             stepId=self._insertRunJobStep("xmipp_nma_alignment_vol",args)
             deps.append(stepId)
             
-        #self._insertFunctionStep('evaluateDeformationsStep',prerequisites=deps)
+        self._insertFunctionStep('evaluateDeformationsStep',prerequisites=deps)
         
 
     #--------------------------- Step functions --------------------------------------------
@@ -112,61 +113,35 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
         args += " --copyGeo %s" % (
                 self._getExtraPath('transformation-matrix_vol%06d.txt'%volId))
         self.runJob("xmipp_volume_align", args)
-
-    def convertToPseudoAtomsStep(self, inputStructure, fnIn, fnMask, prefix):
-        XmippProtConvertToPseudoAtomsBase.convertToPseudoAtomsStep(self, fnIn, fnMask, prefix)
-        self.createChimeraScriptStep(inputStructure, fnIn, prefix)
-        createLink(self._getPath("pseudoatoms%s.pdb"%prefix),self._getPath("pseudoatoms.pdb"))
-
-    '''def computeNMAStep(self, fnIn, prefix):
-        cutoffStr=''
-        if self.cutoffMode == NMA_CUTOFF_REL:
-            cutoffStr = 'Relative %f'%self.rcPercentage.get()
-        else:
-            cutoffStr = 'Absolute %f'%self.rc.get()
-        self.computeModesStep(fnIn, self.numberOfModes.get(), cutoffStr)
-        self.reformatOutputStep("pseudoatoms.pdb")
-        self.qualifyModesStep(self.numberOfModes.get(), self.collectivityThreshold.get(), True)
-        fnModes=self._getPath("modes.xmd")
-        fnModesPrefix=self._getPath("modes%s.xmd"%prefix)
-        self.runJob("xmipp_metadata_utilities",
-                    "-i %s --operate modify_values \"nmaModeFile=replace(nmaModeFile,'/modes/','/modes%s/')\" -o %s"%
-                    (fnModes,prefix,fnModesPrefix))
-        self.runJob("mv","%s %s"%(self._getPath('modes'),self._getPath('modes%s'%prefix)))
-
-        # Remove intermediate files
-        cleanPath(self._getPath("pseudoatoms.pdb"), fnModes, self._getExtraPath('vec_ani.pkl'))'''
     
     def evaluateDeformationsStep(self):
-        N = self.inputStructures.get().getSize()
+        N = self.files
         import numpy
-        distances=numpy.zeros([N,N])
+        distances=numpy.zeros([N])
+        pdb=open(self.pseudoatoms).readlines()
         for volCounter in range(1,N+1):
-            pdb1=open(self._getPath('pseudoatoms_%02d.pdb'%volCounter)).readlines()
-            for volCounter2 in range(1,N+1):
-                if volCounter!=volCounter2:
-                    davg=0.
-                    Navg=0.
-                    pdb2=open(self._getExtraPath('alignment_%02d_%02d.pdb'%(volCounter,volCounter2))).readlines()
-                    for i in range(len(pdb1)):
-                        line1=pdb1[i]
-                        if line1.startswith("ATOM"):
-                            line2=pdb2[i]
-                            x1=float(line1[30:37])
-                            y1=float(line1[38:45])
-                            z1=float(line1[46:53])
-                            x2=float(line2[30:37])
-                            y2=float(line2[38:45])
-                            z2=float(line2[46:53])
-                            dx=x1-x2
-                            dy=y1-y2
-                            dz=z1-z2
-                            d=math.sqrt(dx*dx+dy*dy+dz*dz)
-                            davg+=d
-                            Navg+=1
-                    if Navg>0:
-                        davg/=Navg
-                    distances[volCounter-1,volCounter2-1]=davg
+            davg=0.
+            Navg=0.
+            pdb2=open(self._getExtraPath('alignment_%s_%02d.pdb'%("Ref",volCounter))).readlines()
+            for i in range(len(pdb)):
+                line1=pdb[i]
+                if line1.startswith("ATOM"):
+                    line2=pdb2[i]
+                    x1=float(line1[30:37])
+                    y1=float(line1[38:45])
+                    z1=float(line1[46:53])
+                    x2=float(line2[30:37])
+                    y2=float(line2[38:45])
+                    z2=float(line2[46:53])
+                    dx=x1-x2
+                    dy=y1-y2
+                    dz=z1-z2
+                    d=math.sqrt(dx*dx+dy*dy+dz*dz)
+                    davg+=d
+                    Navg+=1
+            if Navg>0:
+                davg/=Navg
+            distances[volCounter-1]=davg
         distances=0.5*(distances+numpy.transpose(distances))
         numpy.savetxt(self._getPath('distances.txt'),distances)
         distances1D=numpy.mean(distances,axis=0)
@@ -178,48 +153,85 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
         createLink(self._getExtraPath("pseudoatoms_%02d_distance.hist"%(imin+1)),self._getExtraPath("pseudoatoms_distance.hist"))
 
         # Measure range
-        minDisplacement= 1e38*numpy.ones([self.numberOfModes.get(),1])
-        maxDisplacement=-1e38*numpy.ones([self.numberOfModes.get(),1])
-        mdNMA=MetaData(self._getPath("modes.xmd"))
+        minDisplacement= 1e38*numpy.ones([self.inputModes.get().getSize(),1])
+        maxDisplacement=-1e38*numpy.ones([self.inputModes.get().getSize(),1])
+        print "Error1"
+        absDisplacement = 1e38*numpy.ones([self.inputModes.get().getSize(),1])
+        print "Error2"
+        mdNMA=MetaData(self.Modes)
         for volCounter in range(1,N+1):
             if volCounter!=imin+1:
-                md=MetaData(self._getExtraPath("alignment_%02d_%02d.xmd"%(imin+1,volCounter)))
+                md=MetaData(self._getExtraPath("alignment_%s_%02d.xmd"%("Ref",volCounter)))
                 displacements=md.getValue(MDL_NMA, md.firstObject())
+                print displacements
                 idx1=0
                 idx2=0
                 for idRow in mdNMA:
                     if mdNMA.getValue(MDL_ENABLED,idRow)==1:
                         minDisplacement[idx2]=min(minDisplacement[idx2],displacements[idx1])
                         maxDisplacement[idx2]=max(maxDisplacement[idx2],displacements[idx1])
+                        absDisplacement[idx2]=abs(maxDisplacement[idx2])
                         idx1+=1
                     else:
                         minDisplacement[idx2]=0
                         maxDisplacement[idx2]=0
+                        absDisplacement[idx2]=0
                     idx2+=1
+        print "Error3"
         idx2=0
         for idRow in mdNMA:
             mdNMA.setValue(MDL_NMA_MINRANGE,float(minDisplacement[idx2]),idRow)
             mdNMA.setValue(MDL_NMA_MAXRANGE,float(maxDisplacement[idx2]),idRow)
+            mdNMA.setValue(MDL_NMA_ABS,float(absDisplacement[idx2]),idRow)
             idx2+=1
         mdNMA.write(self._getPath("modes.xmd"))
-
+        print "Error4"
         # Create output
         volCounter=0
-        for inputStructure in self.inputStructures.get():
+
+        '''for inputStructure in self.inputVolumes:
             if volCounter==imin:
-                print("The corresponding volume is %s"%(getImageLocation(inputStructure)))
+                print("The corresponding volume is %s"%(inputStructure.get().getFileName()))
                 finalStructure=inputStructure
                 break
-            volCounter+=1
+            volCounter+=1'''
 
-        pdb = PdbFile(self._getPath('pseudoatoms.pdb'), pseudoatoms=True)
+        '''pdb = PdbFile(self._getPath('pseudoatoms.pdb'), pseudoatoms=True)
         self._defineOutputs(outputPdb=pdb)
-        modes = NormalModes(filename=self._getPath('modes.xmd'))
+        self._defineSourceRelation(self.inputVolumes.get(), pdb)
+        modes = SetOfNormalModes(filename=self._getPath('modes.sqlite'))
         self._defineOutputs(outputModes=modes)
-        
-        self._defineSourceRelation(self.inputStructures, self.outputPdb)
+        self._defineSourceRelation(self.inputVolumes,modes)'''
+        self._insertFunctionStep('createOutputStep')
+
         # ToDo: the self.outputPdb should be a Pointer, not an object
 #         self._defineSourceRelation(self.outputPdb, self.outputModes)
+
+    #--------------------------- OUTPUT step -----------------------------------------------
+
+    def createOutputStep(self):
+        modes = SetOfNormalModes(filename=self._getPath('modes.sqlite'))
+        md = xmipp.MetaData(self._getPath('modes.xmd'))
+        row = XmippMdRow()
+
+        for objId in md:
+            row.readFromMd(md, objId)
+            modes.append(rowToMode(row))
+        inputPdb = self.inputModes.get().getPdb()
+        modes.setPdb(inputPdb)
+        self._defineOutputs(outputModes=modes)
+        self._defineSourceRelation(self.inputRefVolume, modes)
+
+        inputVol = self.inputRefVolume.get()
+        volume = Volume()
+        volume.setFileName(self._getExtraPath("pseudoatoms_nma_selection"))
+        volume.setSamplingRate(inputVol.getSamplingRate())
+
+        pdb = PdbFile(self._getPath('pseudoatoms.pdb'), pseudoatoms=True)
+        pdb.setVolume(volume)
+        #self.createChimeraScript(inputVol, pdb)
+        self._defineOutputs(outputPdb=pdb)
+        self._defineSourceRelation(self.inputRefVolume, pdb)
 
     #--------------------------- INFO functions --------------------------------------------
     def _summary(self):

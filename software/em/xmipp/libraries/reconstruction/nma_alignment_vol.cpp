@@ -95,7 +95,6 @@ void ProgNmaAlignmentVol::readParams() {
 	if (useFixedGaussian)
 		sigmaGaussian = getDoubleParam("--fixed_Gaussian");
 	alignVolumes=checkParam("--alignVolumes");
-	std::cout << "yyyyyyyyyyyyyyyyyyyyyyyyyyyyy" << std::endl;
 }
 
 // Show ====================================================================
@@ -136,7 +135,6 @@ void ProgNmaAlignmentVol::createWorkFiles() {
 		mdDone.write(fn);
 	}
 	*pmdIn = mdTodo;
-	std::cout << "zzzzzzzzzzzzzzzzzzzzzz" << std::endl;
 }
 
 void ProgNmaAlignmentVol::preProcess() {
@@ -155,11 +153,9 @@ void ProgNmaAlignmentVol::preProcess() {
 		aux.read(fnmask);
 		typeCast(aux(),mask);
 	}
-	std::cout << "aaaaaaaaaaaaaaaaaaaaaaaaaaaa" << std::endl;
 }
 
 void ProgNmaAlignmentVol::finishProcessing() {
-	std::cout << "bbbbbbbbbbbbbbbbbbbb" << std::endl;
 	XmippMetadataProgram::finishProcessing();
 	rename((fnOutDir+"/nmaDone.xmd").c_str(), fn_out.c_str());
 
@@ -169,7 +165,6 @@ void ProgNmaAlignmentVol::finishProcessing() {
 void deformPDB(const FileName &PDBin, const FileName &PDBout, const FileName &fnModeList,
 		const Matrix1D<double> &trial)
 {
-	std::cout << "ccccccccccccccccccccc" << std::endl;
 	String program = "xmipp_pdb_nma_deform";
 	String arguments = formatString("--pdb %s -o %s --nma %s --deformations ",PDBin.c_str(), PDBout.c_str(), fnModeList.c_str());
 	for (size_t i = 0; i < VEC_XSIZE(trial); ++i)
@@ -179,7 +174,6 @@ void deformPDB(const FileName &PDBin, const FileName &PDBout, const FileName &fn
 }
 
 FileName ProgNmaAlignmentVol::createDeformedPDB() const {
-	std::cout << "ddddddddddddddddddddd" << std::endl;
 	String program;
 	String arguments;
 	FileName fnRandom;
@@ -216,7 +210,6 @@ FileName ProgNmaAlignmentVol::createDeformedPDB() const {
 }
 
 void ProgNmaAlignmentVol::updateBestFit(double fitness, int dim) {
-	std::cout << "fffffffffffffffffffffff" << std::endl;
 	if (fitness < fitness_min) {
 		fitness_min = fitness;
 		trial_best = trial;
@@ -226,7 +219,6 @@ void ProgNmaAlignmentVol::updateBestFit(double fitness, int dim) {
 
 // Compute fitness =========================================================
 double ObjFunc_nma_alignment_vol::eval(Vector X, int *nerror) {
-	std::cout << "gggggggggggggggggggggggggg" << std::endl;
 	int dim = global_nma_vol_prog->numberOfModes;
 
 	for (int i = 0; i < dim; i++) {
@@ -262,10 +254,8 @@ ObjFunc_nma_alignment_vol::ObjFunc_nma_alignment_vol(int _t, int _n) {
 
 void ProgNmaAlignmentVol::processImage(const FileName &fnImg,
 		const FileName &fnImgOut, const MDRow &rowIn, MDRow &rowOut) {
-	std::cout << "hhhhhhhhhhhhhhhhhhhhhhhhhhh" << std::endl;
 	static size_t imageCounter = 0;
 	++imageCounter;
-	std::cout << numberOfModes << std::endl;
 	ObjectiveFunction *of;
 
 	int dim = numberOfModes;
@@ -279,7 +269,6 @@ void ProgNmaAlignmentVol::processImage(const FileName &fnImg,
 	trial_best.initZeros(dim);
 
 	fitness_min=1000000.0;
-	std::cout << "hhhhhhhhhhhh22222222222222222" << std::endl;
 	of = new ObjFunc_nma_alignment_vol(1, dim);
 
 	of->xStart.setSize(dim);
@@ -289,9 +278,7 @@ void ProgNmaAlignmentVol::processImage(const FileName &fnImg,
 	double rhoStart=trustradius_scale*250.;
     double rhoEnd=trustradius_scale*50.;
     int niter=10000;
-    std::cout << rhoStart << " "<< rhoEnd << " " << niter << " " << of->xStart << std::endl;
 	CONDOR(rhoStart, rhoEnd, niter, of);
-	std::cout << "hhhhhhhhhhhhh333333333" << std::endl;
 	trial = parameters = trial_best;
 
 	parameters.resize(VEC_XSIZE(parameters) + 1);
@@ -305,7 +292,6 @@ void ProgNmaAlignmentVol::processImage(const FileName &fnImg,
 }
 
 void ProgNmaAlignmentVol::writeVolumeParameters(const FileName &fnImg) {
-	std::cout << "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii" << std::endl;
 	MetaData md;
 	size_t objId = md.addObject();
 	md.setValue(MDL_IMAGE, fnImg, objId);
