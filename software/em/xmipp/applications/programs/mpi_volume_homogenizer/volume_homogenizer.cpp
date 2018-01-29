@@ -81,7 +81,7 @@ void ProgVolumeHomogenizer::convert2Uint8(cv::Mat opencvDoubleMat, cv::Mat &open
 // Converts an OpenCV matrix to XMIPP MultidimArray
 void ProgVolumeHomogenizer::opencv2Xmipp(const cv::Mat &opencvMat, MultidimArray<double> &xmippArray)
 {
-	//nothing 1
+	//nothing 2
     int h = opencvMat.rows;
     int w = opencvMat.cols;
     xmippArray.initZeros(h, w);
