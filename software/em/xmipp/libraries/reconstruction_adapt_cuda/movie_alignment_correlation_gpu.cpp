@@ -58,9 +58,11 @@ void ProgMovieAlignmentCorrelationGPU::loadData(const MetaData& movie,
 
 	loadFrame(movie, movie.firstObject(), cropInput, frame);
 	int noOfImgs = nlast - nfirst + 1;
-	size_t noOfFloats = noOfImgs * frame.data.yxdim;
-	float* imgs = new float[noOfFloats];
+	size_t noOfFloats = noOfImgs * std::max(frame.data.yxdim, (frame.data.xdim/2+1) * frame.data.ydim * 2);
+	float* imgs = new float[noOfFloats]();
+	std::cout << "noOfFloats: " << noOfFloats << std::endl;
 	int counter = -1;
+	int paddedLineLength = (frame.data.xdim/2+1)*2;
 	FOR_ALL_OBJECTS_IN_METADATA(movie) {
 		counter++;
 		if (counter < nfirst ) continue;
@@ -73,16 +75,38 @@ void ProgMovieAlignmentCorrelationGPU::loadData(const MetaData& movie,
 		if (XSIZE(gainF()) > 0)
 			frame() *= gainF();
 
-		// add image at the end of the stack (that is already long enough)
-		memcpy(imgs + ((counter-nfirst) * frame.data.yxdim),
-				frame.data.data,
-				frame.data.yxdim * sizeof(float));
+
+//		************
+//		IN-PLACE
+//		************
+		// copy line by line, adding offset at the end of each line
+		// result is the same image, padded in the X dimension to (N/2+1)*2
+		float* dest = imgs + ((counter-nfirst) * paddedLineLength * frame.data.ydim); // points to first float in the image
+		for (int i = 0; i < frame.data.ydim; i++) {
+			memcpy(dest + (paddedLineLength * i),
+					frame.data.data + i*frame.data.xdim,
+					frame.data.xdim * sizeof(float));
+		}
+
+//		************
+//		OUT-OF-PLACE
+//		************
+//		// add image at the end of the stack (that is already long enough)
+//		memcpy(imgs + ((counter-nfirst) * ((frame.data.xdim/2+1) * frame.data.ydim * 2)),
+//				frame.data.data,
+//				frame.data.yxdim * sizeof(float));
 	}
+
+	Image<float> aaaa((frame.data.xdim/2+1)*2, frame.data.ydim, 1, noOfImgs);
+	aaaa.data.data = imgs;
+	aaaa.write("images.vol");
+
 	std::complex<float>* result;
 	kernel1(imgs, frame.data.xdim, frame.data.ydim, noOfImgs, newXdim, newYdim, result);
 	// 16785408 X:2049 Y:4096
 	Image<float> tmp(2049, 4096, 1, noOfImgs);
 	for (size_t i = 0; i < 16785408L; i++) {
+//	for (size_t i = 0; i < 8388608L; i++) {
 		float val = result[i].real() / 16785408.f;
 		if (val < 1) tmp.data[i] = val;
 		else std::cout << "skipping " << val << " at position " << i << std::endl;

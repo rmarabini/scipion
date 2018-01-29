@@ -64,11 +64,15 @@ public:
 		d_data=NULL;
     }
 
-	GpuMultidimArrayAtGpu(size_t _Xdim, size_t _Ydim=1, size_t _Zdim=1, size_t _Ndim=1)
+	GpuMultidimArrayAtGpu(size_t _Xdim, size_t _Ydim=1, size_t _Zdim=1, size_t _Ndim=1, bool allocate=true)
     {
 		Xdim=Ydim=Zdim=Ndim=yxdim=zyxdim=nzyxdim=0;
 		d_data=NULL;
-		resize(_Xdim, _Ydim, _Zdim, _Ndim);
+		if (allocate) {
+			resize(_Xdim, _Ydim, _Zdim, _Ndim);
+		} else {
+			setDims(_Xdim, _Ydim, _Zdim, _Ndim);
+		}
     }
 
 	GpuMultidimArrayAtGpu(size_t _Xdim, size_t _Ydim, size_t _Zdim, size_t _Ndim, T* deviceData)
