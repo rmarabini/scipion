@@ -14,14 +14,16 @@ void kernel2(const float2* __restrict__ src, float2* dest, int noOfImages, size_
 	volatile int idx = blockIdx.x*blockDim.x + threadIdx.x;
 	volatile int idy = blockIdx.y*blockDim.y + threadIdx.y;
 
-	if (idx == 0 && idy ==0) {
-		printf("kernle2 called %p %p %d old:%lu %lu new:%lu %lu filter %p\n", src, dest, noOfImages, oldX, oldY, newX, newY, filter);
-	}
-	if (idx >= newX || idy >= newY ) return;
+//	FIXME add tiling. currently limited by memory transfers (even without filtering)
 
+//	if (idx == 0 && idy ==0) {
+//		printf("kernle2 called %p %p %d old:%lu %lu new:%lu %lu filter %p\n", src, dest, noOfImages, oldX, oldY, newX, newY, filter);
+//	}
+	if (idx >= newX || idy >= newY ) return;
+	size_t fIndex = idy*newX + idx; // index within single image
+	float lpfw = filter[fIndex];
 	int yhalf = (newY+1)/2;
 
-	size_t fIndex = idy*newX + idx; // index within single image
 	size_t origY = (idy <= yhalf) ? idy : (oldY - (newY-idy)); // take top N/2+1 and bottom N/2 lines
 	for (int n = 0; n < noOfImages; n++) {
 		size_t iIndex = n*oldX*oldY + origY*oldX + idx; // index within consecutive images
@@ -34,7 +36,7 @@ void kernel2(const float2* __restrict__ src, float2* dest, int noOfImages, size_
 //			printf("problem: %p %p old:%lu %lu new:%lu %lu : i:%lu o:%lu f:%lu \nyhalf: %d origY %lu thread %d %d \n", src, dest, oldX, oldY, newX, newY, iIndex, oIndex, fIndex,
 //								yhalf, origY, idx, idy);
 //		}
-		dest[oIndex] = src[iIndex] * filter[fIndex];
+		dest[oIndex] = src[iIndex] * lpfw;
 	}
 
 //	int halfY = iSizeY / 2;

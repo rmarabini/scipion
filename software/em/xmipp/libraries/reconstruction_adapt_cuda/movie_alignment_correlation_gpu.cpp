@@ -119,15 +119,33 @@ void ProgMovieAlignmentCorrelationGPU::loadData(const MetaData& movie,
 
 	std::complex<float>* result;
 //	float* result;
+	size_t newFFTXDim = newXdim/2+1;
 	kernel1(imgs, frame.data.xdim, frame.data.ydim, noOfImgs, newXdim, newYdim, filter.data, result);
+// 	******************
+//	FIXME normalization has to be done using original img size, i.e frame.data.xdim*frame.data.ydim
+//	******************
 
-	FourierTransformer transformer();
-	transformer.setFourier()
-	transformer.inverseFourierTransform()
+	MultidimArray<std::complex<double> > V(1, 1, newYdim, newFFTXDim);
+	for (size_t i = 0; i < (newFFTXDim*newYdim); i++) {
+		V.data[i].real() = result[i].real() / (frame.data.xdim*frame.data.ydim);
+		V.data[i].imag() = result[i].imag() / (frame.data.xdim*frame.data.ydim);
+	}
+	Image<double> aaa(newFFTXDim, newYdim, 1, noOfImgs);
+	for (size_t i = 0; i < (newFFTXDim*newYdim*noOfImgs); i++) {
+		double d = result[i].real() / (frame.data.xdim*frame.data.ydim);
+		if (d < 3) aaa.data[i] = d;
+	}
+	aaa.write("fftFromGPU.vol");
+	std::cout << "normalization done" << std::endl;
+	Image<double> yyy (newXdim, newYdim, 1, 1);
+	FourierTransformer transformer;
+	std::cout << "about to do IFFT" << std::endl;
+	transformer.inverseFourierTransform(V, yyy.data);
+	std::cout << "IFFT done" << std::endl;
+	yyy.write("filteredCroppedInputGPU0.vol");
 
 
 	// 16785408 X:2049 Y:4096
-//	size_t newFFTXDim = newXdim/2+1;
 //	Image<float> tmp(newFFTXDim, newYdim, 1, noOfImgs);
 //	for (size_t i = 0; i < (newFFTXDim*newYdim*2); i++) {
 ////	for (size_t i = 0; i < 8388608L; i++) {

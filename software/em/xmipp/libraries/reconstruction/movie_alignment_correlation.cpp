@@ -91,7 +91,8 @@ void ProgMovieAlignmentCorrelation::loadData(const MetaData& movie,
 			}
 			frameFourier.push_back(reducedFrameFourier);
 			Image<double> Vout(newXdim, newYdim);
-			Vout.data = transformer.getReal();
+			transformer.inverseFourierTransform(*reducedFrameFourier, Vout.data);
+//			Vout.data = transformer.getReal();
 			Vout.write("filteredCroppedInput" + SSTR(n) + ".vol");
 		}
 		++n;
