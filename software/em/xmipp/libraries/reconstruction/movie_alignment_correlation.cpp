@@ -26,6 +26,11 @@
 
 #include "reconstruction/movie_alignment_correlation.h"
 
+#include <sstream>
+
+#define SSTR( x ) static_cast< std::ostringstream & >( \
+        ( std::ostringstream() << std::dec << x ) ).str()
+
 void ProgMovieAlignmentCorrelation::loadData(const MetaData& movie,
 		const Image<double>& dark, const Image<double>& gain,
 		double targetOccupancy, const MultidimArray<double>& lpf) {
@@ -85,6 +90,9 @@ void ProgMovieAlignmentCorrelation::loadData(const MetaData& movie,
 					DIRECT_MULTIDIM_ELEM(*reducedFrameFourier,nn) *= wlpf;
 			}
 			frameFourier.push_back(reducedFrameFourier);
+			Image<double> Vout(newXdim, newYdim);
+			Vout.data = transformer.getReal();
+			Vout.write("filteredCroppedInput" + SSTR(n) + ".vol");
 		}
 		++n;
 		if (verbose)

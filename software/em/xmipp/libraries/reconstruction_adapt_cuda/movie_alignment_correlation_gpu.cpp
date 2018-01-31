@@ -46,15 +46,31 @@ void ProgMovieAlignmentCorrelationGPU::loadFrame(const MetaData& movie, size_t o
 	}
 }
 
+
 void ProgMovieAlignmentCorrelationGPU::loadData(const MetaData& movie,
 		const Image<double>& dark, const Image<double>& gain,
 		double targetOccupancy, const MultidimArray<double>& lpf) {
 	Image<float> frame, gainF, darkF;
+	MultidimArray<float> filter;
 	// FIXME consider loading imgs in full size and cropping them on GPU
 	bool cropInput = (yDRcorner != -1);
 	// find input image size
 	gainF.data.resize(gain());
 	darkF.data.resize(dark());
+
+	// FIXME extract
+	Matrix1D<double> w(2);
+	filter.initZeros(newYdim, newXdim/2+1);
+	FOR_ALL_DIRECT_ELEMENTS_IN_ARRAY2D(filter)
+	{
+		FFT_IDX2DIGFREQ(i, newYdim, YY(w));
+		FFT_IDX2DIGFREQ(j, newXdim, XX(w));
+		double wabs = w.module();
+		if (wabs <= targetOccupancy)
+			A2D_ELEM(filter,i,j) = lpf.interpolatedElement1D(
+					wabs * newXdim);
+	}
+
 
 	loadFrame(movie, movie.firstObject(), cropInput, frame);
 	int noOfImgs = nlast - nfirst + 1;
@@ -102,17 +118,26 @@ void ProgMovieAlignmentCorrelationGPU::loadData(const MetaData& movie,
 	aaaa.write("images.vol");
 
 	std::complex<float>* result;
-	kernel1(imgs, frame.data.xdim, frame.data.ydim, noOfImgs, newXdim, newYdim, result);
-	// 16785408 X:2049 Y:4096
-	Image<float> tmp(2049, 4096, 1, noOfImgs);
-	for (size_t i = 0; i < 16785408L; i++) {
-//	for (size_t i = 0; i < 8388608L; i++) {
-		float val = result[i].real() / 16785408.f;
-		if (val < 1) tmp.data[i] = val;
-		else std::cout << "skipping " << val << " at position " << i << std::endl;
+//	float* result;
+	kernel1(imgs, frame.data.xdim, frame.data.ydim, noOfImgs, newXdim, newYdim, filter.data, result);
 
-	}
-	tmp.write("fftFromGPU" + SSTR(counter) + ".vol");
+	FourierTransformer transformer();
+	transformer.setFourier()
+	transformer.inverseFourierTransform()
+
+
+	// 16785408 X:2049 Y:4096
+//	size_t newFFTXDim = newXdim/2+1;
+//	Image<float> tmp(newFFTXDim, newYdim, 1, noOfImgs);
+//	for (size_t i = 0; i < (newFFTXDim*newYdim*2); i++) {
+////	for (size_t i = 0; i < 8388608L; i++) {
+//		float val = result[i].real() / (newYdim*newYdim);
+//		if (val < 3) tmp.data[i] = val;
+//		else std::cout << "skipping " << val << " at position " << i << std::endl;
+//
+//	}
+//	tmp.write("fftFromGPU" + SSTR(counter) + ".vol");
+
 }
 
 void ProgMovieAlignmentCorrelationGPU::computeShifts(size_t N,
