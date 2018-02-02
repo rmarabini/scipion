@@ -117,22 +117,22 @@ void ProgMovieAlignmentCorrelationGPU::loadData(const MetaData& movie,
 	aaaa.data.data = imgs;
 	aaaa.write("images.vol");
 
-	std::complex<float>* result;
+
 //	float* result;
 	size_t newFFTXDim = newXdim/2+1;
-	kernel1(imgs, frame.data.xdim, frame.data.ydim, noOfImgs, newXdim, newYdim, filter.data, result);
+	kernel1(imgs, frame.data.xdim, frame.data.ydim, noOfImgs, newXdim, newYdim, filter.data, tmpResult);
 // 	******************
 //	FIXME normalization has to be done using original img size, i.e frame.data.xdim*frame.data.ydim
 //	******************
 
 	MultidimArray<std::complex<double> > V(1, 1, newYdim, newFFTXDim);
 	for (size_t i = 0; i < (newFFTXDim*newYdim); i++) {
-		V.data[i].real() = result[i].real() / (frame.data.xdim*frame.data.ydim);
-		V.data[i].imag() = result[i].imag() / (frame.data.xdim*frame.data.ydim);
+		V.data[i].real() = tmpResult[i].real() / (frame.data.xdim*frame.data.ydim);
+		V.data[i].imag() = tmpResult[i].imag() / (frame.data.xdim*frame.data.ydim);
 	}
 	Image<double> aaa(newFFTXDim, newYdim, 1, noOfImgs);
 	for (size_t i = 0; i < (newFFTXDim*newYdim*noOfImgs); i++) {
-		double d = result[i].real() / (frame.data.xdim*frame.data.ydim);
+		double d = tmpResult[i].real() / (frame.data.xdim*frame.data.ydim);
 		if (d < 3) aaa.data[i] = d;
 	}
 	aaa.write("fftFromGPU.vol");
@@ -161,6 +161,39 @@ void ProgMovieAlignmentCorrelationGPU::loadData(const MetaData& movie,
 void ProgMovieAlignmentCorrelationGPU::computeShifts(size_t N,
 		const Matrix1D<double>& bX, const Matrix1D<double>& bY,
 		const Matrix2D<double>& A) {
+
+	std::complex<float>* result;
+	kernel3(maxShift, N, tmpResult, newXdim/2+1, newYdim, result);
+	std::cout << "kernel3 done" << std::endl;
+	size_t framexdim = 4096;
+	size_t frameydim = 4096; // FIXME
+
+
+	size_t newFFTXDim = newXdim/2+1;
+	for (int img = 0; img < (N * (N-1)/2); img++) {
+		MultidimArray<std::complex<double> > V(1, 1, newYdim, newFFTXDim);
+		for (size_t i = 0; i < (newFFTXDim*newYdim); i++) {
+			V.data[i].real() = result[i + img*newYdim*newFFTXDim].real() / (framexdim*frameydim);
+			V.data[i].imag() = result[i + img*newYdim*newFFTXDim].imag() / (framexdim*frameydim);
+		}
+		std::cout << "V done" << std::endl;
+		Image<double> aaa(newFFTXDim, newYdim, 1, 1);
+		for (size_t i = 0; i < (newFFTXDim*newYdim); i++) {
+			double d = result[i + img*newYdim*newFFTXDim].real() / (framexdim*frameydim);
+			if (d < 3) aaa.data[i] = d;
+		}
+		aaa.write("correlationGPU" + SSTR(img) + ".vol");
+		std::cout << "correlation done" << std::endl;
+		Image<double> yyy (newXdim, newYdim, 1, 1);
+		FourierTransformer transformer;
+		std::cout << "about to do IFFT" << std::endl;
+		transformer.inverseFourierTransform(V, yyy.data);
+		std::cout << "IFFT done" << std::endl;
+		CenterFFT(yyy.data, true);
+		yyy.write("correlationIFFTGPU" + SSTR(img) + ".vol");
+	}
+
+
 	return;
 	// FIXME refactor
 

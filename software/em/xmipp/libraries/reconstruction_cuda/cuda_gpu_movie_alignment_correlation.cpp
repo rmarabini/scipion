@@ -86,7 +86,7 @@ void kernel1(float* imgs, size_t oldX, size_t oldY, int noOfImages, size_t newX,
 
 	size_t noOfFloats = noOfImages * std::max(oldX*oldY, (oldX/2+1) * oldY * 2);
 	float* d_imgs;
-	gpuMalloc((void**) &d_imgs,noOfFloats*sizeof(float));
+	gpuMalloc((void**) &d_imgs,noOfFloats*sizeof(float)); // no dealoc here, destructor will take care of it
 	gpuErrchk(cudaMemcpy(d_imgs, imgs, noOfFloats*sizeof(float), cudaMemcpyHostToDevice));
 	// store to proper structure
 	GpuMultidimArrayAtGpu<float> imagesGPU(oldX, oldY, 1, noOfImages, d_imgs);
@@ -135,6 +135,8 @@ void kernel1(float* imgs, size_t oldX, size_t oldY, int noOfImages, size_t newX,
 	dim3 dimBlock(BLOCK_DIM_X, BLOCK_DIM_X);
 	dim3 dimGrid(ceil(newFFTX/(float)dimBlock.x), ceil(newY/(float)dimBlock.y));
 	kernel2<<<dimGrid, dimBlock>>>((float2*)resultingFFT.d_data,(float2*) d_cropped, noOfImages, resultingFFT.Xdim, resultingFFT.Ydim, newFFTX, newY, d_filter);
+	cudaFree(d_filter);
+
 	gpuErrchk( cudaPeekAtLastError() );
 	gpuErrchk( cudaDeviceSynchronize() );
 	gpuErrchk( cudaPeekAtLastError() );
@@ -146,7 +148,74 @@ void kernel1(float* imgs, size_t oldX, size_t oldY, int noOfImages, size_t newX,
 //	resultingFFT.copyToCpu(result);
 	printf ("about to copy to host: %p %p %d\n", result, d_cropped, noOfCroppedFloats*sizeof(float));
 	gpuErrchk(cudaMemcpy((void*)result, (void*)d_cropped, noOfCroppedFloats*sizeof(float), cudaMemcpyDeviceToHost));
+	cudaFree(d_cropped);
 	std::cout << "copy to host done" << std::endl;
-	resultingFFT.d_data = NULL; // unbind connection
+	resultingFFT.d_data = NULL; // points to imagesGPU, which will be cleared by destructor
 //	std::cout << "No of elems: " << resultingFFT.nzyxdim  << " X:" << resultingFFT.Xdim << " Y:" << resultingFFT.Ydim<< std::endl;
+}
+
+
+__global__
+void kernel4(const float2* __restrict__ imgs, float2* correlations, int xDim, int yDim, int noOfImgs) {
+	// assign pixel to thread
+		volatile int idx = blockIdx.x*blockDim.x + threadIdx.x;
+		volatile int idy = blockIdx.y*blockDim.y + threadIdx.y;
+
+		if (idx == 0 && idy ==0) {
+			printf("kernel4 called %p %p %d %d %d\n", imgs, correlations, xDim, yDim, noOfImgs);
+		}
+		if (idx >= xDim || idy >= yDim ) return;
+		size_t pixelIndex = idy*xDim + idx; // index within single image
+
+		int counter = 0;
+		for (int i = 0; i < (noOfImgs - 1); i++) {
+			int tmpOffset = i * xDim * yDim;
+			float2 tmp = imgs[tmpOffset + pixelIndex];
+			for (int j = i+1; j < noOfImgs; j++) {
+				int tmp2Offset = j * xDim * yDim;
+				float2 tmp2 = imgs[tmp2Offset + pixelIndex];
+				float2 res;
+				// FIXME why conjugate?
+				res.x = (tmp.x*tmp2.x) + (tmp.y*tmp2.y);
+				res.y = (tmp.y*tmp2.x) - (tmp.x*tmp2.y);
+				correlations[counter*xDim*yDim + pixelIndex] = res;
+				counter++;
+			}
+		}
+}
+
+void kernel3(float maxShift, size_t noOfImgs, const std::complex<float>* imgs, size_t fftXdim, size_t fftYdim, std::complex<float>*& result) {
+
+	size_t noOfCorellations = noOfImgs * (noOfImgs - 1) / 2;
+//	float2* d_b;
+//
+//	gpuMalloc((void**) &d_b,noOfCorellations*sizeof(float)*2);
+//	cudaMemset(d_b, 0.f, noOfCorellations*sizeof(float)*2);
+
+	size_t noOfPixels = noOfImgs * fftXdim * fftYdim;
+	float2* d_imgs;
+	gpuMalloc((void**) &d_imgs, noOfPixels*sizeof(float2));
+	cudaMemcpy((void*)d_imgs, (void*)imgs, noOfPixels*sizeof(float2), cudaMemcpyHostToDevice);
+
+	size_t noOfCorrPixels = noOfCorellations * fftXdim * fftYdim;
+	float2* d_corrs;
+	gpuMalloc((void**) &d_corrs, noOfCorrPixels*sizeof(float2));
+	cudaMemset(d_corrs, 0.f, noOfCorrPixels*sizeof(float2));
+
+	dim3 dimBlock(BLOCK_DIM_X, BLOCK_DIM_X);
+	dim3 dimGrid(ceil(fftXdim/(float)dimBlock.x), ceil(fftYdim/(float)dimBlock.y));
+	kernel4<<<dimGrid, dimBlock>>>((float2*)d_imgs,(float2*) d_corrs, fftXdim, fftYdim, noOfImgs);
+
+	gpuErrchk( cudaDeviceSynchronize() );
+	gpuErrchk( cudaPeekAtLastError() );
+
+
+	result = new std::complex<float>[noOfCorrPixels]();
+	cudaMemcpy((void*)result, (void*)d_corrs, noOfCorrPixels*sizeof(float2), cudaMemcpyDeviceToHost);
+
+	gpuErrchk( cudaDeviceSynchronize() );
+	gpuErrchk( cudaPeekAtLastError() );
+
+
+
 }

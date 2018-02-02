@@ -36,6 +36,7 @@ class ProgMovieAlignmentCorrelationGPU: public AProgMovieAlignmentCorrelation
 private:
 	// Fourier transforms of the input images
 	std::vector< MultidimArray<std::complex<double> > * > frameFourier;
+	std::complex<float>* tmpResult;
 
 private:
 	void loadData(const MetaData& movie, const Image<double>& dark,
