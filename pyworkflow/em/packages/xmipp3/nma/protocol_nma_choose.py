@@ -148,7 +148,7 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
         print("Average distance to rest of volumes=",distances1D)
         imin=numpy.argmin(distances1D)
         print("The volume in the middle is pseudoatoms_%02d.pdb"%(imin+1))
-        createLink(self._getPath("pseudoatoms_%02d.pdb"%(imin+1)),self._getPath("pseudoatoms.pdb"))
+        #createLink(self._getPath("pseudoatoms_%02d.pdb"%(imin+1)),self._getPath("pseudoatoms.pdb"))
         createLink(self._getPath("modes_%02d.xmd"%(imin+1)),self._getPath("modes.xmd"))
         createLink(self._getExtraPath("pseudoatoms_%02d_distance.hist"%(imin+1)),self._getExtraPath("pseudoatoms_distance.hist"))
 
@@ -216,13 +216,17 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
 
         for objId in md:
             row.readFromMd(md, objId)
-            modes.append(rowToMode(row))
+            mode = rowToMode(row)
+            mode.nmaMin = Float(row.getValue(MDL_NMA_MINRANGE))
+            mode.nmaMax = Float(row.getValue(MDL_NMA_MAXRANGE))
+            mode.nmaAbs = Float(row.getValue(MDL_NMA_ABS))
+            modes.append(mode)
         inputPdb = self.inputModes.get().getPdb()
         modes.setPdb(inputPdb)
         self._defineOutputs(outputModes=modes)
         self._defineSourceRelation(self.inputRefVolume, modes)
 
-        inputVol = self.inputRefVolume.get()
+        '''inputVol = self.inputRefVolume.get()
         volume = Volume()
         volume.setFileName(self._getExtraPath("pseudoatoms_nma_selection"))
         volume.setSamplingRate(inputVol.getSamplingRate())
@@ -231,7 +235,7 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
         pdb.setVolume(volume)
         #self.createChimeraScript(inputVol, pdb)
         self._defineOutputs(outputPdb=pdb)
-        self._defineSourceRelation(self.inputRefVolume, pdb)
+        self._defineSourceRelation(self.inputRefVolume, pdb)'''
 
     #--------------------------- INFO functions --------------------------------------------
     def _summary(self):
