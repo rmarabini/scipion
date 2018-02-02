@@ -61,13 +61,7 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
                       label='Pseudoatom radius (vox)',
                       help='Pseudoatoms are defined as Gaussians whose \n'
                            'standard deviation is this value in voxels')
-        #form.addParam('alignVolumes', BooleanParam, label="Align volumes", default=False,
-        #              help="Align deformed PDBs to volume to maximize match")
-        #XmippProtConvertToPseudoAtomsBase._defineParams(self,form)
-        form.addParallelSection(threads=4, mpi=1)    
-
-        #form.addSection(label='Normal Mode Analysis')
-        #XmippProtNMABase._defineParamsCommon(self,form)
+        form.addParallelSection(threads=4, mpi=1)
              
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -98,8 +92,6 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
                   self._getExtraPath('alignment_%s_%02d.xmd'%("Ref",volCounter)),\
                   self.sampling*self.pseudoAtomRadius.get(),
                   self._getExtraPath('alignment_%s_%02d.pdb'%("Ref",volCounter)))
-            #if self.alignVolumes.get():
-             #   args+=" --alignVolumes"
             stepId=self._insertRunJobStep("xmipp_nma_alignment_vol",args)
             deps.append(stepId)
             
@@ -155,9 +147,7 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
         # Measure range
         minDisplacement= 1e38*numpy.ones([self.inputModes.get().getSize(),1])
         maxDisplacement=-1e38*numpy.ones([self.inputModes.get().getSize(),1])
-        print "Error1"
         absDisplacement = 1e38*numpy.ones([self.inputModes.get().getSize(),1])
-        print "Error2"
         mdNMA=MetaData(self.Modes)
         for volCounter in range(1,N+1):
             if volCounter!=imin+1:
@@ -177,7 +167,6 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
                         maxDisplacement[idx2]=0
                         absDisplacement[idx2]=0
                     idx2+=1
-        print "Error3"
         idx2=0
         for idRow in mdNMA:
             mdNMA.setValue(MDL_NMA_MINRANGE,float(minDisplacement[idx2]),idRow)
@@ -185,23 +174,7 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
             mdNMA.setValue(MDL_NMA_ABS,float(absDisplacement[idx2]),idRow)
             idx2+=1
         mdNMA.write(self._getPath("modes.xmd"))
-        print "Error4"
         # Create output
-        volCounter=0
-
-        '''for inputStructure in self.inputVolumes:
-            if volCounter==imin:
-                print("The corresponding volume is %s"%(inputStructure.get().getFileName()))
-                finalStructure=inputStructure
-                break
-            volCounter+=1'''
-
-        '''pdb = PdbFile(self._getPath('pseudoatoms.pdb'), pseudoatoms=True)
-        self._defineOutputs(outputPdb=pdb)
-        self._defineSourceRelation(self.inputVolumes.get(), pdb)
-        modes = SetOfNormalModes(filename=self._getPath('modes.sqlite'))
-        self._defineOutputs(outputModes=modes)
-        self._defineSourceRelation(self.inputVolumes,modes)'''
         self._insertFunctionStep('createOutputStep')
 
         # ToDo: the self.outputPdb should be a Pointer, not an object
@@ -225,17 +198,6 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
         modes.setPdb(inputPdb)
         self._defineOutputs(outputModes=modes)
         self._defineSourceRelation(self.inputRefVolume, modes)
-
-        '''inputVol = self.inputRefVolume.get()
-        volume = Volume()
-        volume.setFileName(self._getExtraPath("pseudoatoms_nma_selection"))
-        volume.setSamplingRate(inputVol.getSamplingRate())
-
-        pdb = PdbFile(self._getPath('pseudoatoms.pdb'), pseudoatoms=True)
-        pdb.setVolume(volume)
-        #self.createChimeraScript(inputVol, pdb)
-        self._defineOutputs(outputPdb=pdb)
-        self._defineSourceRelation(self.inputRefVolume, pdb)'''
 
     #--------------------------- INFO functions --------------------------------------------
     def _summary(self):
