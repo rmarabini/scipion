@@ -24,6 +24,8 @@
 # *
 # **************************************************************************
 
+# 1 copy 8 sections
+# param line; boolean and conditional
 
 import os
 
@@ -32,24 +34,77 @@ import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_1_2
 from pyworkflow.em.convert import ImageHandler
 from pyworkflow.em.protocol import EMProtocol
-
+from pyworkflow.protocol.params import (BooleanParam, MultiPointerParam, StringParam)
 
 class ProtBackup(EMProtocol):
     """ copy project, or part of a project, to another disk or computer
     """
     _label = 'Backup project'
-    _program = ""
-    _lastUpdateVersion = VERSION_1_2
 
     def __init__(self, **kwargs):
         EMProtocol.__init__(self, **kwargs)
 
 # ===========================
+    def __init__(self, **kwargs):
+        pass
+
+    #--------------- DEFINE param functions ---------------
+
+    def _defineParams(self, form):
+        form.addSection(label='Input')
+        form.addParam('doAll', BooleanParam, default=True, label="Backup Whole Project?",
+                       help='Check to backup the whole project')
+        form.addParam('inputProtocolsExclude', MultiPointerParam,
+                      label="Exclude this protocols",
+                      pointerClass='EMProtocol',
+                      default=None, condition='not doAll',
+                      help="Protocols NOT to be excluded")
+        form.addParam('doLocal', BooleanParam, default=True, label="Backup Whole Project?",
+                       help='Check to backup the whole project')
+        form.addParam('targetLocal', StringParam, default=None, condition='doLocal',
+                      label='Target Directory', help="Path to local directory where "
+                                                     "the backup will be stored")
+        form.addParam('targetRemote', StringParam, default=None,
+                      condition='not doLocal',
+                      label='Target Directory', help="Path to remote directory where "
+                                                     "the backup will be stored")
+
+    #--------------- INSERT steps functions ----------------
+
+    def _insertAllSteps(self):
+        pass
+
+    #--------------- STEPS functions -----------------------
+
+    def convertInputStep(self):
+        pass
+
+    def runMLStep(self, params):
+        pass
+
+    def createOutputStep(self):
+        pass
+
+    #--------------- INFO functions -------------------------
+
+    def _validate(self):
+        return []
+
+    def _citations(self):
+        return []
+
+    def _summary(self):
+        return []
+
+    def _methods(self):
+        return []
+
+    #--------------- UTILS functions -------------------------
 
 
 # ===========================
 
-
+"""
         #--------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
@@ -111,3 +166,5 @@ class ProtBackup(EMProtocol):
 
     def getFnPath(self, label='volume'):
         return os.path.join(self.filesPath.get(), self._getFileName(label))
+
+"""
