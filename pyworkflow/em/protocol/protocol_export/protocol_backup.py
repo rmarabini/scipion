@@ -28,13 +28,165 @@
 # param line; boolean and conditional
 
 import os
-
-import pyworkflow.protocol.params as params
-
-from pyworkflow import VERSION_1_2
-from pyworkflow.em.convert import ImageHandler
+import sys
+import time
+import select
+import paramiko
 from pyworkflow.em.protocol import EMProtocol
-from pyworkflow.protocol.params import (BooleanParam, MultiPointerParam, StringParam)
+from pyworkflow.protocol.params import (BooleanParam,
+                                        FloatParam,
+                                        IntParam,
+                                        MultiPointerParam,
+                                        PathParam,
+                                        StringParam
+                                        )
+
+class RemoteCommands:
+    "class to execute a multiple commands in a remote host"
+    def __init__(self, retry_time=0):
+        self.retry_time = retry_time
+
+    def run_cmd(self, username, host_name, cmd_list):
+        i = 0
+        while True:
+            print("Trying to connect to %s (%i/%i)" % (host_name, i, self.retry_time))
+            try:
+                ssh = paramiko.SSHClient()
+                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                print "connect to", host_name
+                ssh.connect(host_name, username=username)
+                break
+            except paramiko.AuthenticationException:
+                print("Authentication failed when connecting to %s" % host_name)
+                sys.exit(1)
+            except:
+                print("Could not SSH to %s, waiting for it to start" % host_name)
+                i += 1
+                time.sleep(2)
+
+        # If we could not connect within time limit
+        if i >= self.retry_time:
+            print("Could not connect to %s. Giving up" % host_name)
+            sys.exit(1)
+        # After connection is successful
+        # Send the command
+        for command in cmd_list:
+            # print command
+            print "> " + command
+            # execute commands
+            stdin, stdout, stderr = ssh.exec_command(command)
+            # TODO() : if an error is thrown, stop further rules and revert back changes
+            # Wait for the command to terminate
+            while not stdout.channel.exit_status_ready():
+                # Only print data if there is data to read in the channel
+                if stdout.channel.recv_ready():
+                    rl, wl, xl = select.select([ stdout.channel ], [ ], [ ], 0.0)
+                    if len(rl) > 0:
+                        tmp = stdout.channel.recv(1024)
+                        output = tmp.decode()
+                        print output
+        # Close SSH connection
+        ssh.close()
+        return
+
+
+class CopyFiles():
+
+    def __init__(self, projectName, target, timeout):
+        self.projectName = projectName
+        self.timeout = timeout
+
+        if "@" in target:
+            parse = target.split(":")[0].split("@")
+            self.targetUserName = parse[0]
+            self.targetHost = parse [1]
+            self.targetDir = target.split(":")[1]
+            self.localTarget = False
+        else:
+            self.targetUserName = None
+            self.targetHost = None
+            self.targetDir = target
+            self.localTarget = True
+
+        self.remoteCommand = RemoteCommands(2) # retry comamnd 2 times
+
+    def _createDirectory(self):
+        """ Create directory either local or remote
+            data will be copied to  this directory
+        """
+        dir = os.path.join(self.targetDir, self.projectName)
+
+        if self.localTarget: #save to local usb disk
+            if not os.path.exists(dir):
+                os.makedirs(dir)
+        else: # rmote directory creation
+            self.remoteCommand.run_cmd(self.targetUserName,
+                                       self.targetHost,
+                                       ['mkdir -p %s' % dir])
+
+    def _copy_files(self, typeDataList, _timeout):
+        """loop that copies files"""
+        _timeout = self.timeout
+        self._createDirectory()
+        cmdEPU = RSYNC + \
+              " -vrl" + \
+              " --progress " + \
+              " --log-file=%s " % os.path.join(DATADIR,LOGS,self.projectName)  + \
+              os.path.join(DATADIR, typeData, self.projectName + "/ ")
+        targetDir = os.path.join(self.targetDir, self.projectName, typeData)
+        if self.localTarget:
+            cmdEPU += targetDir
+        else:
+            cmdEPU += "%s@%s:%s" % (self.targetUserName, self.targetHost, targetDir)
+
+#        if PROJECTDIR in typeDataList:
+#            typeData = PROJECTDIR
+#            self._createDirectory(typeData)
+#            cmdProj = RSYNC + \
+#                  " -vrl" + \
+#                  " --progress " + \
+#                  ' --exclude="*Fractions.mrc" ' + \
+#                  " --log-file=%s " % os.path.join(DATADIR,LOGS,
+                # self.projectName)  + \
+#                  os.path.join(DATADIR, typeData, self.projectName + "/ ")
+#            targetDir = os.path.join(self.targetDir, self.projectName,
+            # typeData)
+            if self.localTarget:
+                cmdProj += targetDir
+            else:
+                cmdProj += "%s@%s:%s" % (self.targetUserName, self.targetHost, targetDir)
+            """
+            typeData = PROJECTDIR
+            self._createDirectory(typeData)
+            cmdProj = RSYNC + \
+                  " -va" + \
+                  " --progress" + \
+                  " " + SCIPIONDATADIR + "/projects/" + self.projectName + "/ "
+            targetDir = os.path.join(self.targetDir, self.projectName, typeData)
+            if self.localTarget:
+                cmdProj += "%s@%s:%s" % (SCIPIONUSER, RUSKAHOST, targetDir)
+            else:
+                cmdProj += "%s@%s:%s" % (self.targetUserName, self.targetHost, targetDir)
+            """
+
+        try:
+####            with timeout(_timeout, exception=RuntimeError): # _timeout
+# seconds
+                while True:
+                    if EPUDATADIR in typeDataList:
+                        print cmdEPU
+                        os.system(cmdEPU)
+                    if PROJECTDIR in typeDataList:
+                        print cmdProj
+                        os.system(cmdProj)
+                        #self.remoteCommand.run_cmd(SCIPIONHOST, [cmdProj])
+                    print "sleeping";sys.stdout.flush()
+                    time.sleep(SLEEPTIME)
+                    print "weaking up";sys.stdout.flush()
+
+        except RuntimeError:
+            print "Aborting, copy didn't finish within %d seconds" % _timeout
+
 
 class ProtBackup(EMProtocol):
     """ copy project, or part of a project, to another disk or computer
@@ -44,10 +196,6 @@ class ProtBackup(EMProtocol):
     def __init__(self, **kwargs):
         EMProtocol.__init__(self, **kwargs)
 
-# ===========================
-    def __init__(self, **kwargs):
-        pass
-
     #--------------- DEFINE param functions ---------------
 
     def _defineParams(self, form):
@@ -55,35 +203,75 @@ class ProtBackup(EMProtocol):
         form.addParam('doAll', BooleanParam, default=True, label="Backup Whole Project?",
                        help='Check to backup the whole project')
         form.addParam('inputProtocolsExclude', MultiPointerParam,
-                      label="Exclude this protocols",
+                      label="Exclude these protocols",
                       pointerClass='EMProtocol',
                       default=None, condition='not doAll',
                       help="Protocols NOT to be excluded")
-        form.addParam('doLocal', BooleanParam, default=True, label="Backup Whole Project?",
-                       help='Check to backup the whole project')
-        form.addParam('targetLocal', StringParam, default=None, condition='doLocal',
+        form.addParam('doLocal', BooleanParam, default=True, label="Local "
+                                                                   "Backup",
+                       help='Perform local backup (same computer)')
+        form.addParam('targetLocal', PathParam, default=None, condition='doLocal',
                       label='Target Directory', help="Path to local directory where "
                                                      "the backup will be stored")
         form.addParam('targetRemote', StringParam, default=None,
                       condition='not doLocal',
                       label='Target Directory', help="Path to remote directory where "
-                                                     "the backup will be stored")
+                                                     "the backup will be "
+                                                     "stored. Example: "
+                                                     "user@host:path")
+        #TODO
+        form.addSection('Streaming')
+
+        form.addParam('dataStreaming', BooleanParam, default=False,
+              label="Process data in streaming?",
+              help="Select this option if you want import data as it is "
+                   "generated and process on the fly by next protocols. "
+                   "In this case the protocol will keep running to check "
+                   "new files and will update the output Set, which can "
+                   "be used right away by next steps.")
+
+        form.addParam('timeout', IntParam, default=43200,
+              condition='dataStreaming',
+              label="Timeout (secs)",
+              help="Interval of time (in seconds) after which, if no new file "
+                   "is detected, the protocol will end. When finished, "
+                   "the output Set will be closed and no more data will be "
+                   "added to it. \n"
+                    "Note 1:  The default value is  high (12 hours) to avoid "
+                   "the protocol finishes during the aqcuisition of the "
+                   "microscpe. You can also stop it from right click and press "
+                   "STOP_STREAMING.\n"
+                   "Note 2: If you're using individual frames when importing "
+                   "movies, the timeout won't be refreshed until a whole "
+                   "movie is stacked.")
+
+        form.addParam('fileTimeout', IntParam, default=30,
+              condition='dataStreaming',
+              label="File timeout (secs)",
+              help="Interval of time (in seconds) after which, if a file has "
+                   "not changed, we consider it as a new file. \n")
+
 
     #--------------- INSERT steps functions ----------------
 
     def _insertAllSteps(self):
-        pass
-
+        self._copyData()
     #--------------- STEPS functions -----------------------
 
-    def convertInputStep(self):
-        pass
+    def _copyData(self, params):
+        if self.doLocal:
+            print "Local"
+            target =self.targetLocal.get()
+        else:
+            print "Remote"
+            target =self.targetRemote.get()
 
-    def runMLStep(self, params):
-        pass
+        projName = self.protocol.getProject().getShortName()
+        print "projName=", projName
 
-    def createOutputStep(self):
-        pass
+        #create directory
+        copyfile = CopyFiles(projName, target, self.timeout)
+        exitcode = copyfile._copy_files()
 
     #--------------- INFO functions -------------------------
 
