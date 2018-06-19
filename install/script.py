@@ -320,6 +320,7 @@ matplotlib = env.addPipModule('matplotlib', '1.5.3', target='matplotlib-1.5.3*')
 
 env.addPipModule('poster', '0.8.1', target='poster-0.8.1*')
 env.addPipModule('psutil', '2.1.1', target='psutil-2.1.1*')
+env.addPipModule('paramiko', '2.4.1', target='paramiko-2.4.1*')
 env.addPipModule('biopython', '1.71', target='biopython-1.71*')
 env.addPipModule('mpi4py', '1.3.1')
 scipy = env.addPipModule('scipy', '0.14.0',
@@ -331,7 +332,7 @@ env.addPipModule('Pillow', '2.5.1', target='Pillow-2.5.1*',
 
 
 # Optional python modules
-env.addPipModule('paramiko', '1.14.0', default=False)
+#### UPDATE since nobody is using it: env.addPipModule('paramiko', '1.14.0', default=False)
 # 1.4.8 could not be found ! Using latest available
 env.addPipModule('winpdb', '1.3.6', default=False)
 

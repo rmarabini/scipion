@@ -231,7 +231,8 @@ def executeRemoteX (command, hostName, userName, password):
     stdout, stderr = p.communicate()
     return stdout, stderr
 
-def executeRemote (command, hostName, userName, password):
+
+def executeRemote (command, hostName, userName, password=None):
     """ Execute a remote command.
     Params:
         command: Command to execute.
@@ -245,7 +246,10 @@ def executeRemote (command, hostName, userName, password):
     ssh = paramiko.SSHClient()
     ssh.load_system_host_keys()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(hostName, 22, userName, password)
+    if password is not None:
+        ssh.connect(hostName, 22, userName, password)
+    else:
+        ssh.connect(hostName, 22, userName)  # only public key connections
     stdin, stdout, stderr = ssh.exec_command(command)
     ssh.close()
     return stdin, stdout, stderr
